@@ -98,6 +98,7 @@ function blank() {
       cols: [{ k: 'phase', l: 'Étape', on: true }, { k: 'ens', l: 'Rôle de l’enseignant', on: true }, { k: 'cons', l: 'Consignes', on: true }, { k: 'att', l: 'Attendus', on: true }, { k: 'elv', l: 'Rôle des élèves', on: true }, { k: 'x1', l: 'Différenciation', on: false }, { k: 'x2', l: 'Matériel', on: false }],
       behav: [{ id: 'b1', l: 'Travail', pos: true }, { id: 'b2', l: 'Progrès', pos: true }, { id: 'b3', l: 'Écoute', pos: true }, { id: 'b4', l: 'Autonomie', pos: true }, { id: 'b5', l: 'Entraide', pos: true }, { id: 'b6', l: 'Bavardage', pos: false }, { id: 'b7', l: 'Travail non fait', pos: false }, { id: 'b8', l: 'Matériel oublié', pos: false }],
       seuils: { eva: 50, a: 75, d: 95 },
+      reasons: ['Sortie', 'Intervenant', 'Évaluations', 'Spectacle', 'Absence', 'Formation', 'Grève', 'Retard pris'],   // motifs proposés quand une séance est remplacée
       apiKey: '', model: 'claude-sonnet-4-6', subInfo: '', safety: '', lastBackup: '', backupHour: 16
     },
     classes: [{ id: uid(), name: 'Ma classe', level: '', color: '#3355c0', icon: '🦊' }],
@@ -172,6 +173,7 @@ function qname(q) { const [c, s, sub] = q.split('|'); return subj(s).name + (sub
 const whatOpts = () => db.subjects.flatMap(s => [[s.id + '|', s.name], ...(s.subs || []).map(x => [s.id + '|' + x, s.name + ' › ' + x])]);
 const clsOpts = () => db.classes.map(c => [c.id, c.name]);
 function findS(id) { for (const seq of db.sequences) { const s = seq.sessions.find(x => x.id === id); if (s) return { s, seq }; } return null; }
+const free = o => !(o.ov && (o.ov.t === 'lost' || o.ov.t === 'host'));   // créneau ni remplacé ni prêté à une autre matière
 const newSess = title => ({ id: uid(), title: title || 'Nouvelle séance', obj: '', comp: '', mat: '', steps: [], rem: [], bilan: '' });
 
 // Jours fériés français d'une année (Pâques est calculé, les autres sont fixes).
@@ -205,9 +207,14 @@ function ctx() {
   for (const x of db.extra) if (x.date >= S.start && x.date <= S.end) occs.push({ key: x.date + '|x' + x.id, date: x.date, slot: x, start: x.start, end: x.end, classId: x.classId, subjectId: x.subjectId, sub: x.sub || '', q: qk(x), extra: x.id });
   for (const o of occs) { const v = db.ov[o.key]; if (v && v.t === 'mv') { o.from = { date: o.date, start: o.start }; o.date = v.date; o.start = v.start; o.end = v.end; } }
   occs.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  // Créneaux réservés : quand on reporte une séance sur un créneau précis (autre matière ou autre moment),
+  // ce créneau lui est réservé ; les autres séances de la matière gardent leur ordre sur les créneaux restants.
+  const live = new Set(), pinOcc = {};
+  db.sequences.forEach(q => q.sessions.forEach(s => { if (!s.skip) live.add(s.id); }));
   for (const o of occs) {
     byKey[o.key] = o; (byDate[o.date] ??= []).push(o); (base[o.q] ??= []).push(o);
-    const v = db.ov[o.key];
+    const v = db.ov[o.key], rs = (v && v.t === 'host' && v.sid) || (o.extra && o.slot.sid);
+    if (rs && live.has(rs) && !(v && v.t === 'lost')) { o.rsv = rs; pinOcc[rs] = o; }
     if (v) { o.ov = v; if (v.t === 'lost') continue; if (v.t === 'host') { o.hostQ = v.q; (act[v.q] ??= []).push(o); continue; } }
     (act[o.q] ??= []).push(o);
   }
@@ -223,7 +230,10 @@ function ctx() {
         total++;
         if (s.pin && !(s.merge && prev)) { while (i < Aq.length && Aq[i].date < s.pin) i++; while (j < B.length && B[j].date < s.pin) j++; }   // date choisie à la main
         const bo = B[j++] || null;                                  // la date « idéale »
-        const o = (s.merge && prev) ? prev : (Aq[i++] || null);     // la date réelle
+        let o;                                                      // la date réelle
+        if (s.merge && prev) o = prev;
+        else if (pinOcc[s.id]) o = pinOcc[s.id];
+        else { while (i < Aq.length && Aq[i].rsv) i++; o = Aq[i++] || null; }
         prev = o; sess[s.id] = { seq, q, o, bo };
         if (o) (occSess[o.key] ??= []).push(s); else lost++;
         if (bo && bo.date < t) nb++; if (o && o.date < t) na++;
@@ -252,6 +262,7 @@ function preview(fn) {
 function restoreOcc(key) {
   const v = db.ov[key]; if (!v) return;
   if (v.host) delete db.ov[v.host];
+  if (v.extraId) remove(db.extra, v.extraId);                        // le créneau ponctuel créé pour reporter la séance
   for (const id of [v.merged, v.skipped]) { const f = id && findS(id); if (f) { f.s.merge = false; f.s.skip = false; } }
   delete db.ov[key];
 }

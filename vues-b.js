@@ -390,6 +390,7 @@ V.reglages = () => {
   <div class="sheet"><h2>108 heures</h2><div class="row">${Object.keys(S.quotas).map(k => `<label class="fld" style="flex:1;min-width:120px"><span>${qlab(k)}</span><input type="number" min="0" data-c="quota" data-k="${k}" value="${esc(S.quotas[k])}" style="width:100%"></label>`).join('')}</div>
    <p class="small ${Object.values(S.quotas).reduce((a, b) => a + +b, 0) === 108 ? 'muted' : 'warn'}">Total : ${Object.values(S.quotas).reduce((a, b) => a + +b, 0)} h.</p></div>
   <div class="sheet"><h2>Option IA</h2><p class="small muted">Pour faire rédiger une fiche de préparation en un clic. Sans clé, le bouton propose de copier la demande dans l’IA de votre choix. La clé reste sur cet appareil et n’est jamais copiée dans les sauvegardes.</p>${inp('apiKey', 'Clé API Anthropic', 'password', 'sk-ant-…')}${inp('model', 'Modèle')}</div>
+  <div class="sheet"><h2>Motifs de remplacement</h2><label class="fld"><span>Proposés d’un appui quand une séance est remplacée (un par ligne)</span><textarea rows="5" data-c="reasons">${esc(S.reasons.join('\n'))}</textarea></label></div>
   <div class="sheet"><h2>Pour le remplaçant</h2><label class="fld"><span>Informations pratiques (horaires, récréations, cantine, sortie, codes, collègues à qui s’adresser)</span><textarea rows="4" data-c="set" data-k="subInfo">${esc(S.subInfo)}</textarea></label>
    <label class="fld"><span>Sécurité (signal incendie, trajet d’évacuation, point de rassemblement, confinement)</span><textarea rows="4" data-c="set" data-k="safety">${esc(S.safety)}</textarea></label><p class="np"><button class="btn" data-a="subSheet">Imprimer la feuille du remplaçant</button></p></div>
   <div class="sheet"><h2>Sauvegarde et années</h2><p>Dernière sauvegarde : <b>${S.lastBackup ? esc(fS(S.lastBackup.slice(0, 10)) + ' à ' + hm(S.lastBackup.slice(11))) : 'jamais'}</b></p>
@@ -402,6 +403,7 @@ A.pal = d => { const T = db.settings.theme; Object.assign(T, THEMES[d.p].c, { pa
 C.tcol = (d, el) => { const T = db.settings.theme; T[d.k] = el.value; T.pal = 'perso'; applyTheme(); saveSoon(); };     // sans réafficher : le sélecteur de couleur reste ouvert
 C.tfont = (d, el) => { db.settings.theme[d.k] = el.value; applyTheme(); saveSoon(); };
 C.tsize = (d, el) => { db.settings.theme.size = +el.value; $('#tsz').textContent = el.value; applyTheme(); saveSoon(); };
+C.reasons = (d, el) => { db.settings.reasons = el.value.split('\n').map(x => x.trim()).filter(Boolean); saveSoon(); };
 C.set = (d, el) => { db.settings[d.k] = el.value; if (d.r) done(); else saveSoon(); };
 C.colOn = (d, el) => { db.settings.cols[d.i].on = el.checked; saveSoon(); };
 C.colL = (d, el) => { db.settings.cols[d.i].l = el.value; saveSoon(); };

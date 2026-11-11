@@ -46,7 +46,7 @@ function occCard(o, c) {
   if (lost) body = `<p class="warn">${esc(o.ov.why || 'Créneau non fait')}</p><p class="np"><button class="btn sm" data-a="restoreOcc" data-key="${o.key}">Rétablir ce créneau</button></p>`;
   else {
     body = ss.map(s => sessBody(s, `data-sid="${s.id}"`)).join('<hr>') || (ad ? sessBody(ad, `data-key="${o.key}"`) : '<p class="muted">Aucune séance programmée sur ce créneau.</p>');
-    body += `<p class="np row">${!ss.length && !ad ? `<button class="btn sm" data-a="adhoc" data-key="${o.key}">Écrire une séance</button>` : ''}<button class="btn sm" data-a="missed" data-key="${o.key}">Séance non faite…</button><button class="btn sm" data-a="occMenu" data-key="${o.key}">Déplacer ou remplacer…</button></p>`;
+    body += `<p class="np row">${!ss.length && !ad ? `<button class="btn sm" data-a="adhoc" data-key="${o.key}">Écrire une séance</button>` : ''}<button class="btn sm" data-a="occMenu" data-key="${o.key}">Séance non faite ou remplacée…</button></p>`;
   }
   return `<div class="sheet"><div class="mg">${hm(o.start)}<br>${hm(o.end)}</div>
     <p style="margin:0"><span class="dot" style="background:${sb.color}"></span><b>${esc(sb.name)}</b>${sub ? ' › ' + esc(sub) : ''} ${o.hostQ ? `<span class="chip yel">à la place de ${esc(subj(o.subjectId).name)}</span>` : ''}${o.from ? ` <span class="chip">déplacé du ${esc(fS(o.from.date))} ${hm(o.from.start)}</span>` : ''}${o.extra ? ' <span class="chip">créneau ponctuel</span>' : ''} ${cbadge(o.classId)}</p>${body}</div>`;
@@ -79,35 +79,6 @@ A.missDay = () => {
 
 // Séance non faite : on demande seulement comment rattraper. Le motif, lui, se note dans l'emploi du
 // temps (« Remplacer ce jour-là ») : il s'y affiche à la place de la séance.
-A.missed = d => {
-  const c = ctx(), o = c.byKey[d.key]; if (!o) return;
-  const q = o.hostQ || o.q, ss = c.occSess[o.key] || [], s = ss[0], why = d.why || '';
-  if (!s) { db.ov[o.key] = { t: 'lost', why }; done(); toast('Créneau marqué non fait.'); return; }
-  const all = c.queues[q].seqs.flatMap(x => x.sessions).filter(x => !x.skip), nx = all[all.indexOf(ss[ss.length - 1]) + 1], nxId = nx ? nx.id : '', nxT = nx ? nx.title : '', titles = ss.map(x => x.title).join(' + ');
-  const cand = c.occs.filter(x => x.classId === o.classId && (x.hostQ || x.q) !== q && !x.ov && x.date + x.start > o.date + o.start && x.date >= TODAY()).slice(0, 40)
-    .map(x => `<option value="${x.key}">${esc(fS(x.date))} ${hm(x.start)}, ${esc(qname(x.q))}${(c.occSess[x.key] || []).length ? ' (« ' + esc(c.occSess[x.key][0].title) + ' »)' : ''}</option>`).join('');
-  const head = `<b>${esc(qname(q))}</b>, ${esc(fS(o.date))} à ${hm(o.start)}`;
-  ui.miss = { key: o.key, sid: s.id, q, why };
-  const out = preview(() => { db.ov[o.key] = { t: 'lost' }; });
-  showModal(`<form class="dlg" id="missf"><h2>${why ? esc(why) + ' : que devient la séance ?' : 'Séance non faite'}</h2><p>${head}<br>« ${esc(titles)} »</p>
-   <label class="opt"><input type="radio" name="m" value="same" checked> <b>Décaler dans la même matière</b><small>Toutes les séances suivantes reculent d’un créneau.${out.length ? ` <span class="warn">Sortiront de l’année : ${esc(out.join(' ; '))}.</span> Vous pourrez changer l’ordre dans la programmation pour choisir lesquelles sacrifier.` : ' Aucune séance ne sort de l’année.'}</small></label>
-   <label class="opt"><input type="radio" name="m" value="other" ${cand ? '' : 'disabled'}> <b>Rattraper sur le créneau d’une autre matière</b><small>La matière remplacée se décale à son tour.</small>
-     <select name="host" style="margin:6px 0 0 1.7em;max-width:calc(100% - 1.7em)"><option value="">Choisir le créneau…</option>${cand}</select></label>
-   <label class="opt"><input type="radio" name="m" value="compact" ${nxId ? '' : 'disabled'}> <b>Compacter avec la séance suivante</b><small>${nxId ? `Cette séance et « ${esc(nxT)} » partageront le prochain créneau. Rien d’autre ne bouge.` : 'Il n’y a pas de séance suivante.'}</small></label>
-   <label class="opt"><input type="radio" name="m" value="drop"> <b>Abandonner cette séance</b><small>Elle reste dans la programmation, marquée abandonnée. Le reste ne bouge pas.</small></label>
-   <input type="hidden" name="nx" value="${nxId}">
-   <div class="row end"><span class="sp"></span><button type="button" class="btn" data-a="closeModal">Annuler</button><button type="button" class="btn pri" data-a="missApply">Appliquer</button></div></form>`);
-};
-A.missApply = () => {
-  const f = $('#missf'), m = f.elements.m.value, { key, sid, q, why } = ui.miss, ov = { t: 'lost', why }, before = lostList().length;
-  if (m === 'other') { const h = f.elements.host.value; if (!h) { toast('Choisissez le créneau de rattrapage dans la liste.'); return; } ov.host = h; db.ov[h] = { t: 'host', q }; }
-  if (m === 'compact') { const nx = f.elements.nx.value; findS(nx).s.merge = true; ov.merged = nx; }
-  if (m === 'drop') { findS(sid).s.skip = true; ov.skipped = sid; }
-  db.ov[key] = ov; closeModal(); save();
-  const n = lostList().length - before, x = ctx().sess[sid];
-  toast((x && x.o ? 'Séance reportée au ' + fS(x.o.date) + '. ' : 'Programmation recalée. ') + (n > 0 ? n + ' séance(s) sortent de l’année : voir la programmation.' : '')); render();
-};
-
 // ---------- Fiche de séance ----------
 function sessInfo(r) {
   if (!r) return null; const c = ctx();
@@ -293,26 +264,64 @@ A.newTT = () => openForm({ title: 'Nouvelle version de l’emploi du temps', int
 A.editTT = () => { const tt = curTT(); openForm({ title: 'Version de l’emploi du temps', values: tt, fields: [{ k: 'label', label: 'Nom', req: 1 }, { k: 'from', label: 'Valable à partir du', type: 'date', req: 1 }], onSave: v => Object.assign(tt, v), onDelete: db.timetables.length > 1 ? () => { remove(db.timetables, tt.id); ui.tt = null; } : null }); };
 
 // Modifier un créneau pour un seul jour.
-A.occMenu = d => {
-  const c = ctx(), o = c.byKey[d.key]; if (!o) return;
-  const q = o.hostQ || o.q, ss = c.occSess[o.key] || [], lost = o.ov && o.ov.t === 'lost';
-  showModal(`<div class="dlg"><h2>${esc(qname(q))}</h2><p>${esc(fD(o.date))}, ${hm(o.start)} à ${hm(o.end)}${ss.length ? '<br>« ' + esc(ss.map(s => s.title).join(' + ')) + ' »' : ''}${o.from ? `<br><span class="chip">déplacé du ${esc(fS(o.from.date))} ${hm(o.from.start)}</span>` : ''}</p>
-   <p><button class="btn" data-a="toJournal" data-d="${o.date}">Ouvrir dans le cahier journal</button></p>
-   ${lost ? `<p class="warn">${esc(o.ov.why || 'Créneau non fait')}</p><p><button class="btn pri" data-a="restoreOcc" data-key="${o.key}">Rétablir ce créneau</button></p>` : `
-   <hr><h3>Remplacer ce jour-là</h3><p class="small muted">Sortie, intervenant, photo de classe, absence… Ce que vous écrivez s’affiche dans l’emploi du temps à la place de la séance.</p>
-   <div class="row"><input id="occWhy" placeholder="Ce qui a lieu à la place" style="flex:1;min-width:150px"><button class="btn pri" data-a="occReplace" data-key="${o.key}">Remplacer</button></div>
-   <hr><h3>Déplacer ce jour-là</h3><p class="small muted">La séance garde sa place dans la programmation, seul ce créneau change de moment.</p>
-   <div class="row"><input type="date" id="mvD" value="${o.date}" aria-label="Nouveau jour"><input type="time" id="mvS" value="${o.start}" aria-label="Début"><input type="time" id="mvE" value="${o.end}" aria-label="Fin"><button class="btn pri" data-a="occMove" data-key="${o.key}">Déplacer</button></div>
-   ${o.from ? `<p><button class="btn sm" data-a="restoreOcc" data-key="${o.key}">Remettre à sa place d’origine</button></p>` : ''}
-   ${o.extra ? `<hr><p><button class="btn danger" data-a="delExtra" data-id="${o.extra}" data-key="${o.key}">Supprimer ce créneau ponctuel</button></p>` : ''}`}
-   <div class="row end"><span class="sp"></span><button class="btn" data-a="closeModal">Fermer</button></div></div>`);
-};
-A.occReplace = d => { const why = $('#occWhy').value.trim(); if (!why) { toast('Écrivez ce qui a lieu à la place : c’est ce qui s’affichera dans l’emploi du temps.'); return; } closeModal(); A.missed({ key: d.key, why }); };
-A.occMove = d => {
-  const date = $('#mvD').value, start = $('#mvS').value, end = $('#mvE').value;
-  if (!date || !start || !end || end <= start) { toast('Indiquez le jour, puis une heure de fin après le début.'); return; }
-  if (!ctx().school(date) && !confirm('Ce jour n’est pas un jour de classe. Déplacer quand même ?')) return;
-  db.ov[d.key] = { t: 'mv', date, start, end }; closeModal(); done(); toast('Créneau déplacé au ' + fS(date) + ' à ' + hm(start) + '.');
+// La fenêtre d'un créneau daté. Règle : quand une séance n'a pas lieu, il y a toujours quelque chose à la place.
+// On dit donc d'abord ce qui a lieu (obligatoire, c'est ce qui s'affichera dans l'emploi du temps),
+// puis où va la séance : une tuile par possibilité, dont une par matière pour prendre un de ses créneaux.
+A.occMenu = d => { ui.occ = { key: d.key, why: '', dest: 'same', host: '' }; showOcc(); };
+A.missed = A.occMenu;
+function showOcc() {
+  const u = ui.occ, c = ctx(), o = c.byKey[u.key]; if (!o) return;
+  const q = o.hostQ || o.q, ss = c.occSess[o.key] || [], lost = o.ov && o.ov.t === 'lost', t = TODAY();
+  const head = `<h2>${esc(qname(q))}</h2><p>${esc(fD(o.date))}, ${hm(o.start)} à ${hm(o.end)}${ss.length ? '<br>« ' + esc(ss.map(s => s.title).join(' + ')) + ' »' : ''}${o.from ? `<br><span class="chip">déplacé du ${esc(fS(o.from.date))} ${hm(o.from.start)}</span>` : ''}
+    <br><button class="lnk small" data-a="toJournal" data-d="${o.date}">Ouvrir dans le cahier journal</button></p>`;
+  if (lost) { showModal(`<div class="dlg">${head}<p class="warn">${esc(o.ov.why || 'Créneau non fait')}</p><div class="row end"><button class="btn pri" data-a="restoreOcc" data-key="${o.key}">Rétablir ce créneau</button><span class="sp"></span><button class="btn" data-a="closeModal">Fermer</button></div></div>`); return; }
+  // Les créneaux à venir des autres matières de la classe, regroupés par matière.
+  const after = x => x.classId === o.classId && free(x) && x.date + x.start > o.date + o.start && x.date >= t;
+  const next = c.occs.find(x => after(x) && (x.hostQ || x.q) === q), bySubj = {};
+  if (ss.length) c.occs.filter(x => after(x) && (x.hostQ || x.q) !== q).forEach(x => { const l = bySubj[x.subjectId] ??= []; if (l.length < 5) l.push(x); });
+  const all = ss.length ? c.queues[q].seqs.flatMap(x => x.sessions).filter(x => !x.skip) : [], nx = ss.length ? all[all.findIndex(x => x.id === ss[ss.length - 1].id) + 1] : null;
+  u.sid = ss.length ? ss[0].id : ''; u.q = q; u.nx = nx ? nx.id : '';
+  if (u.dest.startsWith('s:') && !u.host) u.host = (bySubj[u.dest.slice(2)] || [{}])[0].key || '';
+  const tile = (k, color, title, sub) => `<button type="button" class="dt" style="--c:${color}" data-a="occDest" data-k="${k}" aria-pressed="${u.dest === k}"><b>${title}</b><small>${sub}</small></button>`;
+  let detail = '';
+  if (u.dest === 'same') { const out = preview(() => { db.ov[o.key] = { t: 'lost' }; }); detail = `<p class="small">Toutes les séances suivantes de la matière reculent d’un créneau. ${out.length ? `<span class="warn">Sortiront de l’année : ${esc(out.join(' ; '))}.</span>` : 'Aucune ne sort de l’année.'}</p>`; }
+  else if (u.dest.startsWith('s:')) detail = `<p class="small" style="margin-bottom:4px">Quel créneau prendre ? La matière remplacée se décale à son tour.</p><div class="row">${(bySubj[u.dest.slice(2)] || []).map(x => `<button type="button" class="qb" data-a="occHost" data-k="${x.key}" aria-pressed="${u.host === x.key}">${esc(fS(x.date))} ${hm(x.start)}${x.sub ? ', ' + esc(x.sub) : ''}</button>`).join('')}</div>`;
+  else if (u.dest === 'when') detail = `<p class="small" style="margin-bottom:4px">Un créneau en plus, ce jour-là seulement :</p><div class="row"><input type="date" id="mvD" data-c="occWhen" data-k="date" value="${esc(u.date || '')}" aria-label="Jour"><input type="time" id="mvS" data-c="occWhen" data-k="start" value="${esc(u.start || '')}" aria-label="Début"><input type="time" id="mvE" data-c="occWhen" data-k="end" value="${esc(u.end || '')}" aria-label="Fin"></div>`;
+  else if (u.dest === 'compact') detail = `<p class="small">Cette séance et « ${esc(nx.title)} » partageront le prochain créneau. Rien d’autre ne bouge.</p>`;
+  else if (u.dest === 'drop') detail = '<p class="small">Elle reste dans la programmation, marquée abandonnée. Le reste ne bouge pas.</p>';
+  showModal(`<div class="dlg">${head}
+   <h3>${ss.length ? '1. ' : ''}Ce qui a lieu à la place</h3>
+   <div class="row" style="margin-bottom:6px">${db.settings.reasons.map(r => `<button type="button" class="qb" data-a="occWhySet" data-v="${esc(r)}" aria-pressed="${u.why === r}">${esc(r)}</button>`).join('')}</div>
+   <input id="occWhy" data-c="occWhy" value="${esc(u.why)}" placeholder="Ou écrivez : photo de classe, chorale…" style="width:100%" aria-label="Ce qui a lieu à la place">
+   ${ss.length ? `<h3 style="margin-top:14px">2. Où va la séance ?</h3>
+   <div class="dts">${tile('same', subj(q.split('|')[1]).color, 'Même matière', next ? esc(fS(next.date)) + ' ' + hm(next.start) : 'plus de créneau')}
+     ${Object.entries(bySubj).map(([sid, l]) => tile('s:' + sid, subj(sid).color, esc(subj(sid).name), esc(fS(l[0].date)) + ' ' + hm(l[0].start))).join('')}
+     ${tile('when', 'var(--jaune)', 'Autre moment', 'jour et heure')}${nx ? tile('compact', 'var(--gris)', 'Compacter', 'avec la suivante') : ''}${tile('drop', 'var(--marge)', 'Abandonner', 'ne sera pas faite')}</div>${detail}` : ''}
+   ${o.from ? `<p><button class="btn sm" data-a="restoreOcc" data-key="${o.key}">Remettre le créneau à sa place d’origine</button></p>` : ''}
+   ${o.extra ? `<p><button class="btn sm danger" data-a="delExtra" data-id="${o.extra}" data-key="${o.key}">Supprimer ce créneau ponctuel</button></p>` : ''}
+   <div class="row end"><span class="sp"></span><button class="btn" data-a="closeModal">Annuler</button><button class="btn pri" data-a="occApply">Valider</button></div></div>`);
+}
+C.occWhy = (d, el) => { ui.occ.why = el.value; };
+A.occWhySet = d => { ui.occ.why = d.v; showOcc(); };
+A.occDest = d => { const u = ui.occ; u.dest = d.k; u.host = ''; if (d.k === 'when' && !u.date) { const o = ctx().byKey[u.key]; Object.assign(u, { date: o.date, start: o.start, end: o.end }); } showOcc(); };
+A.occHost = d => { ui.occ.host = d.k; showOcc(); };
+C.occWhen = (d, el) => { ui.occ[d.k] = el.value; };
+A.occApply = () => {
+  const u = ui.occ, why = (u.why || '').trim(), key = u.key, before = lostList().length;
+  if (!why) { toast('Indiquez d’abord ce qui a lieu à la place : c’est ce qui s’affichera dans l’emploi du temps.'); const el = $('#occWhy'); if (el) el.focus(); return; }
+  const ov = { t: 'lost', why };
+  if (u.sid) {
+    if (u.dest.startsWith('s:')) { if (!u.host) { toast('Choisissez le créneau à prendre.'); return; } ov.host = u.host; db.ov[u.host] = { t: 'host', q: u.q, sid: u.sid }; }
+    if (u.dest === 'when') {
+      if (!u.date || !u.start || !u.end || u.end <= u.start) { toast('Indiquez le jour, puis une heure de fin après le début.'); return; }
+      const [classId, subjectId, sub] = u.q.split('|'), id = uid(); db.extra.push({ id, date: u.date, start: u.start, end: u.end, subjectId, sub, classId, sid: u.sid }); ov.extraId = id;
+    }
+    if (u.dest === 'compact') { findS(u.nx).s.merge = true; ov.merged = u.nx; }
+    if (u.dest === 'drop') { findS(u.sid).s.skip = true; ov.skipped = u.sid; }
+  }
+  db.ov[key] = ov; closeModal(); save();
+  const n = lostList().length - before, x = u.sid && ctx().sess[u.sid];
+  toast(!u.sid ? 'Créneau remplacé par « ' + why + ' ».' : (x && x.o ? 'Séance reportée au ' + fS(x.o.date) + ' à ' + hm(x.o.start) + '. ' : x && x.skip ? 'Séance abandonnée. ' : 'Programmation recalée. ') + (n > 0 ? n + ' séance(s) sortent de l’année : voir la programmation.' : '')); render();
 };
 A.addExtra = () => openForm({ title: 'Créneau ponctuel', intro: '<p class="small">Un créneau en plus, pour un seul jour. La matière avance d’une séance grâce à lui.</p>', values: { date: ui.view === 'journal' ? ui.date : ui.week, start: '15:00', end: '15:45', what: (db.subjects[0] || {}).id + '|', classId: defCls() },
   fields: [{ k: 'date', label: 'Jour', type: 'date', req: 1 }, { k: 'start', label: 'Début', type: 'time', req: 1 }, { k: 'end', label: 'Fin', type: 'time', req: 1 }, { k: 'what', label: 'Matière', type: 'select', options: whatOpts() }, ...(db.classes.length > 1 ? [{ k: 'classId', label: 'Classe', type: 'select', options: clsOpts() }] : [])],
