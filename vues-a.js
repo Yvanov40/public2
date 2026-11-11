@@ -340,19 +340,39 @@ V.prog = () => {
     return `<li class="srow ${st}"><span class="n">${st === 'done' ? '✓' : i + 1}</span><span class="t"><button class="lnk" data-a="openSess" data-sid="${s.id}">${esc(s.title)}</button>${s.rem.length ? ' <span class="small muted">' + s.rem.map(r => REM[r.type][0]).join('') + '</span>' : ''}</span>${chip}
       <span class="np"><button class="btn sm" data-a="mvSess" data-sid="${s.id}" data-n="-1" aria-label="Monter">↑</button> <button class="btn sm" data-a="mvSess" data-sid="${s.id}" data-n="1" aria-label="Descendre">↓</button></span></li>`;
   };
-  return `<div class="head"><h1>Programmation</h1><span class="sp"></span><div class="row np"><button class="btn pri" data-a="newSeq">Nouveau bloc de séances</button><button class="btn" data-a="planSeqs">Choisir les dates des blocs</button><button class="btn" data-a="importBloc">Importer un bloc ou une séance</button></div></div>
-  ${qs.length ? '' : '<div class="sheet"><p>La programmation se fait en une fois : créez un bloc par séquence, listez ses séances dans l’ordre. Les dates se calculent d’après l’emploi du temps, et se recalculent à chaque imprévu.</p></div>'}
-  ${qs.map(q => {
-    const v = c.queues[q];
-    return `<h2 style="margin:18px 0 8px"><span class="dot" style="background:${subj(q.split('|')[1]).color}"></span>${esc(qname(q))} ${v.late > 0 ? `<span class="chip yel">${v.late} séance${v.late > 1 ? 's' : ''} de retard</span>` : v.late < 0 ? `<span class="chip ok">${-v.late} d’avance</span>` : '<span class="chip ok">à jour</span>'} ${v.lost ? `<span class="chip red">${v.lost} hors année</span>` : ''}</h2>
-    <div class="bar" style="margin-bottom:6px" title="${v.done} faites sur ${v.total}"><i style="width:${v.total ? v.done / v.total * 100 : 0}%;background:var(--ok)"></i></div>
+  // Trois niveaux, pour ne pas faire défiler toute l'année : des tuiles par matière, puis, pour la matière
+  // choisie, ses blocs de séances repliés ; un seul bloc est ouvert à la fois, et ses séances passées sont repliées.
+  if (ui.pseq) { const sq = seqs.find(s => s.id === ui.pseq); if (sq) ui.pq = qk(sq); else ui.pseq = null; }
+  if (!qs.includes(ui.pq)) ui.pq = qs.length === 1 ? qs[0] : null;
+  const status = v => `${v.late > 0 ? `<span class="chip yel">${v.late} séance${v.late > 1 ? 's' : ''} de retard</span>` : v.late < 0 ? `<span class="chip ok">${-v.late} d’avance</span>` : '<span class="chip ok">à jour</span>'}${v.lost ? ` <span class="chip red">${v.lost} hors année</span>` : ''}`;
+  const tiles = qs.map(q => { const v = c.queues[q], [, sid, sub] = q.split('|'), n = seqs.filter(s => qk(s) === q).length;
+    return `<button class="pt" style="--c:${subj(sid).color}" data-a="progQ" data-q="${esc(q)}" aria-pressed="${ui.pq === q}"><b>${esc(subj(sid).name)}</b><span class="small">${esc(sub || ' ')}${db.classes.length > 1 ? ' ' + cbadge(q.split('|')[0]) : ''}</span>
+      <span class="bar"><i style="width:${v.total ? v.done / v.total * 100 : 0}%;background:var(--ok)"></i></span><span class="small muted">${v.done}/${v.total} séances, ${n} bloc${n > 1 ? 's' : ''}</span><span>${status(v)}</span></button>`; }).join('');
+  let detail = '';
+  if (ui.pq) {
+    const q = ui.pq, v = c.queues[q];
+    detail = `<h2 style="margin:18px 0 6px"><span class="dot" style="background:${subj(q.split('|')[1]).color}"></span>${esc(qname(q))} ${status(v)}</h2>
     <p class="small muted">${v.done} séance${v.done > 1 ? 's' : ''} passée${v.done > 1 ? 's' : ''} sur ${v.total}, ${v.slots} créneaux dans l’année.${v.slots ? '' : ' <span class="warn">Aucun créneau de cette matière dans l’emploi du temps : ajoutez-en un pour que les dates se calculent.</span>'}${v.lost ? ' <span class="warn">Les séances « hors année » n’ont plus de créneau : montez celles à garder, ou compactez.</span>' : ''}</p>
-    ${v.seqs.filter(s => seqs.includes(s)).map(seq => `<div class="sheet"><div class="mg">${seq.sessions.length} séance${seq.sessions.length > 1 ? 's' : ''}</div>
-      <div class="row"><h3>${esc(seq.title)}</h3>${seq.level ? `<span class="chip">${esc(seq.level)}</span>` : ''}${cbadge(seq.classId)}${seq.start ? `<span class="small muted">pas avant le ${esc(fS(seq.start))}</span>` : ''}<span class="sp"></span>
-      <span class="np row"><button class="btn sm" data-a="addSess" data-id="${seq.id}">Ajouter des séances</button><button class="btn sm" data-a="editSeq" data-id="${seq.id}">Modifier</button><button class="btn sm" data-a="exportSeq" data-id="${seq.id}">Exporter</button>${multi ? `<button class="btn sm" data-a="mvSeq" data-id="${seq.id}" data-n="-1" aria-label="Monter le bloc">↑</button><button class="btn sm" data-a="mvSeq" data-id="${seq.id}" data-n="1" aria-label="Descendre le bloc">↓</button>` : ''}</span></div>
-      <ul class="plain">${seq.sessions.map(row).join('') || '<li class="muted">Aucune séance. Ajoutez-en.</li>'}</ul></div>`).join('')}`;
-  }).join('')}`;
+    ${v.seqs.filter(s => seqs.includes(s)).map(seq => {
+      const xs = seq.sessions.map(s => c.sess[s.id]).filter(x => x && x.o), past = seq.sessions.filter(s => { const x = c.sess[s.id]; return x.o && x.o.date < t; }).length, n = seq.sessions.length, open = ui.pseq === seq.id;
+      const head = `<button class="pbh" data-a="progSeq" data-id="${seq.id}" aria-expanded="${open}"><span class="car" aria-hidden="true">${open ? '▾' : '▸'}</span><b>${esc(seq.title)}</b>
+        <span class="small muted">${n} séance${n > 1 ? 's' : ''}${xs.length ? ', du ' + esc(fD(xs[0].o.date, { day: 'numeric', month: 'short' })) + ' au ' + esc(fD(xs[xs.length - 1].o.date, { day: 'numeric', month: 'short' })) : ''}</span>
+        <span class="chip ${past === n && n ? 'ok' : ''}">${past}/${n} faites</span>${seq.level ? `<span class="chip">${esc(seq.level)}</span>` : ''}</button>`;
+      if (!open) return `<div class="pb">${head}</div>`;
+      const hide = past > 3 && !ui.ppast, rows = seq.sessions.map((s, i) => { const x = c.sess[s.id]; return hide && x.o && x.o.date < t ? '' : row(s, i); }).join('');
+      return `<div class="pb open">${head}
+      <div class="row np" style="margin:4px 0 6px">${seq.start ? `<span class="small muted">pas avant le ${esc(fS(seq.start))}</span>` : ''}<span class="sp"></span><button class="btn sm" data-a="addSess" data-id="${seq.id}">Ajouter des séances</button><button class="btn sm" data-a="editSeq" data-id="${seq.id}">Modifier</button><button class="btn sm" data-a="exportSeq" data-id="${seq.id}">Exporter</button>${multi ? `<button class="btn sm" data-a="mvSeq" data-id="${seq.id}" data-n="-1" aria-label="Monter le bloc">↑</button><button class="btn sm" data-a="mvSeq" data-id="${seq.id}" data-n="1" aria-label="Descendre le bloc">↓</button>` : ''}</div>
+      ${past > 3 ? `<p class="np" style="margin:0 0 4px"><button class="lnk small" data-a="progPast">${hide ? `Afficher les ${past} séances passées` : 'Replier les séances passées'}</button></p>` : ''}
+      <ul class="plain">${rows || '<li class="muted">Aucune séance. Ajoutez-en.</li>'}</ul></div>`;
+    }).join('')}`;
+  }
+  return `<div class="head"><h1>Programmation</h1><span class="sp"></span><div class="row np"><button class="btn pri" data-a="newSeq">Nouveau bloc de séances</button><button class="btn" data-a="planSeqs">Choisir les dates des blocs</button><button class="btn" data-a="importBloc">Importer un bloc ou une séance</button></div></div>
+  ${qs.length ? `<div class="pts">${tiles}</div>${ui.pq ? '' : '<p class="small muted np">Touchez une matière pour voir ses blocs de séances.</p>'}` : '<div class="sheet"><p>La programmation se fait en une fois : créez un bloc par séquence, listez ses séances dans l’ordre. Les dates se calculent d’après l’emploi du temps, et se recalculent à chaque imprévu.</p></div>'}
+  ${detail}`;
 };
+A.progQ = d => { ui.pq = ui.pq === d.q ? null : d.q; ui.pseq = null; ui.ppast = false; render(); };
+A.progSeq = d => { ui.pseq = ui.pseq === d.id ? null : d.id; ui.ppast = false; render(); };
+A.progPast = () => { ui.ppast = !ui.ppast; render(); };
 function seqForm(seq) {
   openForm({ title: seq ? 'Modifier le bloc' : 'Nouveau bloc de séances', values: seq ? { ...seq, what: seq.subjectId + '|' + (seq.sub || '') } : { classId: defCls(), level: ui.lvl },
     fields: [{ k: 'title', label: 'Titre (ex. La soustraction posée)', req: 1 }, { k: 'what', label: 'Matière', type: 'select', options: whatOpts() }, ...(db.classes.length > 1 ? [{ k: 'classId', label: 'Classe', type: 'select', options: clsOpts() }] : []),

@@ -161,6 +161,16 @@ td.c,th.c{text-align:center}
 .step label{font-size:.78rem;color:var(--gris);display:block}
 .step .x{grid-column:1/-1;text-align:right}
 #print{display:none}
+/* Programmation : tuiles par matière, puis blocs de séances repliables. */
+.pts{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:6px}
+.pt{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:4px;background:var(--papier);border:1.5px solid var(--bord);border-left:6px solid var(--c);border-radius:10px;padding:9px 10px;min-width:0}
+.pt b{font-family:var(--titre);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pt[aria-pressed=true]{border-color:var(--encre);border-left-color:var(--c);background:var(--teinte2);box-shadow:inset 0 0 0 1px var(--encre)}
+.pt:focus-visible,.pbh:focus-visible{outline:3px solid var(--jaune)}
+.pb{background:var(--papier);border:1px solid var(--bord);border-radius:10px;margin:0 0 8px;padding:0 12px}
+.pb.open{border-color:var(--encre);padding-bottom:8px}
+.pbh{all:unset;box-sizing:border-box;cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%;padding:11px 0}
+.pbh b{font-family:var(--titre)}.pbh .car{width:1em;color:var(--gris)}
 /* Fenêtre d'un créneau : petites étiquettes à toucher, et tuiles « où va la séance ». */
 .qb{all:unset;cursor:pointer;border:1.5px solid var(--bord);border-radius:99px;padding:3px 10px;font-size:.84rem;font-weight:700;background:var(--champ)}
 .dts{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px;margin:8px 0}
@@ -226,7 +236,7 @@ input[type=color]{padding:2px;width:3.2em;height:2.2em}
   .sheet>.mg{position:static;width:auto;text-align:left;float:left;margin-right:8pt}
   .head{background:none;border-bottom:1.5pt solid #000}.head h1{background:none}
   .gridw{overflow:visible;border:0}.grid{min-width:0}
-  .blk,.chip,.att,th,.srow .n,.bar,.bar i,.tile .av,.dot,.cb i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .pt,.pb,.blk,.chip,.att,th,.srow .n,.bar,.bar i,.tile .av,.dot,.cb i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .tw{overflow:visible}
   body.pdoc #main{display:none}
   body.pdoc #print{display:block}
