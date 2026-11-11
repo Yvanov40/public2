@@ -161,6 +161,16 @@ td.c,th.c{text-align:center}
 .step label{font-size:.78rem;color:var(--gris);display:block}
 .step .x{grid-column:1/-1;text-align:right}
 #print{display:none}
+/* Élèves : sélection de plusieurs tuiles, et la barre d'actions collée en bas. */
+.tile{position:relative}
+.tile.on{border-color:var(--encre);background:var(--teinte2);box-shadow:inset 0 0 0 2px var(--encre)}
+.tile .tick{position:absolute;top:6px;right:6px;width:1.4em;height:1.4em;border-radius:50%;border:2px solid var(--bord);display:grid;place-items:center;font-weight:700;font-size:.8rem;background:var(--champ)}
+.tile.on .tick{background:var(--encre);border-color:var(--encre);color:var(--papier)}
+.selbar{position:sticky;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);z-index:6;margin-top:14px;background:var(--papier);border:2px solid var(--encre);border-radius:12px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+/* Difficultés à reprendre, sur une séance. */
+.difb{border-left:4px solid var(--jaune);background:color-mix(in srgb,var(--jaune) 14%,var(--papier));border-radius:6px;padding:6px 10px;margin:8px 0}
+#voice .dlg{z-index:1}
 /* Programmation : tuiles par matière, puis blocs de séances repliables. */
 .pts{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:6px}
 .pt{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:4px;background:var(--papier);border:1.5px solid var(--bord);border-left:6px solid var(--c);border-radius:10px;padding:9px 10px;min-width:0}
@@ -217,6 +227,7 @@ input[type=color]{padding:2px;width:3.2em;height:2.2em}
   #nav .ic{font-size:1.25rem}
   #top{padding:8px 12px}
   #main{padding:14px 12px 96px}
+  .selbar{bottom:calc(env(safe-area-inset-bottom,0px) + 74px)}
   .sheet{padding:12px 12px 12px 58px}.sheet::before{left:48px}.sheet>.mg{width:46px;font-size:.74rem}
   .step{grid-template-columns:1fr}
   table.steps thead{display:none}

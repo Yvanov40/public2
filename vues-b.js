@@ -97,15 +97,31 @@ V.eleves = () => {
   if (tab === 'evals') return head + (db.evals.find(e => e.id === ui.ev) ? evalGrid(db.evals.find(e => e.id === ui.ev)) : evalList());
   if (tab === 'bilans') return head + bilansHTML();
   const t = TODAY(), vc = visCls();
-  return head + `<div class="row np" style="margin-bottom:8px"><button class="btn pri" data-a="newStu">Ajouter un élève</button><button class="btn" data-a="newStuList">Ajouter une liste</button></div>
-  <p class="np small muted">Touchez une tuile pour ouvrir la fiche. <b>Maintenez le doigt dessus</b> pour dicter une note : l’heure est notée, et vous choisissez ensuite incident, comportement, évaluation ou commentaire.</p>
+  return head + `<div class="row np" style="margin-bottom:8px"><button class="btn pri" data-a="newStu">Ajouter un élève</button><button class="btn" data-a="newStuList">Ajouter une liste</button><span class="sp"></span>${ui.sel ? '' : '<button class="btn" data-a="selOn">Sélectionner plusieurs élèves</button>'}</div>
+  ${ui.sel ? '' : `<p class="np small muted">Touchez une tuile pour ouvrir la fiche. <b>Maintenez le doigt dessus</b> pour dicter une note : l’heure est notée, et vous choisissez ensuite observation, incident, difficulté ou comportement. Pour plusieurs élèves à la fois : <button class="lnk" data-a="selOn">sélectionner plusieurs élèves</button>.</p>`}
   ${vc.map(cid => {
     const st = visStu().filter(s => s.classId === cid);
     return `${db.classes.length > 1 ? `<h2 style="margin:14px 0 8px">${cbadge(cid, 1)} <span class="small muted">${st.length} élèves</span></h2>` : ''}
     ${st.length ? `<div class="tiles">${st.map(s => { const ab = db.att[t + '|M|' + s.id] === 'A' || db.att[t + '|S|' + s.id] === 'A', n = db.notes.filter(x => x.sid === s.id && x.date === t).length;
-      return `<button class="tile" data-a="openStu" data-id="${s.id}"><span class="av" style="background:${esc(cls(cid).color)}">${esc(db.settings.mark === 'icon' ? cls(cid).icon || initials(s) : initials(s))}</span><b>${esc(s.first)}<br>${esc(s.last)}</b>${s.level ? `<span class="chip">${esc(s.level)}</span>` : ''}${s.pai ? '<span class="chip red">PAI</span>' : ''}${s.needs ? '<span class="chip yel">besoins particuliers</span>' : ''}${ab ? '<span class="chip red">absent</span>' : ''}${n ? `<span class="chip yel">${n} note${n > 1 ? 's' : ''} ce jour</span>` : ''}</button>`; }).join('')}</div>` : '<div class="sheet"><p class="muted">Aucun élève. Ajoutez-les un par un, ou collez toute la liste.</p></div>'}`;
-  }).join('')}`;
+      return `<button class="tile ${ui.sel && ui.sel.has(s.id) ? 'on' : ''}" data-a="${ui.sel ? 'selStu' : 'openStu'}" data-id="${s.id}" ${ui.sel ? `aria-pressed="${ui.sel.has(s.id)}"` : ''}>${ui.sel ? `<span class="tick" aria-hidden="true">${ui.sel.has(s.id) ? '✓' : ''}</span>` : ''}<span class="av" style="background:${esc(cls(cid).color)}">${esc(db.settings.mark === 'icon' ? cls(cid).icon || initials(s) : initials(s))}</span><b>${esc(s.first)}<br>${esc(s.last)}</b>${s.level ? `<span class="chip">${esc(s.level)}</span>` : ''}${s.pai ? '<span class="chip red">PAI</span>' : ''}${s.needs ? '<span class="chip yel">besoins particuliers</span>' : ''}${ab ? '<span class="chip red">absent</span>' : ''}${n ? `<span class="chip yel">${n} note${n > 1 ? 's' : ''} ce jour</span>` : ''}</button>`; }).join('')}</div>` : '<div class="sheet"><p class="muted">Aucun élève. Ajoutez-les un par un, ou collez toute la liste.</p></div>'}`;
+  }).join('')}${ui.sel ? selBar() : ''}`;
 };
+// ---------- Sélection de plusieurs élèves : une même note pour tous ----------
+function selBar() {
+  const n = ui.sel.size, B = db.settings.behav, dis = n ? '' : 'disabled';
+  return `<div class="selbar np"><div class="row"><b>${n ? n + ' élève' + (n > 1 ? 's' : '') + ' sélectionné' + (n > 1 ? 's' : '') : 'Touchez les élèves concernés'}</b><span class="sp"></span><button class="btn sm" data-a="selAll">Tous</button>${n ? '<button class="btn sm" data-a="selNone">Aucun</button>' : ''}<button class="btn sm pri" data-a="selOff">Terminé</button></div>
+    ${ui.selBeh ? `<div class="row" style="margin-top:6px">${B.map(x => `<button class="btn sm" style="border-color:${x.pos ? 'var(--ok)' : 'var(--marge)'}" data-a="selBeh" data-b="${x.id}" ${dis}>${x.pos ? '＋ ' : ''}${esc(x.l)}</button>`).join('')}<button class="btn sm ghost" data-a="selBehT">Fermer</button></div>`
+    : `<div class="row" style="margin-top:6px">${['observation', 'incident', 'difficulte'].map(t => `<button class="btn sm" data-a="selNote" data-t="${t}" ${dis}>${NOTE[t][0]} ${NOTE[t][1]}</button>`).join('')}<button class="btn sm" data-a="selBehT" ${dis}>🙂 Comportement</button></div>`}
+    <p class="small muted" style="margin:4px 0 0">Ou maintenez une tuile pour dicter la note pour toute la sélection.</p></div>`;
+}
+A.selOn = () => { ui.sel = new Set(); ui.selBeh = false; render(); };
+A.selOff = () => { ui.sel = null; render(); };
+A.selStu = d => { ui.sel.has(d.id) ? ui.sel.delete(d.id) : ui.sel.add(d.id); render(); };
+A.selAll = () => { visStu().forEach(s => ui.sel.add(s.id)); render(); };
+A.selNone = () => { ui.sel.clear(); render(); };
+A.selBehT = () => { ui.selBeh = !ui.selBeh; render(); };
+A.selNote = d => noteForm(null, d.t, [...ui.sel]);
+A.selBeh = d => { const x = db.settings.behav.find(y => y.id === d.b), ids = [...ui.sel]; addNotes(ids, { type: 'comportement', sub: x.l, pos: x.pos, text: '', date: TODAY(), time: new Date().toTimeString().slice(0, 5) }); done(); toast('« ' + x.l + ' » noté pour ' + whoTxt(ids) + '.'); };
 A.etab = d => { ui.etab = d.t; ui.ev = null; render(); };
 function stuForm(s) {
   openForm({ title: s ? 'Modifier la fiche' : 'Nouvel élève', values: s || { classId: defCls(), level: ui.lvl },
@@ -126,11 +142,11 @@ A.openStu = d => { ui.stu = d.id; go('eleve'); };
 const stuGrades = (s, from, to) => db.evals.filter(e => db.grades[e.id + '|' + s.id] && (!from || (e.date >= from && e.date <= to))).sort((a, b) => b.date.localeCompare(a.date));
 V.eleve = () => {
   const s = stu(ui.stu); if (!s) return V.eleves();
-  const notes = db.notes.filter(n => n.sid === s.id).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)), pos = notes.filter(n => n.type !== 'incident' && n.pos === true), obs = notes.filter(n => n.type !== 'incident' && n.pos !== true), inc = notes.filter(n => n.type === 'incident');
+  const notes = db.notes.filter(n => n.sid === s.id).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)), beh = notes.filter(n => n.type === 'comportement'), obs = notes.filter(n => n.type === 'observation'), dif = notes.filter(n => n.type === 'difficulte'), inc = notes.filter(n => n.type === 'incident');
   const res = stuGrades(s), meet = db.meetings.filter(m => m.sid === s.id).sort((a, b) => b.date.localeCompare(a.date));
   const lists = db.lists.filter(l => !l.classId || l.classId === s.classId), imp = lists.filter(l => l.important);
   const abs = Object.keys(db.att).filter(k => k.endsWith('|' + s.id)).sort(), nA = abs.filter(k => db.att[k] === 'A'), nJ = nA.filter(k => (db.absInfo[k.slice(0, 10) + '|' + s.id] || {}).just);
-  const nli = n => `<li><span class="small muted">${esc(fS(n.date))}${n.time ? ' ' + hm(n.time) : ''}</span><span class="chip ${n.pos === true ? 'ok' : n.pos === false ? 'yel' : ''}">${NOTE[n.type][0]} ${esc(n.sub || NOTE[n.type][1])}</span><button class="lnk" data-a="editNote" data-id="${n.id}" style="flex:1;min-width:160px">${n.text ? nl(n.text) : '<span class="muted small">Ajouter un détail</span>'}</button></li>`;
+  const nli = n => `<li><span class="small muted">${esc(fS(n.date))}${n.time ? ' ' + hm(n.time) : ''}</span><span class="chip ${n.pos === true ? 'ok' : n.pos === false ? 'yel' : ''}">${NOTE[n.type][0]} ${esc(n.sub || NOTE[n.type][1])}</span><button class="lnk" data-a="editNote" data-id="${n.id}" style="flex:1;min-width:160px">${n.text ? nl(n.text) : '<span class="muted small">Ajouter un détail</span>'}</button>${n.gid ? '<span class="chip" title="Note prise pour plusieurs élèves">groupe</span>' : ''}${n.type === 'difficulte' ? difWhere(n) : ''}</li>`;
   const sec = (title, body, act, label) => `<div class="sheet"><div class="row"><h2>${title}</h2><span class="sp"></span>${act ? `<button class="btn sm np" data-a="${act}">${label}</button>` : ''}</div>${body}</div>`;
   const B = db.settings.behav;
   return `<div class="head"><h1>${esc(sname(s))}</h1><span class="sp"></span><div class="row np"><button class="btn" data-a="go" data-v="eleves">‹ Tous les élèves</button><button class="btn" data-a="editStu">Modifier la fiche</button></div></div>
@@ -139,26 +155,51 @@ V.eleve = () => {
    ${s.contacts ? `<p><b>Responsables :</b> ${nl(s.contacts)}</p>` : ''}${s.info ? `<p>${nl(s.info)}</p>` : ''}
    ${!s.pai && !s.needs ? '<p class="small muted np">Ni PAI ni besoin particulier enregistré. « Modifier la fiche » pour en ajouter.</p>' : ''}
    ${imp.length ? `<p>${imp.map(l => `<span class="chip ${l.checked[s.id] ? 'ok' : 'red'}">${l.checked[s.id] ? '✓' : '✗'} ${esc(l.title)}</span>`).join(' ')}</p>` : ''}</div>
-  <div class="sheet np"><h2>Observation en un geste</h2><p class="small muted">Un appui enregistre l’observation, datée et horodatée. Vous pourrez y ajouter un détail ensuite.</p>
+  <div class="sheet"><div class="row"><h2>Comportement et points positifs</h2></div>
+   <div class="np"><p class="small muted">Un appui enregistre le comportement, daté et horodaté. Touchez-le ensuite dans la liste pour ajouter un détail.</p>
    <div class="row">${B.filter(b => b.pos).map(b => `<button class="btn sm" style="border-color:var(--ok)" data-a="quickObs" data-b="${b.id}">＋ ${esc(b.l)}</button>`).join('')}</div>
-   <div class="row" style="margin-top:8px">${B.filter(b => !b.pos).map(b => `<button class="btn sm" style="border-color:var(--marge)" data-a="quickObs" data-b="${b.id}">${esc(b.l)}</button>`).join('')}</div></div>
-  ${sec('Points positifs', pos.length ? `<ul class="plain">${pos.map(nli).join('')}</ul>` : '<p class="muted">Travail, progrès, écoute, autonomie… Notez ici ce qui va bien.</p>', 'newPos', 'Ajouter un point positif')}
+   <div class="row" style="margin:8px 0">${B.filter(b => !b.pos).map(b => `<button class="btn sm" style="border-color:var(--marge)" data-a="quickObs" data-b="${b.id}">${esc(b.l)}</button>`).join('')}</div></div>
+   ${beh.length ? `<ul class="plain">${beh.map(nli).join('')}</ul>` : ''}</div>
   ${sec('Résultats', res.length ? `<div class="tw"><table><thead><tr><th>Date</th><th>Matière</th><th>Compétence ou évaluation</th><th>Résultat</th><th>Commentaire</th></tr></thead><tbody>${res.map(e => { const g = db.grades[e.id + '|' + s.id]; return `<tr><td>${esc(fS(e.date))}</td><td>${esc(subj(e.subjectId).name)}${e.sub ? ' › ' + esc(e.sub) : ''}</td><td><button class="lnk" data-a="openEval" data-id="${e.id}">${esc(e.title)}</button></td><td>${gradeView(e, g)}</td><td>${nl(g.c)}</td></tr>`; }).join('')}</tbody></table></div>` : '<p class="muted">Aucun résultat. Les notes se saisissent pour toute la classe dans Élèves › Évaluations.</p>')}
-  ${sec('Observations', obs.length ? `<ul class="plain">${obs.map(nli).join('')}</ul>` : '<p class="muted">Aucune observation.</p>', 'newObs', 'Ajouter une observation')}
+  ${sec('Observations', obs.length ? `<ul class="plain">${obs.map(nli).join('')}</ul>` : '<p class="muted">Aucune observation : travail, évaluation, commentaire…</p>', 'newObs', 'Ajouter une observation')}
+  ${sec('Difficultés', dif.length ? `<ul class="plain">${dif.map(nli).join('')}</ul>` : '<p class="muted">Aucune difficulté notée. Une difficulté est rattachée à sa séance et rappelée à la séance suivante de la matière.</p>', 'newDif', 'Ajouter une difficulté')}
   ${sec('Incidents', inc.length ? `<ul class="plain">${inc.map(nli).join('')}</ul>` : '<p class="muted">Aucun incident (dispute, blessure, maladie, échange avec la famille).</p>', 'newInc', 'Ajouter un incident')}
   ${sec('Réunions avec les parents', meet.length ? `<ul class="plain">${meet.map(m => `<li><span class="small muted">${esc(fS(m.date))}</span><button class="lnk" data-a="editMeet" data-id="${m.id}" style="flex:1;min-width:160px"><b>${esc(m.who || 'Rendez-vous')}</b><br>${nl(m.text)}</button></li>`).join('')}</ul>` : '<p class="muted">Aucun compte rendu.</p>', 'newMeet', 'Ajouter un compte rendu')}
   ${sec('Absences', `<p><b>${nA.length}</b> demi-journée${nA.length > 1 ? 's' : ''} d’absence, dont ${nJ.length} justifiée${nJ.length > 1 ? 's' : ''} ; ${abs.length - nA.length} retard${abs.length - nA.length > 1 ? 's' : ''}.</p>${abs.length ? `<p class="small">${abs.map(k => { const [d, h] = k.split('|'), i = db.absInfo[d + '|' + s.id] || {}; return esc(fD(d, { day: 'numeric', month: 'short' })) + ' ' + (h === 'M' ? 'matin' : 'après-midi') + (db.att[k] === 'R' ? ' (retard)' : '') + (i.motif ? ' : ' + esc(i.motif) : '') + (db.att[k] === 'A' && !i.just ? ' <span class="warn">non justifiée</span>' : ''); }).join(' ; ')}</p>` : ''}`)}
   ${sec('Administratif', lists.length ? `<ul class="plain">${lists.map(l => `<li><label><input type="checkbox" data-c="chk" data-l="${l.id}" data-s="${s.id}" ${l.checked[s.id] ? 'checked' : ''}> ${esc(l.title)}</label>${l.important ? '<span class="chip yel">important</span>' : ''}</li>`).join('')}</ul>` : '<p class="muted">Aucune liste. Créez-les dans Administratif.</p>')}`;
 };
-A.quickObs = d => { const b = db.settings.behav.find(x => x.id === d.b); db.notes.push({ id: uid(), sid: ui.stu, type: 'comportement', sub: b.l, pos: b.pos, text: '', date: TODAY(), time: new Date().toTimeString().slice(0, 5) }); done(); toast('« ' + b.l + ' » noté pour ' + sname(stu(ui.stu)) + '.'); };
-function noteForm(n, type, pos) {
-  const B = db.settings.behav;
-  openForm({ title: n ? 'Modifier la note' : type === 'incident' ? 'Nouvel incident' : pos ? 'Nouveau point positif' : 'Nouvelle observation', values: n ? { ...n, pos: n.pos === true ? '1' : n.pos === false ? '0' : '' } : { type, date: TODAY(), time: new Date().toTimeString().slice(0, 5), sub: '', pos: pos || '' },
-    fields: [{ k: 'type', label: 'Type', type: 'select', options: Object.entries(NOTE).map(([k, v]) => [k, v[1]]) }, { k: 'sub', label: 'Nature', type: 'select', options: [['', 'Sans précision'], ...B.map(b => [b.l, b.l]), ...INC.map(x => [x, x])] },
-    { k: 'pos', label: 'Appréciation', type: 'select', options: [['', 'D’après la nature choisie, sinon neutre'], ['1', 'Point positif'], ['0', 'Point à travailler']] }, { k: 'date', label: 'Date', type: 'date', req: 1 }, { k: 'time', label: 'Heure', type: 'time' }, { k: 'text', label: 'Note', type: 'textarea', rows: 4 }],
-    onSave: v => { const b = B.find(x => x.l === v.sub); v.pos = v.pos === '' ? (b && v.type !== 'incident' ? b.pos : null) : v.pos === '1'; upsert(db.notes, n && n.id, { ...v, sid: ui.stu }); }, onDelete: n ? () => remove(db.notes, n.id) : null });
+A.quickObs = d => { const x = db.settings.behav.find(y => y.id === d.b); addNotes([ui.stu], { type: 'comportement', sub: x.l, pos: x.pos, text: '', date: TODAY(), time: new Date().toTimeString().slice(0, 5) }); done(); toast('« ' + x.l + ' » noté pour ' + sname(stu(ui.stu)) + '.'); };
+// Où en est une difficulté : sa séance d'origine et la séance où la reprendre.
+function difWhere(n) {
+  if (n.done) return '<span class="chip ok">reprise</span>';
+  const c = ctx(), o = c.byKey[n.occ], x = difNext(n);
+  return `<span class="small muted" style="flex-basis:100%">${o ? 'Séance du ' + esc(fS(o.date)) + ', ' + esc(qname(o.hostQ || o.q)) + '. ' : 'Pas de séance rattachée. '}${x ? 'À reprendre le ' + esc(fS(x.date)) + ' à ' + hm(x.start) + '.' : ''}</span>`;
 }
-A.newObs = () => noteForm(null, 'commentaire'); A.newPos = () => noteForm(null, 'comportement', '1'); A.newInc = () => noteForm(null, 'incident'); A.editNote = d => noteForm(db.notes.find(n => n.id === d.id));
+// Formulaire de note, pour un élève ou pour plusieurs (ids).
+function noteForm(n, type, ids) {
+  type = n ? n.type : type; ids = n ? [n.sid] : ids || [ui.stu];
+  const B = db.settings.behav, now = new Date().toTimeString().slice(0, 5), f = [];
+  if (type === 'incident') f.push({ k: 'sub', label: 'Nature', type: 'select', options: [['', 'Sans précision'], ...INC.map(x => [x, x])] });
+  if (type === 'comportement') f.push({ k: 'sub', label: 'Comportement', type: 'select', options: B.map(x => [x.l, (x.pos ? '＋ ' : '') + x.l]) });
+  if (type === 'difficulte') {
+    const list = pastOccs(ids), c = ctx(), cur = n && c.byKey[n.occ];
+    if (cur && !list.includes(cur)) list.unshift(cur);
+    f.push({ k: 'occ', label: 'Séance où la difficulté est apparue (proposée d’office : la séance en cours ou la dernière)', type: 'select', options: [...list.map(x => [x.key, occLabel(x, c)]), ['', 'Pas de séance précise']] });
+  } else f.push({ k: 'date', label: 'Date', type: 'date', req: 1 }, { k: 'time', label: 'Heure', type: 'time' });
+  f.push({ k: 'text', label: type === 'difficulte' ? 'Difficulté observée' : 'Note', type: 'textarea', rows: 4 });
+  if (type === 'difficulte' && n) f.push({ k: 'done', label: 'Reprise : ne plus la rappeler', type: 'checkbox' });
+  const def = { date: TODAY(), time: now, sub: '', occ: (pastOccs(ids, 1)[0] || {}).key || '' };
+  openForm({ title: (n ? NOTE[type][1] : NTITLE[type]) + (ids.length > 1 ? ' pour ' + ids.length + ' élèves' : ''),
+    intro: ids.length > 1 ? `<p class="small">${esc(ids.map(id => sname(stu(id))).join(', '))}. Une note est créée dans la fiche de chacun.</p>` : '',
+    values: n || def, fields: f,
+    onSave: v => {
+      if (type === 'comportement') v.pos = (B.find(x => x.l === v.sub) || {}).pos ?? null;
+      if (type === 'difficulte') { const o = ctx().byKey[v.occ]; Object.assign(v, o ? { q: o.hostQ || o.q, date: o.date, time: o.start } : { q: '', date: n ? n.date : TODAY(), time: n ? n.time : now }); }
+      if (n) Object.assign(n, v); else addNotes(ids, { type, ...v });
+      if (ids.length > 1) toast(NOTE[type][1] + ' enregistrée pour ' + ids.length + ' élèves.');
+    }, onDelete: n ? () => remove(db.notes, n.id) : null });
+}
+A.newObs = () => noteForm(null, 'observation'); A.newInc = () => noteForm(null, 'incident'); A.newDif = () => noteForm(null, 'difficulte'); A.editNote = d => noteForm(db.notes.find(n => n.id === d.id));
 function meetForm(m) {
   openForm({ title: m ? 'Modifier le compte rendu' : 'Réunion avec les parents', values: m || { date: TODAY() }, fields: [{ k: 'date', label: 'Date', type: 'date', req: 1 }, { k: 'who', label: 'Personnes présentes' }, { k: 'text', label: 'Compte rendu, décisions prises', type: 'textarea', rows: 6 }],
     onSave: v => upsert(db.meetings, m && m.id, { ...v, sid: ui.stu }), onDelete: m ? () => remove(db.meetings, m.id) : null });

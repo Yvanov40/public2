@@ -33,7 +33,9 @@ const CATS = { apc: ['APC', '#23795b'], equipe: ['Équipe pédagogique', '#3355c
 // mais elles puisent dans la même enveloppe de 48 heures.
 const qcat = k => k === 'parents' ? 'equipe' : k;
 const qlab = k => k === 'equipe' ? 'Équipe pédagogique et parents' : CATS[k][0];
-const NOTE = { incident: ['🚑', 'Incident'], comportement: ['🙂', 'Comportement'], evaluation: ['📝', 'Évaluation'], commentaire: ['💬', 'Commentaire'] };
+// Les types de notes sur un élève. « Comportement » ne se crée que par les boutons du comportement en un geste.
+const NOTE = { observation: ['📝', 'Observation'], incident: ['🚑', 'Incident'], difficulte: ['🧩', 'Difficulté'], comportement: ['🙂', 'Comportement'] };
+const NTITLE = { observation: 'Nouvelle observation', incident: 'Nouvel incident', difficulte: 'Nouvelle difficulté', comportement: 'Comportement' };
 const INC = ['Dispute', 'Blessure', 'Maladie', 'Communication avec la famille', 'Autre'];
 // Les niveaux d'acquisition, et leur version affinée avec + et −.
 const LV = { NA: ['Non atteint', 'red'], EVA: ['En voie d’acquisition', 'yel'], A: ['Acquis', 'ok'], D: ['Dépassé', ''] };
@@ -134,6 +136,7 @@ function normalize() {                                 // complète ce qui manqu
   for (const k in b.settings) if (db.settings[k] === undefined) db.settings[k] = b.settings[k];
   db.settings.theme = { ...b.settings.theme, ...db.settings.theme };
   // Anciennes versions : la santé devient le PAI ; les résultats saisis élève par élève deviennent des évaluations.
+  db.notes.forEach(n => { if (n.type === 'evaluation' || n.type === 'commentaire') n.type = 'observation'; });   // évaluation et commentaire réunis
   db.students.forEach(s => { if (s.pai === undefined) { s.pai = s.health || ''; delete s.health; } if (s.needs === undefined) s.needs = ''; });
   if (db.results.length) {
     const map = { 'Non atteint': 'NA', 'Partiellement atteint': 'EVA', 'Atteint': 'A', 'Dépassé': 'D' };
@@ -251,6 +254,27 @@ function reminders() {
   for (const k in db.adhoc) if (c.byKey[k]) push(db.adhoc[k], c.byKey[k], qname(c.byKey[k].q));
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
+// ---------- Difficultés ----------
+// Une difficulté est rattachée à la séance où elle est apparue (n.occ). Elle est rappelée à la prochaine séance
+// de la même matière, recalculée à chaque changement de l'emploi du temps ou de la programmation.
+const nowKey = () => TODAY() + new Date().toTimeString().slice(0, 5);
+const occLabel = (x, c) => { const ss = c.occSess[x.key] || [], ad = db.adhoc[x.key]; return fS(x.date) + ' ' + hm(x.start) + ', ' + qname(x.hostQ || x.q) + (ss.length ? ' : « ' + ss.map(s => s.title).join(' + ') + ' »' : ad ? ' : « ' + ad.title + ' »' : ''); };
+// Les séances déjà commencées des classes de ces élèves, de la plus récente à la plus ancienne.
+function pastOccs(ids, n = 25) {
+  const c = ctx(), k = new Set(ids.map(id => (stu(id) || {}).classId)), now = nowKey();
+  return c.occs.filter(x => k.has(x.classId) && !(x.ov && x.ov.t === 'lost') && x.date + x.start <= now).slice(-n).reverse();
+}
+function difNext(n) {
+  const c = ctx(), o = c.byKey[n.occ], q = o ? o.hostQ || o.q : n.q; if (!q) return null;
+  const at = o ? o.date + o.start : (n.date || '') + '99';
+  return c.occs.find(x => (x.hostQ || x.q) === q && !(x.ov && x.ov.t === 'lost') && x.date + x.start > at) || null;
+}
+function difMap() {                                     // créneau → difficultés à y reprendre (gardé en mémoire avec le calcul)
+  const c = ctx(); if (c.dif) return c.dif; const m = {};
+  db.notes.filter(n => n.type === 'difficulte' && !n.done).forEach(n => { const x = difNext(n); if (x) (m[x.key] ??= []).push(n); });
+  return c.dif = m;
+}
+
 const lostList = () => { const c = ctx(), r = []; for (const seq of db.sequences) for (const s of seq.sessions) { const x = c.sess[s.id]; if (x && !x.skip && !x.o) r.push(qname(x.q) + ' : ' + s.title); } return r; };
 // Essaie une modification, regarde quelles séances sortiraient de l'année, puis remet tout en place.
 function preview(fn) {
@@ -438,12 +462,14 @@ function pickFile(cb) { const f = $('#file'); f.value = ''; f.onchange = () => {
 // quatre bulles entourent le texte pour choisir le type de note. L'heure est notée automatiquement.
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let hold = null, rec = null;
-document.addEventListener('pointerdown', e => { const t = e.target.closest('.tile'); if (!t) return; const id = t.dataset.id; hold = { timer: setTimeout(() => { hold.on = true; startVoice(id); }, 450) }; });
+document.addEventListener('pointerdown', e => { const t = e.target.closest('.tile'); if (!t) return; const id = t.dataset.id;
+  // En mode sélection, la dictée vaut pour tous les élèves sélectionnés (plus celui qu'on maintient).
+  hold = { timer: setTimeout(() => { hold.on = true; startVoice(ui.sel ? [...new Set([...ui.sel, id])] : [id]); }, 450) }; });
 function endHold() { if (!hold) return; clearTimeout(hold.timer); if (hold.on) { ui.held = true; setTimeout(() => ui.held = false, 400); stopVoice(); } hold = null; }
 document.addEventListener('pointerup', endHold); document.addEventListener('pointercancel', endHold);
 document.addEventListener('contextmenu', e => { if (e.target.closest('.tile')) e.preventDefault(); });
-function startVoice(id) {
-  ui.voice = { id, text: '', time: new Date().toTimeString().slice(0, 5), date: TODAY(), on: true }; showVoice();
+function startVoice(ids) {
+  ui.voice = { ids, text: '', time: new Date().toTimeString().slice(0, 5), date: TODAY(), on: true }; showVoice();
   if (!SR) return;
   try {
     rec = new SR(); rec.lang = 'fr-FR'; rec.continuous = true; rec.interimResults = true; let fin = '';
@@ -452,10 +478,18 @@ function startVoice(id) {
   } catch (e) { rec = null; }
 }
 function stopVoice() { if (rec) { try { rec.stop(); } catch (e) { } } if (ui.voice) { ui.voice.on = false; showVoice(); const el = $('#vtext'); if (el) el.focus(); } }
+const whoTxt = ids => ids.length === 1 ? sname(stu(ids[0])) : ids.length + ' élèves : ' + ids.map(id => (stu(id) || {}).first).join(', ');
 function showVoice() {
   const v = ui.voice, el = $('#voice');
-  el.innerHTML = `<div class="ov"></div><div class="vp">${Object.entries(NOTE).map(([k, [ic, l]]) => `<button class="bb" data-a="voiceSave" data-t="${k}"><div><span>${ic}</span>${l}</div></button>`).join('')}
-    <div class="mid"><b>${esc(sname(stu(v.id)))}</b><span class="small muted">${fS(v.date)} à ${hm(v.time)}</span>
+  if (v.beh) {                                         // le choix « Comportement » : les boutons du comportement en un geste
+    const B = db.settings.behav, chip = b => `<button class="btn sm" style="border-color:${b.pos ? 'var(--ok)' : 'var(--marge)'}" data-a="voiceBeh" data-b="${b.id}">${b.pos ? '＋ ' : ''}${esc(b.l)}</button>`;
+    el.innerHTML = `<div class="ov"></div><div class="dlg"><h2>Comportement</h2><p class="small muted">${esc(whoTxt(v.ids))}, ${fS(v.date)} à ${hm(v.time)}.${v.text ? ' Le texte dicté sera gardé en détail.' : ''}</p>
+      <div class="row">${B.filter(b => b.pos).map(chip).join('')}</div><div class="row" style="margin-top:8px">${B.filter(b => !b.pos).map(chip).join('')}</div>
+      <div class="row end"><button class="btn" data-a="voiceBack">‹ Retour</button><span class="sp"></span><button class="btn" data-a="voiceCancel">Annuler</button></div></div>`;
+    el.hidden = false; return;
+  }
+  el.innerHTML = `<div class="ov"></div><div class="vp">${Object.entries(NOTE).map(([k, [ic, l]]) => `<button class="bb" data-a="${k === 'comportement' ? 'voiceBehOpen' : 'voiceSave'}" data-t="${k}"><div><span>${ic}</span>${l}</div></button>`).join('')}
+    <div class="mid"><b>${esc(whoTxt(v.ids))}</b><span class="small muted">${fS(v.date)} à ${hm(v.time)}</span>
     ${v.on ? `<span class="pulse small">${SR ? '🎙️ J’écoute… relâchez pour finir' : 'Relâchez pour écrire la note'}</span>` : ''}
     <textarea id="vtext" data-c="vtext" placeholder="${SR ? 'Le texte dicté apparaît ici' : 'Dictée indisponible ici : écrivez la note, ou utilisez le micro du clavier'}">${esc(v.text)}</textarea></div>
     <button class="x" data-a="voiceCancel">Annuler</button></div>`;
@@ -463,9 +497,22 @@ function showVoice() {
 }
 C.vtext = (d, el) => { if (ui.voice) ui.voice.text = el.value; };
 A.voiceCancel = () => { if (rec) { try { rec.abort(); } catch (e) { } } ui.voice = null; $('#voice').hidden = true; };
+// Enregistre une note pour un ou plusieurs élèves (une note par élève, reliées par gid).
+function addNotes(ids, base) {
+  const gid = ids.length > 1 ? uid() : undefined;
+  if (base.type === 'difficulte' && base.occ === undefined) { const o = pastOccs(ids, 1)[0]; base.occ = o ? o.key : ''; }
+  if (base.type === 'difficulte') { const o = ctx().byKey[base.occ]; if (o) Object.assign(base, { q: o.hostQ || o.q, date: o.date, time: o.start }); }
+  ids.forEach(sid => db.notes.push({ id: uid(), gid, sid, sub: '', ...base }));
+}
 A.voiceSave = d => {
   const v = ui.voice; if (!v) return; const text = ($('#vtext').value || '').trim();
   if (!text) { toast('La note est vide : dictez ou écrivez quelques mots.'); return; }
-  db.notes.push({ id: uid(), sid: v.id, type: d.t, sub: '', text, date: v.date, time: v.time });
-  A.voiceCancel(); toast(NOTE[d.t][1] + ' enregistré pour ' + sname(stu(v.id)) + '.'); done();
+  addNotes(v.ids, { type: d.t, text, date: v.date, time: v.time });
+  const n = db.notes[db.notes.length - 1], x = d.t === 'difficulte' && n.occ ? ctx().byKey[n.occ] : null;
+  A.voiceCancel(); done();
+  toast(NOTE[d.t][1] + ' enregistrée pour ' + whoTxt(v.ids) + '.' + (x ? ' Rattachée à la séance de ' + qname(x.hostQ || x.q) + ' du ' + fS(x.date) + ' (modifiable dans la fiche).' : ''));
+};
+A.voiceBehOpen = () => { const el = $('#vtext'); if (el) ui.voice.text = el.value; ui.voice.beh = true; ui.voice.on = false; if (rec) { try { rec.stop(); } catch (e) { } } showVoice(); };
+A.voiceBack = () => { ui.voice.beh = false; showVoice(); };
+A.voiceBeh = d => { const v = ui.voice, b = db.settings.behav.find(x => x.id === d.b); addNotes(v.ids, { type: 'comportement', sub: b.l, pos: b.pos, text: (v.text || '').trim(), date: v.date, time: v.time }); A.voiceCancel(); done(); toast('« ' + b.l + ' » noté pour ' + whoTxt(v.ids) + '.'); 
 };

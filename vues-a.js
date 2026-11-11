@@ -26,12 +26,23 @@ V.home = () => {
   <div class="sheet"><h2>Séances du jour</h2>${occ.length ? `<ul class="plain">${occ.map(o => { const ss = c.occSess[o.key] || [], ad = db.adhoc[o.key]; return `<li><span class="muted small">${hm(o.start)}</span><span class="dot" style="background:${subj((o.hostQ || o.q).split('|')[1]).color}"></span><b>${esc(qname(o.hostQ || o.q))}</b> ${o.ov && o.ov.t === 'lost' ? '<span class="chip red">non fait</span>' : esc(ss.map(s => s.title).join(' + ') || (ad ? ad.title : ''))}</li>`; }).join('')}</ul>
     <p class="np"><button class="btn" data-a="toJournal" data-d="${t}">Ouvrir le cahier journal</button></p>` : `<p class="muted">${esc(c.why(t) || 'Aucun créneau à l’emploi du temps aujourd’hui.')}</p>`}</div>
   <div class="sheet"><h2>À préparer cette semaine</h2>${rems.length ? `<ul class="plain">${rems.map(r => remLi(r, t)).join('')}</ul>` : '<p class="muted">Aucun rappel en attente. Les rappels se créent dans chaque séance (impression, matériel, mot aux parents, équipement).</p>'}</div>
+  ${(() => { const m = difMap(), ks = Object.keys(m).filter(k => { const o = c.byKey[k]; return o && vc.includes(o.classId); }).sort((x, y) => (c.byKey[x].date + c.byKey[x].start).localeCompare(c.byKey[y].date + c.byKey[y].start)).slice(0, 8);
+    return ks.length ? `<div class="sheet"><h2>Difficultés à reprendre</h2><ul class="plain">${ks.map(k => { const o = c.byKey[k], l = m[k]; return `<li><span class="small ${o.date <= t ? 'warn' : 'muted'}">${o.date === t ? 'aujourd’hui ' + hm(o.start) : esc(fS(o.date))}</span><b>${esc(qname(o.hostQ || o.q))}</b><span class="small">${esc([...new Set(l.map(n => (stu(n.sid) || {}).first))].join(', '))}</span></li>`; }).join('')}</ul><p class="small muted">Elles s’affichent aussi dans le cahier journal, sur la séance concernée.</p></div>` : ''; })()}
   <div class="sheet"><h2>Avancée du programme</h2>${al.length ? `<ul class="plain">${al.map(([q, v]) => `<li><b>${esc(qname(q))}</b> ${v.late > 0 ? `<span class="chip yel">${v.late} séance${v.late > 1 ? 's' : ''} de retard</span>` : ''} ${v.lost ? `<span class="chip red">${v.lost} hors année</span>` : ''}</li>`).join('')}</ul><p class="np"><button class="btn" data-a="go" data-v="prog">Voir la programmation</button></p>` : '<p class="muted">Rien à signaler : aucune matière en retard.</p>'}</div>
   <div class="sheet"><h2>108 heures</h2><p><b>${fmtH(tot)}</b> inscrites sur 108 h</p><div class="bar">${Object.entries(H).map(([k, x]) => `<i style="width:${Math.min(100, (x.done + x.plan) / 108 * 100)}%;background:${CATS[k][1]}"></i>`).join('')}</div>
     <p class="np"><button class="btn" data-a="go" data-v="hors">Ouvrir Hors classe</button></p></div>
   </div>`;
 };
 A.toJournal = d => { closeModal(); ui.date = d.d; go('journal'); };
+
+// Les difficultés à reprendre sur un créneau (rappel de la prochaine séance de la matière).
+function difBlock(key) {
+  const ns = difMap()[key]; if (!ns || !ns.length) return '';
+  const g = {}; ns.forEach(n => (g[n.gid || n.id] ??= []).push(n));
+  return `<div class="difb"><b>🧩 Difficultés à reprendre</b><ul class="plain">${Object.values(g).map(l => { const n = l[0], o = ctx().byKey[n.occ];
+    return `<li><label style="flex:1;min-width:180px"><input type="checkbox" data-c="difDone" data-g="${n.gid || n.id}" class="np"> <b>${esc(l.map(x => sname(stu(x.sid))).join(', '))}</b>${n.text ? ' : ' + esc(n.text) : ''}</label><span class="small muted">${o ? 'notée le ' + esc(fS(o.date)) : ''}</span></li>`; }).join('')}</ul><p class="small muted np" style="margin:0">Cochez quand c’est repris : le rappel disparaît.</p></div>`;
+}
+C.difDone = (d, el) => { db.notes.forEach(n => { if ((n.gid || n.id) === d.g) n.done = el.checked; }); save(); toast('Difficulté marquée reprise.'); setTimeout(render, 600); };
 
 // ---------- Cahier journal ----------
 // Le cahier journal ne montre que l'objectif de chaque séance. Le détail (déroulé, étapes) est dans la
@@ -49,7 +60,7 @@ function occCard(o, c) {
     body += `<p class="np row">${!ss.length && !ad ? `<button class="btn sm" data-a="adhoc" data-key="${o.key}">Écrire une séance</button>` : ''}<button class="btn sm" data-a="occMenu" data-key="${o.key}">Séance non faite ou remplacée…</button></p>`;
   }
   return `<div class="sheet"><div class="mg">${hm(o.start)}<br>${hm(o.end)}</div>
-    <p style="margin:0"><span class="dot" style="background:${sb.color}"></span><b>${esc(sb.name)}</b>${sub ? ' › ' + esc(sub) : ''} ${o.hostQ ? `<span class="chip yel">à la place de ${esc(subj(o.subjectId).name)}</span>` : ''}${o.from ? ` <span class="chip">déplacé du ${esc(fS(o.from.date))} ${hm(o.from.start)}</span>` : ''}${o.extra ? ' <span class="chip">créneau ponctuel</span>' : ''} ${cbadge(o.classId)}</p>${body}</div>`;
+    <p style="margin:0"><span class="dot" style="background:${sb.color}"></span><b>${esc(sb.name)}</b>${sub ? ' › ' + esc(sub) : ''} ${o.hostQ ? `<span class="chip yel">à la place de ${esc(subj(o.subjectId).name)}</span>` : ''}${o.from ? ` <span class="chip">déplacé du ${esc(fS(o.from.date))} ${hm(o.from.start)}</span>` : ''}${o.extra ? ' <span class="chip">créneau ponctuel</span>' : ''} ${cbadge(o.classId)}</p>${lost ? '' : difBlock(o.key)}${body}</div>`;
 }
 V.journal = () => {
   const c = ctx(), d = ui.date, vc = visCls(), occ = (c.byDate[d] || []).filter(o => vc.includes(o.classId));
@@ -101,6 +112,7 @@ V.seance = () => {
    <p class="small muted">${o ? 'Prévue le ' + esc(fD(o.date)) + ', ' + hm(o.start) + ' à ' + hm(o.end) + ' (' + slot + ' min)' : s.skip ? 'Séance abandonnée' : 'Pas de créneau disponible avant la fin de l’année'}</p>
    <label class="fld"><span>Titre</span><input data-c="sf" data-f="title" value="${esc(s.title)}"></label>
    ${ta('obj', 'Objectif de la séance', 2)}${ta('comp', 'Compétences travaillées', 2)}${ta('mat', 'Matériel', 2)}</div>
+  ${o && difBlock(o.key) ? `<div class="sheet">${difBlock(o.key)}</div>` : ''}
   <div class="sheet"><h2>Déroulé</h2><p class="small muted">Durée totale des étapes : <b id="tot">${totDur(s)}</b> min${slot ? ' pour un créneau de ' + slot + ' min' : ''}. Les rubriques se choisissent et se renomment dans <button class="lnk" data-a="go" data-v="reglages">Réglages › Fiche de préparation</button>.</p>
    ${s.steps.map((p, i) => `<div class="step"><div><label>Durée (min)<input type="number" min="0" data-c="st" data-i="${i}" data-f="dur" value="${esc(p.dur)}" style="width:100%"></label></div>${cs.map(c => st(p, i, c.k, c.l)).join('')}
      <div class="x np">${i ? `<button class="btn sm" data-a="mvStep" data-i="${i}">Monter</button> ` : ''}<button class="btn sm danger" data-a="delStep" data-i="${i}">Retirer l’étape</button></div></div>`).join('')}
