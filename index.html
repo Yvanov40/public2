@@ -161,6 +161,41 @@ td.c,th.c{text-align:center}
 .step label{font-size:.78rem;color:var(--gris);display:block}
 .step .x{grid-column:1/-1;text-align:right}
 #print{display:none}
+/* Noter vite : gros boutons de type, petits boutons de comportement. */
+.qbig{all:unset;box-sizing:border-box;cursor:pointer;flex:1;min-width:96px;text-align:center;border:2px solid var(--encre);border-radius:12px;padding:10px 6px;font:700 .95rem var(--titre);background:var(--champ)}
+.qbig span{display:block;font-size:1.5rem;line-height:1.2}
+.qbig:hover,.qb:hover{background:var(--teinte2)}.qbig:focus-visible{outline:3px solid var(--jaune)}
+.qb.pos{border-color:var(--ok)}.qb.neg{border-color:var(--marge)}
+.dlg.wide{width:min(760px,100%)}
+.scs{display:flex;flex-wrap:wrap;gap:6px;max-height:42vh;overflow:auto;padding:2px}
+.sc{all:unset;box-sizing:border-box;cursor:pointer;border:1.5px solid var(--bord);border-radius:99px;padding:6px 12px;font-weight:700;background:var(--champ)}
+.sc small{color:var(--gris);font-weight:400}
+.sc[aria-pressed=true]{background:var(--encre);color:var(--papier);border-color:var(--encre)}.sc[aria-pressed=true] small{color:inherit}
+.sc:focus-visible{outline:3px solid var(--jaune)}
+.txtd{background:var(--teinte);border-radius:8px;padding:8px 12px;line-height:1.6}
+/* Programmation : onglets de période, tableau « en ce moment ». */
+.ptabs{margin-bottom:6px}table.now td{vertical-align:middle}
+/* Gestion de classe. */
+.btn.big{padding:12px 18px;font-size:1.05rem}
+.roul{min-height:120px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;margin-top:14px;border:2px dashed var(--bord);border-radius:14px;padding:14px;text-align:center}
+.roul small{flex-basis:100%;color:var(--gris)}
+.roul span{font:700 1.4rem var(--titre)}.roul .spin{font-size:2.2rem;opacity:.75}
+.roul .win{font-size:2rem;background:var(--jaune);color:#3d2d00;border-radius:12px;padding:6px 16px;animation:pop .35s ease-out}
+@keyframes pop{from{transform:scale(.6)}to{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.roul .win{animation:none}}
+.gcols{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin:8px 0}
+.gbox{border:1.5px solid var(--bord);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:5px;align-items:flex-start;background:var(--champ)}
+.board{text-align:center;background:var(--ardoise);color:var(--craie);border-radius:6px;padding:4px;font-size:.8rem;margin:8px auto 10px;width:60%}
+.plan{display:grid;grid-template-columns:repeat(var(--c),minmax(0,1fr));gap:5px;overflow-x:auto}
+.desk{all:unset;box-sizing:border-box;cursor:pointer;min-height:48px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font:700 .82rem var(--texte);text-align:center;line-height:1.1;min-width:52px}
+.desk small{font-weight:400;color:var(--gris)}
+.desk.full{background:color-mix(in srgb,var(--jaune) 30%,var(--papier));border:1.5px solid color-mix(in srgb,var(--jaune) 70%,var(--encre))}
+.desk.empty{border:1.5px dashed var(--bord)}
+.desk.void{opacity:.25;border:1px dotted transparent}.desk.void:hover{border-color:var(--bord)}
+.desk.sel{outline:3px solid var(--encre);outline-offset:1px}.desk.bad{background:color-mix(in srgb,var(--marge) 25%,var(--papier));border-color:var(--marge)}
+.desk:focus-visible{outline:3px solid var(--jaune)}
+/* Mots aux parents imprimés : deux par page. */
+.mots .mot{white-space:normal;min-height:46vh;border-bottom:1px dashed #999;padding:10pt 0;break-inside:avoid}
 /* Élèves : sélection de plusieurs tuiles, et la barre d'actions collée en bas. */
 .tile{position:relative}
 .tile.on{border-color:var(--encre);background:var(--teinte2);box-shadow:inset 0 0 0 2px var(--encre)}
@@ -247,7 +282,7 @@ input[type=color]{padding:2px;width:3.2em;height:2.2em}
   .sheet>.mg{position:static;width:auto;text-align:left;float:left;margin-right:8pt}
   .head{background:none;border-bottom:1.5pt solid #000}.head h1{background:none}
   .gridw{overflow:visible;border:0}.grid{min-width:0}
-  .pt,.pb,.blk,.chip,.att,th,.srow .n,.bar,.bar i,.tile .av,.dot,.cb i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .desk,.board,.pt,.pb,.blk,.chip,.att,th,.srow .n,.bar,.bar i,.tile .av,.dot,.cb i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .tw{overflow:visible}
   body.pdoc #main{display:none}
   body.pdoc #print{display:block}
@@ -272,6 +307,9 @@ input[type=color]{padding:2px;width:3.2em;height:2.2em}
 <script src="core.js"></script>
 <script src="vues-a.js"></script>
 <script src="vues-b.js"></script>
+<script src="vues-c.js"></script>
+<script src="vues-d.js"></script>
+<script src="demo.js"></script>
 <script>
   // Mode hors connexion : le « service worker » garde une copie de l'appli pour la classe sans wifi.
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js");

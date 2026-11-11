@@ -16,7 +16,9 @@ V.home = () => {
   const al = Object.entries(c.queues).filter(([q, v]) => vc.includes(q.split('|')[0]) && (v.late > 0 || v.lost > 0));
   const start = !db.students.length && !db.timetables.some(x => x.slots.length);
   const H = h108(), tot = Object.values(H).reduce((a, x) => a + x.done + x.plan, 0);
+  const hwG = hwGiven(t), hwN = (() => { let d = addD(t, 1); for (let i = 0; i < 10 && !c.school(d); i++) d = addD(d, 1); return { d, l: hwDue(d) }; })();
   return `<div class="head"><h1>${esc(fD(t))}</h1></div>
+  ${db.students.length ? `<div class="sheet np"><div class="mg">Noter</div>${quickBar()}</div>` : ''}
   ${start ? `<div class="sheet"><h2>Pour commencer</h2>
     <p>1. Dans <button class="lnk" data-a="go" data-v="reglages">Réglages</button>, nommez votre classe, vérifiez les matières et les vacances de votre zone.<br>
     2. Dans <button class="lnk" data-a="go" data-v="edt">Emploi du temps</button>, posez vos créneaux de la semaine.<br>
@@ -25,12 +27,13 @@ V.home = () => {
   <div class="cols">
   <div class="sheet"><h2>Séances du jour</h2>${occ.length ? `<ul class="plain">${occ.map(o => { const ss = c.occSess[o.key] || [], ad = db.adhoc[o.key]; return `<li><span class="muted small">${hm(o.start)}</span><span class="dot" style="background:${subj((o.hostQ || o.q).split('|')[1]).color}"></span><b>${esc(qname(o.hostQ || o.q))}</b> ${o.ov && o.ov.t === 'lost' ? '<span class="chip red">non fait</span>' : esc(ss.map(s => s.title).join(' + ') || (ad ? ad.title : ''))}</li>`; }).join('')}</ul>
     <p class="np"><button class="btn" data-a="toJournal" data-d="${t}">Ouvrir le cahier journal</button></p>` : `<p class="muted">${esc(c.why(t) || 'Aucun créneau à l’emploi du temps aujourd’hui.')}</p>`}</div>
+  ${hwG.length || hwN.l.length ? `<div class="sheet"><h2>Devoirs</h2>${hwG.length ? `<p class="small"><b>À noter aujourd’hui :</b></p><ul class="plain">${hwG.map(h => `<li><span class="chip">${esc(h.subj || 'Divers')}</span>${esc(h.text)} <span class="small muted">pour le ${esc(fS(h.due))}</span></li>`).join('')}</ul>` : ''}${hwN.l.length ? `<p class="small"><b>Pour ${esc(fD(hwN.d, { weekday: 'long' }))} :</b> ${hwN.l.map(h => esc((h.subj ? h.subj + ' : ' : '') + h.text)).join(' ; ')}</p>` : ''}<p class="np"><button class="btn sm" data-a="go" data-v="devoirs">Tous les devoirs</button></p></div>` : ''}
   <div class="sheet"><h2>À préparer cette semaine</h2>${rems.length ? `<ul class="plain">${rems.map(r => remLi(r, t)).join('')}</ul>` : '<p class="muted">Aucun rappel en attente. Les rappels se créent dans chaque séance (impression, matériel, mot aux parents, équipement).</p>'}</div>
   ${(() => { const m = difMap(), ks = Object.keys(m).filter(k => { const o = c.byKey[k]; return o && vc.includes(o.classId); }).sort((x, y) => (c.byKey[x].date + c.byKey[x].start).localeCompare(c.byKey[y].date + c.byKey[y].start)).slice(0, 8);
     return ks.length ? `<div class="sheet"><h2>Difficultés à reprendre</h2><ul class="plain">${ks.map(k => { const o = c.byKey[k], l = m[k]; return `<li><span class="small ${o.date <= t ? 'warn' : 'muted'}">${o.date === t ? 'aujourd’hui ' + hm(o.start) : esc(fS(o.date))}</span><b>${esc(qname(o.hostQ || o.q))}</b><span class="small">${esc([...new Set(l.map(n => (stu(n.sid) || {}).first))].join(', '))}</span></li>`; }).join('')}</ul><p class="small muted">Elles s’affichent aussi dans le cahier journal, sur la séance concernée.</p></div>` : ''; })()}
   <div class="sheet"><h2>Avancée du programme</h2>${al.length ? `<ul class="plain">${al.map(([q, v]) => `<li><b>${esc(qname(q))}</b> ${v.late > 0 ? `<span class="chip yel">${v.late} séance${v.late > 1 ? 's' : ''} de retard</span>` : ''} ${v.lost ? `<span class="chip red">${v.lost} hors année</span>` : ''}</li>`).join('')}</ul><p class="np"><button class="btn" data-a="go" data-v="prog">Voir la programmation</button></p>` : '<p class="muted">Rien à signaler : aucune matière en retard.</p>'}</div>
   <div class="sheet"><h2>108 heures</h2><p><b>${fmtH(tot)}</b> inscrites sur 108 h</p><div class="bar">${Object.entries(H).map(([k, x]) => `<i style="width:${Math.min(100, (x.done + x.plan) / 108 * 100)}%;background:${CATS[k][1]}"></i>`).join('')}</div>
-    <p class="np"><button class="btn" data-a="go" data-v="hors">Ouvrir Hors classe</button></p></div>
+    <p class="np"><button class="btn" data-a="go" data-v="hors">Ouvrir l’agenda de l’enseignant</button></p></div>
   </div>`;
 };
 A.toJournal = d => { closeModal(); ui.date = d.d; go('journal'); };
@@ -48,7 +51,7 @@ C.difDone = (d, el) => { db.notes.forEach(n => { if ((n.gid || n.id) === d.g) n.
 // Le cahier journal ne montre que l'objectif de chaque séance. Le détail (déroulé, étapes) est dans la
 // fiche de préparation, qui s'imprime à part. Les colonnes du déroulé se choisissent dans les réglages.
 const stepsTable = s => { const cs = cols(); return !(s.steps || []).length ? '' : `<div class="tw"><table class="steps"><thead><tr><th>Durée</th>${cs.map(c => `<th>${esc(c.l)}</th>`).join('')}</tr></thead><tbody>${s.steps.map(p => `<tr><td data-l="Durée">${esc(p.dur || '')} min</td>${cs.map(c => `<td data-l="${esc(c.l)}">${nl(p[c.k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`; };
-const sessBody = (s, ref) => `<h3><button class="lnk" data-a="openSess" ${ref}>${esc(s.title)}</button></h3>
+const sessBody = (s, ref) => `<h3><button class="lnk" data-a="readSess" ${ref}>${esc(s.title)}</button></h3>${s.lesson ? `<p class="small">📘 <b>Leçon :</b> ${esc(s.lesson)}</p>` : ''}${s.hw ? `<p class="small">✏️ <b>Devoirs pour la prochaine fois :</b> ${esc(s.hw)}</p>` : ''}
   ${s.obj ? `<p><b>Objectif :</b> ${nl(s.obj)}</p>` : '<p class="muted small np">Objectif à rédiger.</p>'}${s.bilan ? `<p class="small"><b>Bilan :</b> ${nl(s.bilan)}</p>` : ''}`;
 
 function occCard(o, c) {
@@ -113,10 +116,18 @@ V.seance = () => {
    <label class="fld"><span>Titre</span><input data-c="sf" data-f="title" value="${esc(s.title)}"></label>
    ${ta('obj', 'Objectif de la séance', 2)}${ta('comp', 'Compétences travaillées', 2)}${ta('mat', 'Matériel', 2)}</div>
   ${o && difBlock(o.key) ? `<div class="sheet">${difBlock(o.key)}</div>` : ''}
-  <div class="sheet"><h2>Déroulé</h2><p class="small muted">Durée totale des étapes : <b id="tot">${totDur(s)}</b> min${slot ? ' pour un créneau de ' + slot + ' min' : ''}. Les rubriques se choisissent et se renomment dans <button class="lnk" data-a="go" data-v="reglages">Réglages › Fiche de préparation</button>.</p>
+  ${(() => { const libre = !s.steps.length && (s.mode ? s.mode === 'libre' : db.settings.redac !== 'tableau'); return libre ? `<div class="sheet"><div class="row"><h2>Déroulé</h2><span class="sp"></span><button class="btn sm np" data-a="toSteps">Passer en tableau</button></div>
+   <textarea rows="12" data-c="sf" data-f="txt" placeholder="Écrivez comme dans un cahier, une ligne par étape :&#10;10' Calcul mental : furet des nombres de 5 en 5.&#10;20' Recherche en binômes : 37 + 25 avec le matériel. Mise en commun.&#10;15' Entraînement : 4 additions sur le cahier. Défi pour les plus rapides.">${esc(s.txt || '')}</textarea>
+   <p class="small muted">En texte libre, rien n’est imposé. « Passer en tableau » découpe ce texte en étapes (une ligne = une étape, la durée en début de ligne).</p></div>` : `<div class="sheet"><div class="row"><h2>Déroulé</h2><span class="sp"></span><button class="btn sm np" data-a="toTxt">Passer en texte libre</button></div>`; })()}
+  ${/* en texte libre, le tableau des étapes qui suit reste dans la page mais caché */ !s.steps.length && (s.mode ? s.mode === 'libre' : db.settings.redac !== 'tableau') ? '<div hidden>' : ''}<p class="small muted">Durée totale des étapes : <b id="tot">${totDur(s)}</b> min${slot ? ' pour un créneau de ' + slot + ' min' : ''}. Les rubriques se choisissent et se renomment dans <button class="lnk" data-a="go" data-v="reglages">Réglages › Fiche de préparation</button>.</p>
    ${s.steps.map((p, i) => `<div class="step"><div><label>Durée (min)<input type="number" min="0" data-c="st" data-i="${i}" data-f="dur" value="${esc(p.dur)}" style="width:100%"></label></div>${cs.map(c => st(p, i, c.k, c.l)).join('')}
      <div class="x np">${i ? `<button class="btn sm" data-a="mvStep" data-i="${i}">Monter</button> ` : ''}<button class="btn sm danger" data-a="delStep" data-i="${i}">Retirer l’étape</button></div></div>`).join('')}
    <p class="np"><button class="btn" data-a="addStep">Ajouter une étape</button></p></div>
+  <div class="sheet"><h2>Leçon et devoirs</h2>
+   <label class="fld"><span>Leçon donnée pendant la séance (facultatif)</span><input data-c="sf" data-f="lesson" value="${esc(s.lesson || '')}" placeholder="ex. Leçon C7 : la soustraction posée"></label>
+   <label class="fld"><span>Révision de la leçon à la maison</span><select data-c="sf" data-f="lmode">${Object.entries(LESSON).map(([k, l]) => `<option value="${k}" ${(s.lmode || 'next') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+   <label class="fld"><span>Devoirs pour la prochaine séance de la matière</span><textarea rows="2" data-c="sf" data-f="hw" placeholder="ex. Exercices 3 et 4 page 52">${esc(s.hw || '')}</textarea></label>
+   <p class="small muted">Ils s’ajoutent tout seuls dans l’onglet Devoirs, aux bonnes dates, et suivent la séance si elle est décalée.</p></div>
   <div class="sheet"><h2>Rappels</h2><p class="small muted">Chaque rappel s’inscrit dans l’agenda à la date que vous choisissez.</p>
    ${s.rem.map((r, i) => { const rd = remDate(r, o); return `<div class="row" style="margin:6px 0"><select data-c="rm" data-i="${i}" data-f="type" aria-label="Type de rappel">${Object.entries(REM).map(([a, [ic, l]]) => `<option value="${a}" ${r.type === a ? 'selected' : ''}>${ic} ${l}</option>`).join('')}</select><input data-c="rm" data-i="${i}" data-f="text" value="${esc(r.text)}" placeholder="Quoi ?" style="flex:1;min-width:120px" aria-label="Détail"><input type="date" data-c="rm" data-i="${i}" data-f="date" value="${esc(rd)}" aria-label="Date du rappel">${o && rd > o.date ? '<span class="chip red">après la séance</span>' : ''}<button class="btn sm danger np" data-a="delRem" data-i="${i}" aria-label="Retirer le rappel">✕</button></div>`; }).join('')}
    <p class="np"><button class="btn" data-a="addRem">Ajouter un rappel</button></p></div>
@@ -128,6 +139,12 @@ V.seance = () => {
 C.sf = (d, el) => { const s = curSess().s; if (el.type === 'checkbox') { s[d.f] = el.checked; done(); } else { s[d.f] = el.value; if (d.r) done(); else saveSoon(); } };
 C.st = (d, el) => { const s = curSess().s; s.steps[d.i][d.f] = el.value; if (d.f === 'dur') $('#tot').textContent = totDur(s); saveSoon(); };
 C.rm = (d, el) => { curSess().s.rem[d.i][d.f] = el.value; saveSoon(); };
+// Texte libre → tableau : une ligne par étape ; « 10' », « 10 min » ou « 10 : » en début de ligne donne la durée.
+A.toSteps = () => { const s = curSess().s, lines = (s.txt || '').split('\n').map(x => x.trim()).filter(Boolean);
+  s.steps = lines.map(l => { const m = l.match(/^(\d+)\s*(?:'|’|min\.?|mn|minutes?)?\s*[:\-–]?\s*(.*)$/i), body = m ? m[2] : l, [ph, ...rest] = body.split(/\s*:\s*/); return { dur: m ? +m[1] : '', phase: rest.length ? ph : '', ens: rest.length ? rest.join(' : ') : body }; });
+  s.mode = 'tableau'; done(); if (!lines.length) toast('Tableau vide : ajoutez des étapes.'); };
+// Tableau → texte libre.
+A.toTxt = () => { const s = curSess().s; if (s.steps.length) s.txt = s.steps.map(p => (p.dur ? p.dur + "' " : '') + [p.phase, ...cols().filter(x => x.k !== 'phase').map(x => p[x.k])].filter(Boolean).join(' : ')).join('\n'); s.steps = []; s.mode = 'libre'; done(); };
 A.addStep = () => { curSess().s.steps.push({ dur: 10 }); done(); };
 A.delStep = d => { curSess().s.steps.splice(d.i, 1); done(); };
 A.mvStep = d => { const st = curSess().s.steps, i = +d.i;[st[i - 1], st[i]] = [st[i], st[i - 1]]; done(); };
@@ -143,7 +160,7 @@ function ficheHTML(k) {
   const { s, o, seq } = k, rem = s.rem.filter(r => r.text || remDate(r, o));
   return docHead('Fiche de préparation') + `<h2>${esc(subj(k.subjectId).name)}${k.sub ? ' › ' + esc(k.sub) : ''} : ${esc(s.title)}</h2>
   <p>${cls(k.classId) ? esc(cls(k.classId).name + (cls(k.classId).level ? ' (' + cls(k.classId).level + ')' : '')) : ''}${o ? ', ' + esc(fD(o.date)) + ', ' + hm(o.start) + ' à ' + hm(o.end) : ''}${seq ? ', bloc « ' + esc(seq.title) + ' », séance ' + (seq.sessions.indexOf(s) + 1) + '/' + seq.sessions.length : ''}</p>
-  <p><b>Objectif :</b> ${nl(s.obj)}</p><p><b>Compétences :</b> ${nl(s.comp)}</p><p><b>Matériel :</b> ${nl(s.mat)}</p><h2>Déroulé</h2>${stepsTable(s) || '<div class="blank"></div>'}
+  <p><b>Objectif :</b> ${nl(s.obj)}</p><p><b>Compétences :</b> ${nl(s.comp)}</p><p><b>Matériel :</b> ${nl(s.mat)}</p><h2>Déroulé</h2>${stepsOrTxt(s) || '<div class="blank"></div>'}${s.lesson ? `<p><b>Leçon :</b> ${esc(s.lesson)}</p>` : ''}${s.hw ? `<p><b>Devoirs pour la prochaine fois :</b> ${nl(s.hw)}</p>` : ''}
   ${rem.length ? `<h2>À prévoir</h2><ul>${rem.map(r => `<li>${REM[r.type][1]} : ${esc(r.text)}${remDate(r, o) ? ' (' + esc(fS(remDate(r, o))) + ')' : ''}</li>`).join('')}</ul>` : ''}<h2>Bilan</h2>${s.bilan ? `<p>${nl(s.bilan)}</p>` : '<div class="blank"></div>'}`;
 }
 A.printFiche = () => printDoc(ficheHTML(curSess()));
@@ -158,6 +175,7 @@ Matière : ${subj(k.subjectId).name}${k.sub ? ' > ' + k.sub : ''}
 ${seq ? `Séquence : ${seq.title} (séance ${seq.sessions.indexOf(s) + 1} sur ${seq.sessions.length} ; séances de la séquence : ${seq.sessions.map(x => x.title).join(' / ')})\n` : ''}Titre de la séance : ${s.title}
 Objectif déjà noté : ${s.obj || 'à proposer'}
 Durée : ${dur} minutes
+Pense à l'aspect ludique : propose au moins une entrée par le jeu, le défi, l'énigme ou la manipulation, adaptée à l'âge des élèves.
 ${extra ? 'Précisions de l’enseignant : ' + extra + '\n' : ''}
 Réponds uniquement par un objet JSON, sans aucun texte autour, de cette forme exacte :
 {"objectif":"","competences":"","materiel":"","etapes":[{"duree":10,${cs.map(x => `"${x.k}":""`).join(',')}}],"rappels":[{"type":"imp","texte":"","joursAvant":1}]}
@@ -240,12 +258,12 @@ V.edt = () => {
     const cols = days.map(d => { const date = addD(ui.week, d - 1); return { date, label: fD(date, { weekday: 'short', day: 'numeric', month: 'short' }), off: c.why(date) }; });
     const blocks = cols.flatMap((col, i) => (c.byDate[col.date] || []).filter(o => vc.includes(o.classId)).map(o => {
       const q = o.hostQ || o.q, sb = subj(q.split('|')[1]), ss = c.occSess[o.key] || [], ad = db.adhoc[o.key], lost = o.ov && o.ov.t === 'lost';
-      return { col: i, start: o.start, end: o.end, color: sb.color, cls: lost ? 'lost' : o.date < t ? 'past' : '', attrs: `data-a="occMenu" data-key="${o.key}"`,
+      return { col: i, start: o.start, end: o.end, color: sb.color, cls: lost ? 'lost' : o.date < t ? 'past' : '', attrs: `data-a="occRead" data-key="${o.key}"`,
         html: lost ? `<b>${esc(o.ov.why || 'Non fait')}</b>à la place de ${esc(sb.name)}` : `<b>${cmark(o.classId)}${esc(sb.name)}${o.from ? ' ↪' : ''}${o.extra ? ' ＋' : ''}</b>${esc(q.split('|')[2])}${q.split('|')[2] ? '<br>' : ''}${esc(ss.map(s => s.title).join(' + ') || (ad ? ad.title : ''))}` };
     }));
     return `<div class="head"><h1>Emploi du temps</h1><span class="sp"></span>${tabs}</div>
      <div class="row" style="margin-bottom:10px"><button class="btn np" data-a="week" data-n="-7" aria-label="Semaine précédente">‹</button><b>Semaine du ${esc(fD(ui.week, { day: 'numeric', month: 'long', year: 'numeric' }))}</b><button class="btn np" data-a="week" data-n="7" aria-label="Semaine suivante">›</button><button class="btn np" data-a="week" data-n="0">Cette semaine</button><span class="sp"></span><button class="btn np" data-a="addExtra">Ajouter un créneau ponctuel</button></div>
-     ${grid(cols, blocks)}<p class="small muted np">Touchez un créneau pour le modifier ce jour-là seulement : le <b>remplacer</b> (sortie, intervenant… le motif s’affiche à sa place et la séance se décale), le <b>déplacer</b> à une autre heure ou un autre jour, ou l’ouvrir dans le cahier journal. ↪ = créneau déplacé, ＋ = créneau ponctuel.</p>`;
+     ${grid(cols, blocks)}<p class="small muted np">Touchez un créneau pour lire la séance ; depuis la lecture, vous pouvez la modifier, ou la  : le <b>remplacer</b> (sortie, intervenant… le motif s’affiche à sa place et la séance se décale), le <b>déplacer</b> à une autre heure ou un autre jour, ou l’ouvrir dans le cahier journal. ↪ = créneau déplacé, ＋ = créneau ponctuel.</p>`;
   }
   const tts = [...db.timetables].sort((a, b) => a.from < b.from ? -1 : 1), tt = tts.find(x => x.id === ui.tt) || c.ttFor(t) || tts[0]; ui.tt = tt.id;
   const cols = days.map(d => ({ day: d, label: DAYS[d] }));
@@ -341,50 +359,46 @@ A.addExtra = () => openForm({ title: 'Créneau ponctuel', intro: '<p class="smal
 A.delExtra = d => { remove(db.extra, d.id); restoreOcc(d.key); delete db.adhoc[d.key]; closeModal(); done(); };
 
 // ---------- Programmation annuelle ----------
+// La programmation, rangée par période (entre deux vacances). En haut : où en est chaque matière (séance en cours
+// et prochaine séance). Dessous : les séquences de la période, repliées ; une seule s'ouvre à la fois.
 V.prog = () => {
-  const c = ctx(), vc = visCls(), t = TODAY(), multi = db.sequences.length > 1;
-  const seqs = db.sequences.filter(s => vc.includes(s.classId) && (!ui.lvl || !s.level || s.level === ui.lvl)), qs = [...new Set(seqs.map(qk))];
-  const row = (s, i) => {
-    const x = c.sess[s.id]; let st, chip;
-    if (x.skip) { st = ''; chip = '<span class="chip">abandonnée</span>'; }
+  const c = ctx(), vc = visCls(), t = TODAY(), ps = periods('periode');
+  if (ui.pp == null || ui.pp >= ps.length) { ui.pp = ps.findIndex(p => t <= p.to); if (ui.pp < 0) ui.pp = ps.length - 1; }
+  const P = ps[ui.pp], seqs = db.sequences.filter(s => vc.includes(s.classId) && (!ui.lvl || !s.level || s.level === ui.lvl));
+  const dates = seq => seq.sessions.map(s => c.sess[s.id]).filter(x => x && x.o).map(x => x.o.date);
+  const inP = seq => { const d = dates(seq); return d.length ? d.some(x => x >= P.from && x <= P.to) : false; };
+  const unplaced = seqs.filter(s => !dates(s).length && !s.off), qs = [...new Set(seqs.map(qk))];
+  // Où en est chaque matière dans la période : la dernière séance faite et la prochaine.
+  const now = qs.map(q => { const all = c.queues[q] ? c.queues[q].seqs.flatMap(x => x.sessions).filter(s => c.sess[s.id] && c.sess[s.id].o) : [];
+    const inPer = all.filter(s => { const d = c.sess[s.id].o.date; return d >= P.from && d <= P.to; }), last = [...inPer].reverse().find(s => c.sess[s.id].o.date < t), next = inPer.find(s => c.sess[s.id].o.date >= t);
+    return { q, last, next, n: inPer.length, v: c.queues[q] }; }).filter(x => x.n);
+  const subjF = ui.psub || '', list = seqs.filter(inP).filter(s => !subjF || s.subjectId === subjF).sort((x, y) => (dates(x)[0] || '').localeCompare(dates(y)[0] || ''));
+  const sl = s => s ? `<button class="lnk" data-a="readSess" data-sid="${s.id}">${esc(s.title)}</button> <span class="small muted">${esc(fS(c.sess[s.id].o.date))}</span>` : '<span class="small muted">—</span>';
+  const row = (s, i) => { const x = c.sess[s.id]; let st = '', chip;
+    if (x.skip) chip = `<span class="chip">${x.off ? 'en réserve' : 'abandonnée'}</span>`;
     else if (!x.o) { st = 'out'; chip = '<span class="chip red">hors année</span>'; }
-    else { st = x.o.date < t ? 'done' : ''; chip = `<span class="small ${x.o.date === t ? 'warn' : 'muted'}">${x.o.date === t ? 'aujourd’hui' : esc(fS(x.o.date))}</span>${s.merge ? ' <span class="chip">compactée</span>' : ''}${s.pin ? ' <span class="chip" title="Date choisie à la main">📌</span>' : ''}${x.bo && x.bo.date !== x.o.date && x.o.date >= t ? ` <span class="chip yel" title="Date prévue au départ">prévue ${esc(fD(x.bo.date, { day: 'numeric', month: 'short' }))}</span>` : ''}`; }
-    return `<li class="srow ${st}"><span class="n">${st === 'done' ? '✓' : i + 1}</span><span class="t"><button class="lnk" data-a="openSess" data-sid="${s.id}">${esc(s.title)}</button>${s.rem.length ? ' <span class="small muted">' + s.rem.map(r => REM[r.type][0]).join('') + '</span>' : ''}</span>${chip}
-      <span class="np"><button class="btn sm" data-a="mvSess" data-sid="${s.id}" data-n="-1" aria-label="Monter">↑</button> <button class="btn sm" data-a="mvSess" data-sid="${s.id}" data-n="1" aria-label="Descendre">↓</button></span></li>`;
-  };
-  // Trois niveaux, pour ne pas faire défiler toute l'année : des tuiles par matière, puis, pour la matière
-  // choisie, ses blocs de séances repliés ; un seul bloc est ouvert à la fois, et ses séances passées sont repliées.
-  if (ui.pseq) { const sq = seqs.find(s => s.id === ui.pseq); if (sq) ui.pq = qk(sq); else ui.pseq = null; }
-  if (!qs.includes(ui.pq)) ui.pq = qs.length === 1 ? qs[0] : null;
-  const status = v => `${v.late > 0 ? `<span class="chip yel">${v.late} séance${v.late > 1 ? 's' : ''} de retard</span>` : v.late < 0 ? `<span class="chip ok">${-v.late} d’avance</span>` : '<span class="chip ok">à jour</span>'}${v.lost ? ` <span class="chip red">${v.lost} hors année</span>` : ''}`;
-  const tiles = qs.map(q => { const v = c.queues[q], [, sid, sub] = q.split('|'), n = seqs.filter(s => qk(s) === q).length;
-    return `<button class="pt" style="--c:${subj(sid).color}" data-a="progQ" data-q="${esc(q)}" aria-pressed="${ui.pq === q}"><b>${esc(subj(sid).name)}</b><span class="small">${esc(sub || ' ')}${db.classes.length > 1 ? ' ' + cbadge(q.split('|')[0]) : ''}</span>
-      <span class="bar"><i style="width:${v.total ? v.done / v.total * 100 : 0}%;background:var(--ok)"></i></span><span class="small muted">${v.done}/${v.total} séances, ${n} bloc${n > 1 ? 's' : ''}</span><span>${status(v)}</span></button>`; }).join('');
-  let detail = '';
-  if (ui.pq) {
-    const q = ui.pq, v = c.queues[q];
-    detail = `<h2 style="margin:18px 0 6px"><span class="dot" style="background:${subj(q.split('|')[1]).color}"></span>${esc(qname(q))} ${status(v)}</h2>
-    <p class="small muted">${v.done} séance${v.done > 1 ? 's' : ''} passée${v.done > 1 ? 's' : ''} sur ${v.total}, ${v.slots} créneaux dans l’année.${v.slots ? '' : ' <span class="warn">Aucun créneau de cette matière dans l’emploi du temps : ajoutez-en un pour que les dates se calculent.</span>'}${v.lost ? ' <span class="warn">Les séances « hors année » n’ont plus de créneau : montez celles à garder, ou compactez.</span>' : ''}</p>
-    ${v.seqs.filter(s => seqs.includes(s)).map(seq => {
-      const xs = seq.sessions.map(s => c.sess[s.id]).filter(x => x && x.o), past = seq.sessions.filter(s => { const x = c.sess[s.id]; return x.o && x.o.date < t; }).length, n = seq.sessions.length, open = ui.pseq === seq.id;
-      const head = `<button class="pbh" data-a="progSeq" data-id="${seq.id}" aria-expanded="${open}"><span class="car" aria-hidden="true">${open ? '▾' : '▸'}</span><b>${esc(seq.title)}</b>
-        <span class="small muted">${n} séance${n > 1 ? 's' : ''}${xs.length ? ', du ' + esc(fD(xs[0].o.date, { day: 'numeric', month: 'short' })) + ' au ' + esc(fD(xs[xs.length - 1].o.date, { day: 'numeric', month: 'short' })) : ''}</span>
-        <span class="chip ${past === n && n ? 'ok' : ''}">${past}/${n} faites</span>${seq.level ? `<span class="chip">${esc(seq.level)}</span>` : ''}</button>`;
-      if (!open) return `<div class="pb">${head}</div>`;
-      const hide = past > 3 && !ui.ppast, rows = seq.sessions.map((s, i) => { const x = c.sess[s.id]; return hide && x.o && x.o.date < t ? '' : row(s, i); }).join('');
-      return `<div class="pb open">${head}
-      <div class="row np" style="margin:4px 0 6px">${seq.start ? `<span class="small muted">pas avant le ${esc(fS(seq.start))}</span>` : ''}<span class="sp"></span><button class="btn sm" data-a="addSess" data-id="${seq.id}">Ajouter des séances</button><button class="btn sm" data-a="editSeq" data-id="${seq.id}">Modifier</button><button class="btn sm" data-a="exportSeq" data-id="${seq.id}">Exporter</button>${multi ? `<button class="btn sm" data-a="mvSeq" data-id="${seq.id}" data-n="-1" aria-label="Monter le bloc">↑</button><button class="btn sm" data-a="mvSeq" data-id="${seq.id}" data-n="1" aria-label="Descendre le bloc">↓</button>` : ''}</div>
-      ${past > 3 ? `<p class="np" style="margin:0 0 4px"><button class="lnk small" data-a="progPast">${hide ? `Afficher les ${past} séances passées` : 'Replier les séances passées'}</button></p>` : ''}
-      <ul class="plain">${rows || '<li class="muted">Aucune séance. Ajoutez-en.</li>'}</ul></div>`;
-    }).join('')}`;
-  }
-  return `<div class="head"><h1>Programmation</h1><span class="sp"></span><div class="row np"><button class="btn pri" data-a="newSeq">Nouveau bloc de séances</button><button class="btn" data-a="planSeqs">Choisir les dates des blocs</button><button class="btn" data-a="importBloc">Importer un bloc ou une séance</button></div></div>
-  ${qs.length ? `<div class="pts">${tiles}</div>${ui.pq ? '' : '<p class="small muted np">Touchez une matière pour voir ses blocs de séances.</p>'}` : '<div class="sheet"><p>La programmation se fait en une fois : créez un bloc par séquence, listez ses séances dans l’ordre. Les dates se calculent d’après l’emploi du temps, et se recalculent à chaque imprévu.</p></div>'}
-  ${detail}`;
+    else { st = x.o.date < t ? 'done' : ''; chip = `<span class="small ${x.o.date === t ? 'warn' : 'muted'}">${x.o.date === t ? 'aujourd’hui' : esc(fS(x.o.date))}</span>`; }
+    const w = s.obj || s.txt || s.steps.length;
+    return `<li class="srow ${st}"><span class="n">${st === 'done' ? '✓' : i + 1}</span><span class="t"><button class="lnk" data-a="readSess" data-sid="${s.id}">${esc(s.title)}</button> ${w ? '' : '<span class="chip yel">à rédiger</span>'}${s.lesson ? ' 📘' : ''}${s.hw ? ' ✏️' : ''}</span>${chip}
+      <span class="np"><button class="btn sm" data-a="openSess" data-sid="${s.id}">Rédiger</button> <button class="btn sm" data-a="mvSess" data-sid="${s.id}" data-n="-1" aria-label="Monter">↑</button> <button class="btn sm" data-a="mvSess" data-sid="${s.id}" data-n="1" aria-label="Descendre">↓</button></span></li>`; };
+  const block = seq => { const d = dates(seq), past = d.filter(x => x < t).length, n = seq.sessions.length, open = ui.pseq === seq.id, sb = subj(seq.subjectId);
+    const head = `<button class="pbh" data-a="progSeq" data-id="${seq.id}" aria-expanded="${open}"><span class="car" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="dot" style="background:${sb.color}"></span><b>${esc(seq.title)}</b><span class="small muted">${esc(sb.name)}${seq.sub ? ' › ' + esc(seq.sub) : ''}${d.length ? ', ' + esc(fD(d[0], { day: 'numeric', month: 'short' })) + ' → ' + esc(fD(d[d.length - 1], { day: 'numeric', month: 'short' })) : ''}</span><span class="chip ${past === n && n ? 'ok' : ''}">${past}/${n}</span>${cbadge(seq.classId)}</button>`;
+    if (!open) return `<div class="pb">${head}</div>`;
+    return `<div class="pb open">${head}<div class="row np" style="margin:2px 0 6px"><span class="sp"></span><button class="btn sm" data-a="addSess" data-id="${seq.id}">Ajouter des séances</button><button class="btn sm" data-a="editSeq" data-id="${seq.id}">Modifier le bloc</button><button class="btn sm" data-a="exportSeq" data-id="${seq.id}">Exporter</button><button class="btn sm" data-a="mvSeq" data-id="${seq.id}" data-n="-1" aria-label="Avancer le bloc">↑</button><button class="btn sm" data-a="mvSeq" data-id="${seq.id}" data-n="1" aria-label="Reculer le bloc">↓</button></div>
+      <ul class="plain">${seq.sessions.map(row).join('') || '<li class="muted">Aucune séance.</li>'}</ul></div>`; };
+  return `<div class="head"><h1>Programmation</h1><span class="sp"></span><div class="row np"><button class="btn pri" data-a="newSeq">Nouvelle séquence</button><button class="btn" data-a="planSeqs">Dates des séquences</button><button class="btn" data-a="importBloc">Importer</button></div></div>
+  <div class="row ptabs np">${ps.map((p, i) => `<button class="btn ${i === ui.pp ? 'pri' : ''}" data-a="progP" data-i="${i}">${esc(p.l)}${t >= p.from && t <= p.to ? ' •' : ''}</button>`).join('')}</div>
+  <p class="small muted">${esc(P.l)} : ${esc(fRange(P))}.</p>
+  ${seqs.length ? '' : '<div class="sheet"><p>Créez une séquence par thème, avec ses séances dans l’ordre. Chaque séance se place toute seule sur l’emploi du temps, et se recale à chaque imprévu.</p></div>'}
+  ${now.length ? `<div class="sheet flat"><h2>${t >= P.from && t <= P.to ? 'En ce moment' : 'Dans cette période'}</h2><div class="tw"><table class="now"><thead><tr><th>Matière</th><th>Dernière séance</th><th>Prochaine séance</th><th></th></tr></thead><tbody>
+    ${now.map(x => `<tr><td><span class="dot" style="background:${subj(x.q.split('|')[1]).color}"></span>${esc(qname(x.q))}</td><td>${sl(x.last)}</td><td>${sl(x.next)}</td><td>${x.v && x.v.late > 0 ? `<span class="chip yel">${x.v.late} de retard</span>` : x.v && x.v.lost ? `<span class="chip red">${x.v.lost} hors année</span>` : ''}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+  <div class="row np" style="margin:12px 0 8px"><h2>Séquences de la période</h2><span class="sp"></span><select data-c="progSub" aria-label="Matière"><option value="">Toutes les matières</option>${[...new Set(seqs.map(s => s.subjectId))].map(id => `<option value="${id}" ${subjF === id ? 'selected' : ''}>${esc(subj(id).name)}</option>`).join('')}</select></div>
+  ${list.map(block).join('') || '<div class="sheet"><p class="muted">Aucune séquence dans cette période.</p></div>'}
+  ${unplaced.length ? `<h2 style="margin:16px 0 8px">Sans créneau</h2><p class="small muted">Ces séquences n’ont plus de place avant la fin de l’année, ou leur matière n’a pas de créneau dans l’emploi du temps.</p>${unplaced.map(block).join('')}` : ''}`;
 };
-A.progQ = d => { ui.pq = ui.pq === d.q ? null : d.q; ui.pseq = null; ui.ppast = false; render(); };
-A.progSeq = d => { ui.pseq = ui.pseq === d.id ? null : d.id; ui.ppast = false; render(); };
-A.progPast = () => { ui.ppast = !ui.ppast; render(); };
+A.progP = d => { ui.pp = +d.i; ui.pseq = null; render(); };
+C.progSub = (d, el) => { ui.psub = el.value; render(); };
+A.progSeq = d => { ui.pseq = ui.pseq === d.id ? null : d.id; render(); };
 function seqForm(seq) {
   openForm({ title: seq ? 'Modifier le bloc' : 'Nouveau bloc de séances', values: seq ? { ...seq, what: seq.subjectId + '|' + (seq.sub || '') } : { classId: defCls(), level: ui.lvl },
     fields: [{ k: 'title', label: 'Titre (ex. La soustraction posée)', req: 1 }, { k: 'what', label: 'Matière', type: 'select', options: whatOpts() }, ...(db.classes.length > 1 ? [{ k: 'classId', label: 'Classe', type: 'select', options: clsOpts() }] : []),

@@ -4,8 +4,8 @@
 //  Règle : on essaie d'abord le réseau (pour avoir la dernière version) ; s'il ne répond
 //  pas, on sert la copie gardée. Les données de la classe ne passent jamais par ici.
 // =====================================================================================
-const CACHE = "classe-v7";
-const FICHIERS = ["./", "index.html", "core.js", "vues-a.js", "vues-b.js", "icone.svg", "icone-192.png", "manifest.webmanifest"];
+const CACHE = "classe-v8";
+const FICHIERS = ["./", "index.html", "core.js", "vues-a.js", "vues-b.js", "vues-c.js", "vues-d.js", "demo.js", "icone.svg", "icone-192.png", "manifest.webmanifest"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FICHIERS))); self.skipWaiting(); });
 self.addEventListener("activate", (e) => { e.waitUntil(self.clients.claim()); });
 self.addEventListener("fetch", (e) => {

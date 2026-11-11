@@ -100,6 +100,7 @@ function blank() {
       cols: [{ k: 'phase', l: 'Étape', on: true }, { k: 'ens', l: 'Rôle de l’enseignant', on: true }, { k: 'cons', l: 'Consignes', on: true }, { k: 'att', l: 'Attendus', on: true }, { k: 'elv', l: 'Rôle des élèves', on: true }, { k: 'x1', l: 'Différenciation', on: false }, { k: 'x2', l: 'Matériel', on: false }],
       behav: [{ id: 'b1', l: 'Travail', pos: true }, { id: 'b2', l: 'Progrès', pos: true }, { id: 'b3', l: 'Écoute', pos: true }, { id: 'b4', l: 'Autonomie', pos: true }, { id: 'b5', l: 'Entraide', pos: true }, { id: 'b6', l: 'Bavardage', pos: false }, { id: 'b7', l: 'Travail non fait', pos: false }, { id: 'b8', l: 'Matériel oublié', pos: false }],
       seuils: { eva: 50, a: 75, d: 95 },
+      redac: 'libre',      // rédaction du déroulé : « libre » (un texte) ou « tableau » (une case par rubrique)
       reasons: ['Sortie', 'Intervenant', 'Évaluations', 'Spectacle', 'Absence', 'Formation', 'Grève', 'Retard pris'],   // motifs proposés quand une séance est remplacée
       apiKey: '', model: 'claude-sonnet-4-6', subInfo: '', safety: '', lastBackup: '', backupHour: 16
     },
@@ -116,6 +117,9 @@ function blank() {
     att: {},             // appel : « date|M ou S|élève » → 'A' (absent) ou 'R' (retard)
     absInfo: {},         // « date|élève » → { motif, just }
     calls: {},           // « date|M ou S|classe » → heure de validation de l'appel
+    mots: [],            // mots aux parents écrits : { id, date, model, v, text, title }
+    groupSets: [], avoid: [], plans: [], drawn: {},   // gestion de classe : groupes, élèves à ne pas associer, plans, élèves déjà tirés au sort
+    hw: [], hwRec: [],   // devoirs ajoutés à la main, devoirs réguliers
     notes: [], results: [], meetings: [], lists: [], events: [],
     ov: {},              // créneaux non faits ou prêtés : « date|créneau » → { t:'lost' | 'host', … }
     adhoc: {},           // séances écrites directement dans le cahier journal, hors programmation
@@ -160,6 +164,8 @@ const done = () => { save(); render(); };
 const cls = id => db.classes.find(c => c.id === id);
 const subj = id => db.subjects.find(s => s.id === id) || { name: '?', color: '#888', subs: [] };
 const stu = id => db.students.find(s => s.id === id);
+// « de Lina », mais « d’Adam » : l'élision devant une voyelle ou un h.
+const deN = n => (/^[aeiouyhàâäéèêëîïôöûüAEIOUYHÀÂÄÉÈÊËÎÏÔÖÛÜ]/.test(n) ? 'd’' : 'de ') + n;
 const sname = s => s ? (s.first + ' ' + s.last).trim() : '?';
 const levelsOf = c => (c.level || '').split(/[\s,\/+-]+/).filter(Boolean);
 const allLevels = () => [...new Set([...db.classes.flatMap(levelsOf), ...db.students.map(s => s.level).filter(Boolean)])].sort();
@@ -292,8 +298,8 @@ function restoreOcc(key) {
 }
 
 // ---------- 4. L'écran : menu, bandeau, fenêtres, impression ----------
-const VIEWS = [['home', '🏠', 'Aujourd’hui'], ['journal', '📓', 'Cahier journal'], ['edt', '🗓️', 'Emploi du temps'], ['prog', '🧭', 'Programmation'], ['agenda', '⏰', 'Agenda de classe'], ['hors', '💼', 'Hors classe'], ['eleves', '🧒', 'Élèves'], ['appel', '✅', 'Appel'], ['admin', '🗂️', 'Administratif'], ['reglages', '⚙️', 'Réglages']];
-const PARENT = { eleve: 'eleves', seance: 'journal' };
+const VIEWS = [['home', '🏠', 'Aujourd’hui'], ['journal', '📓', 'Cahier journal'], ['edt', '🗓️', 'Emploi du temps'], ['prog', '🧭', 'Programmation'], ['eleves', '🧒', 'Élèves'], ['classe', '🎲', 'Gestion de classe'], ['devoirs', '✏️', 'Devoirs'], ['appel', '✅', 'Appel'], ['hors', '⏰', 'Agenda de l’enseignant'], ['admin', '🗂️', 'Administratif'], ['reglages', '⚙️', 'Réglages']];
+const PARENT = { eleve: 'eleves', seance: 'journal', agenda: 'hors' };
 function go(v) { ui.view = v; if (location.hash.slice(1) !== v) history.pushState(null, '', '#' + v); render(); window.scrollTo(0, 0); }
 window.addEventListener('popstate', () => { const v = location.hash.slice(1); ui.view = V[v] && !((v === 'eleve' && !ui.stu) || (v === 'seance' && !ui.sess)) ? v : 'home'; render(); });
 const needBackup = () => db.dirty && new Date().getHours() >= (+db.settings.backupHour || 16) && (db.settings.lastBackup || '').slice(0, 10) !== TODAY() && ui.snooze !== TODAY();
