@@ -1,0 +1,15 @@
+{
+  "name": "Cahier de classe",
+  "short_name": "Classe",
+  "description": "Cahier journal, emploi du temps, programmation, appel et dossiers élèves.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eceef7",
+  "theme_color": "#27433d",
+  "lang": "fr",
+  "icons": [
+    { "src": "icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

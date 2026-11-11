@@ -1,0 +1,218 @@
+<!doctype html>
+<!-- ==================================================================================
+     classe/index.html — « Cahier de classe »
+     Adresse : https://yvanov40.github.io/public/classe/
+     Cette page ne contient que la structure (HTML) et l'apparence (CSS).
+     Le comportement est dans trois fichiers JavaScript chargés tout en bas :
+       core.js     : données, calcul automatique de la programmation, outils communs
+       vues-a.js   : aujourd'hui, cahier journal, séance, emploi du temps, programmation
+       vues-b.js   : agenda et 108 h, élèves, appel, administratif, réglages
+     Toutes les données restent dans le navigateur de l'appareil (rien n'est envoyé sur GitHub).
+     ================================================================================== -->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cahier de classe</title>
+<meta name="theme-color" content="#27433d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icone.svg">
+<link rel="apple-touch-icon" href="icone-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap" rel="stylesheet">
+<style>
+/* Les couleurs : l'ardoise (menu), le papier, l'encre bleue, les lignes Seyès, la marge rouge, la craie jaune. */
+:root{color-scheme:light;--ardoise:#27433d;--ardoise2:#1c322d;--craie:#f1efe2;--fond:#eceef7;--papier:#fcfdff;--ligne:#d3d7ee;--encre:#1b2c66;
+  --marge:#d5334b;--jaune:#f2c230;--gris:#59607c;--ok:#23795b;--bord:#c9cde3;
+  --titre:"Bricolage Grotesque","Trebuchet MS",system-ui,sans-serif;--texte:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+*{box-sizing:border-box}
+html{height:100%}
+body{margin:0;min-height:100%;background:var(--fond);color:var(--encre);font:16px/1.5 var(--texte);display:grid;grid-template-columns:232px 1fr;grid-template-rows:auto 1fr}
+h1,h2,h3{font-family:var(--titre);line-height:1.15;margin:0}
+h1{font-size:1.7rem;font-weight:700}h2{font-size:1.25rem;font-weight:700}h3{font-size:1.02rem;font-weight:700}
+p{margin:.4em 0}a{color:inherit}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--jaune);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* Le menu : une ardoise à gauche (en bas sur téléphone). */
+#nav{grid-row:1/3;background:var(--ardoise);color:var(--craie);padding:calc(env(safe-area-inset-top,0px) + 18px) 12px 18px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh;overflow:auto}
+#nav .logo{font:700 1.3rem var(--titre);padding:0 10px 14px;letter-spacing:-.01em}
+#nav .logo small{display:block;font:400 .8rem var(--texte);opacity:.75}
+#nav button{all:unset;cursor:pointer;display:flex;gap:10px;align-items:center;padding:9px 10px;border-radius:8px;font-size:.98rem}
+#nav button:hover{background:var(--ardoise2)}
+#nav button[aria-current]{background:var(--craie);color:var(--ardoise2);font-weight:700}
+#nav button:focus-visible{outline:3px solid var(--jaune)}
+#nav .ic{width:1.4em;text-align:center}
+
+#top{background:var(--papier);border-bottom:1px solid var(--bord);padding:10px 22px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+#top .sp{flex:1}
+#main{padding:22px;min-width:0;max-width:1180px;width:100%}
+
+/* Les boutons et champs. */
+.btn{border:1.5px solid var(--encre);background:var(--papier);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:700;font-size:.92rem;white-space:nowrap}
+.btn:hover{background:#eef1ff}
+.btn.pri{background:var(--encre);color:#fff}.btn.pri:hover{background:#27408f}
+.btn.danger{border-color:var(--marge);color:var(--marge)}
+.btn.sm{padding:3px 8px;font-size:.82rem}
+.btn.ghost{border-color:transparent;font-weight:400;text-decoration:underline}
+.lnk{all:unset;cursor:pointer;text-decoration:underline;text-decoration-color:var(--ligne);text-underline-offset:3px}
+.lnk:hover{text-decoration-color:var(--encre)}.lnk:focus-visible{outline:3px solid var(--jaune)}
+input,select,textarea{border:1.5px solid var(--bord);border-radius:7px;padding:6px 9px;background:#fff;max-width:100%}
+textarea{width:100%;resize:vertical;min-height:2.6em}
+input[type=checkbox]{width:1.15em;height:1.15em;accent-color:var(--encre);vertical-align:-2px}
+.fld{display:block;margin:.55em 0}.fld>span{display:block;font-size:.85rem;color:var(--gris);margin-bottom:2px}
+.fld input:not([type=checkbox]),.fld select{width:100%}
+.chk{display:block;margin:.55em 0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row.end{margin-top:14px}.sp{flex:1}
+.cap{margin-bottom:12px}.cap::first-letter{text-transform:uppercase}
+.muted{color:var(--gris)}.small{font-size:.86rem}
+.warn{color:var(--marge);font-weight:700}
+
+/* La feuille de cahier : marge rouge à gauche, c'est la signature de l'appli. */
+.sheet{background:var(--papier);border:1px solid var(--bord);border-radius:4px 12px 12px 4px;padding:16px 18px 16px 76px;margin:0 0 16px;position:relative}
+.sheet::before{content:"";position:absolute;left:62px;top:0;bottom:0;width:2px;background:var(--marge);opacity:.75}
+.sheet>.mg{position:absolute;left:0;width:60px;text-align:right;font:700 .82rem var(--titre);color:var(--gris);line-height:1.25;padding-top:2px}
+.sheet.flat{padding-left:18px}.sheet.flat::before{display:none}
+.sheet h2+*,.sheet h3+*{margin-top:8px}
+.head{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:0 0 16px;padding-bottom:10px;
+  background:repeating-linear-gradient(to bottom,transparent 0 9px,var(--ligne) 9px 10px);background-size:100% 40px;background-repeat:repeat-x;background-position:bottom}
+.head h1{background:var(--fond);padding-right:12px}
+.chip{display:inline-block;border-radius:99px;padding:1px 9px;font-size:.78rem;font-weight:700;background:#e4e8fb;white-space:nowrap}
+.chip.red{background:#fde3e7;color:#a11c33}.chip.ok{background:#dcf2e8;color:#17573f}.chip.yel{background:#fdf0c3;color:#6a4d00}
+.cb{display:inline-flex;gap:5px;align-items:center;font-size:.8rem;font-weight:700;white-space:nowrap}
+.cb i{width:.8em;height:.8em;border-radius:50%;display:inline-block}
+.dot{display:inline-block;width:.75em;height:.75em;border-radius:3px;margin-right:6px}
+ul.plain{list-style:none;margin:0;padding:0}
+ul.plain>li{padding:6px 0;border-bottom:1px solid var(--ligne);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+ul.plain>li:last-child{border-bottom:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.cols>.sheet{margin:0}
+
+/* Tableaux. */
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{border:1px solid var(--bord);padding:5px 7px;text-align:left;vertical-align:top}
+th{background:#eef0fa;font-family:var(--titre);font-weight:700;font-size:.85rem}
+table.steps td:first-child{white-space:nowrap}
+td.c,th.c{text-align:center}
+
+/* Emploi du temps : la grille horaire. */
+.gridw{overflow-x:auto;background:var(--papier);border:1px solid var(--bord);border-radius:10px}
+.grid{position:relative;min-width:620px}
+.grid .hr{position:absolute;left:0;right:0;border-top:1px solid var(--ligne);pointer-events:none}
+.grid .hr span{position:absolute;left:4px;top:-.7em;font-size:.72rem;color:var(--gris);background:var(--papier);padding:0 2px}
+.grid .col{position:absolute;top:0;bottom:0;border-left:1px solid var(--bord)}
+.grid .col[data-a]{cursor:copy}
+.grid .col.off{background:repeating-linear-gradient(135deg,#f1f2f9 0 8px,#fafbff 8px 16px)}
+.grid .colh{height:34px;display:flex;align-items:center;justify-content:center;font:700 .85rem var(--titre);border-bottom:1px solid var(--bord);background:#eef0fa}
+.grid .offl{text-align:center;color:var(--gris);font-size:.8rem;margin-top:30px}
+.blk{position:absolute;border:0;border-left:5px solid var(--c);background:color-mix(in srgb,var(--c) 17%,#fff);border-radius:5px;padding:2px 5px;text-align:left;overflow:hidden;cursor:pointer;font-size:.76rem;line-height:1.2}
+.blk b{display:block;font-family:var(--titre)}
+.blk.lost{background:repeating-linear-gradient(135deg,#fde3e7 0 6px,#fff 6px 12px);border-left-color:var(--marge);text-decoration:line-through}
+.blk.past{opacity:.72}
+
+/* Programmation. */
+.srow .n{width:1.8em;height:1.8em;border-radius:50%;background:#e4e8fb;display:inline-grid;place-items:center;font:700 .8rem var(--titre);flex:none}
+.srow.done .n{background:var(--ok);color:#fff}.srow.out .n{background:var(--marge);color:#fff}
+.srow .t{flex:1;min-width:140px}
+.bar{height:10px;border-radius:99px;background:#e1e4f3;overflow:hidden;display:flex}
+.bar i{display:block;height:100%}
+
+/* Tuiles élèves. */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px}
+.tile{all:unset;box-sizing:border-box;cursor:pointer;background:var(--papier);border:1.5px solid var(--bord);border-radius:12px;padding:12px 8px;text-align:center;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation;min-height:104px;display:flex;flex-direction:column;align-items:center;gap:4px}
+.tile:hover{border-color:var(--encre)}.tile:focus-visible{outline:3px solid var(--jaune)}
+.tile .av{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:700 1rem var(--titre);color:#fff}
+.tile b{font-size:.92rem;line-height:1.15}
+.att{all:unset;cursor:pointer;width:2.3em;height:2.3em;border-radius:8px;display:inline-grid;place-items:center;font-weight:700;background:#dcf2e8;color:#17573f}
+.att.A{background:var(--marge);color:#fff}.att.R{background:var(--jaune);color:#4a3600}
+.att:focus-visible{outline:3px solid var(--encre)}
+
+/* Fenêtres par-dessus la page. */
+#modal,#voice{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:14px}
+.ov{position:absolute;inset:0;background:rgba(20,28,60,.55)}
+.dlg{position:relative;background:var(--papier);border-radius:14px;padding:18px 20px;width:min(560px,100%);max-height:92vh;overflow:auto}
+.dlg h2{margin-bottom:8px}
+.opt{display:block;border:1.5px solid var(--bord);border-radius:10px;padding:9px 11px;margin:8px 0;cursor:pointer}
+.opt:has(input:checked){border-color:var(--encre);background:#eef1ff}
+.opt small{display:block;color:var(--gris);margin-left:1.7em}
+
+/* La note vocale : quatre bulles autour du texte dicté. */
+.vp{position:relative;width:320px;height:330px}
+.vp .mid{position:absolute;inset:78px 34px;background:var(--papier);border-radius:16px;padding:10px;display:flex;flex-direction:column;gap:4px}
+.vp .mid textarea{flex:1;font-size:.95rem}
+.vp .bb{all:unset;cursor:pointer;position:absolute;width:92px;height:92px;border-radius:50%;background:var(--jaune);color:#3d2d00;display:grid;place-items:center;text-align:center;font:700 .7rem/1.15 var(--titre);box-shadow:0 3px 0 rgba(0,0,0,.25)}
+.vp .bb span{font-size:1.5rem;display:block}
+.vp .bb:nth-of-type(1){left:0;top:0}.vp .bb:nth-of-type(2){right:0;top:0}.vp .bb:nth-of-type(3){left:0;bottom:0}.vp .bb:nth-of-type(4){right:0;bottom:0}
+.vp .bb:focus-visible{outline:4px solid #fff}
+.vp .x{all:unset;cursor:pointer;position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);color:#fff;text-decoration:underline}
+.pulse{color:var(--marge);font-weight:700;animation:pu 1s infinite alternate}
+@keyframes pu{to{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none}}
+
+#toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ardoise2);color:var(--craie);padding:10px 16px;border-radius:10px;z-index:30;max-width:92vw}
+.banner{background:var(--jaune);color:#3d2d00;border-radius:10px;padding:10px 14px;margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-weight:700}
+.step{border:1px solid var(--bord);border-radius:10px;padding:8px 10px;margin:8px 0;display:grid;grid-template-columns:90px 1fr 1fr;gap:6px 10px;background:#fff}
+.step label{font-size:.78rem;color:var(--gris);display:block}
+.step .x{grid-column:1/-1;text-align:right}
+#print{display:none}
+
+/* Téléphone : le menu passe en bas, la marge du cahier se resserre. */
+@media (max-width:820px){
+  body{display:block}
+  #nav{grid-row:auto;position:fixed;top:auto;bottom:0;left:0;right:0;height:auto;flex-direction:row;overflow-x:auto;padding:6px 6px calc(env(safe-area-inset-bottom,0px) + 6px);z-index:10;gap:0}
+  #nav .logo{display:none}
+  #nav button{flex-direction:column;gap:0;font-size:.66rem;padding:5px 9px;white-space:nowrap}
+  #nav .ic{font-size:1.25rem}
+  #top{padding:8px 12px}
+  #main{padding:14px 12px 96px}
+  .sheet{padding:12px 12px 12px 58px}.sheet::before{left:48px}.sheet>.mg{width:46px;font-size:.74rem}
+  .step{grid-template-columns:1fr}
+  table.steps thead{display:none}
+  table.steps,table.steps tbody,table.steps tr,table.steps td{display:block;border:0;padding:0}
+  table.steps tr{border:1px solid var(--bord);border-radius:8px;padding:8px;margin:6px 0}
+  table.steps td[data-l]::before{content:attr(data-l) " : ";font-weight:700;font-size:.8rem;color:var(--gris)}
+  table.steps td:empty{display:none}
+}
+
+/* Impression : on ne garde que le contenu. */
+@media print{
+  body{display:block;background:#fff;font-size:11pt}
+  #nav,#top,#modal,#voice,#toast,.np,.banner{display:none!important}
+  #main{padding:0;max-width:none}
+  .sheet{border:0;padding:0 0 0 0;margin-bottom:12pt;break-inside:avoid-page}.sheet::before{display:none}
+  .sheet>.mg{position:static;width:auto;text-align:left;float:left;margin-right:8pt}
+  .head{background:none;border-bottom:1.5pt solid #000}.head h1{background:none}
+  .gridw{overflow:visible;border:0}.grid{min-width:0}
+  .blk,.chip,.att,th,.srow .n,.bar,.bar i,.tile .av,.dot,.cb i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .tw{overflow:visible}
+  body.pdoc #main{display:none}
+  body.pdoc #print{display:block}
+  #print h1{font-size:16pt;margin-bottom:6pt}#print h2{font-size:12.5pt;margin:12pt 0 4pt;border-bottom:1pt solid #000}
+  #print .blank{border:1pt solid #999;min-height:60pt;margin:4pt 0}
+  #print td.w{height:22pt}
+  #print .pb{break-before:page}
+  table.steps thead{display:table-header-group}
+}
+</style>
+</head>
+<body>
+<nav id="nav" aria-label="Menu"></nav>
+<header id="top"></header>
+<main id="main"></main>
+<div id="modal" hidden></div>
+<div id="voice" hidden></div>
+<div id="toast" hidden role="status"></div>
+<div id="print"></div>
+<input type="file" id="file" accept=".json,application/json" hidden>
+<script src="core.js"></script>
+<script src="vues-a.js"></script>
+<script src="vues-b.js"></script>
+<script>
+  // Mode hors connexion : le « service worker » garde une copie de l'appli pour la classe sans wifi.
+  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
