@@ -24,6 +24,9 @@ V.home = () => {
     2. Dans <button class="lnk" data-a="go" data-v="edt">Emploi du temps</button>, posez vos créneaux de la semaine.<br>
     3. Dans <button class="lnk" data-a="go" data-v="prog">Programmation</button>, créez vos blocs de séances : les dates se calculent toutes seules.</p>
     <p class="np"><button class="btn" data-a="demo">Charger une classe d’exemple pour essayer</button></p></div>` : ''}
+  ${(() => { const c0 = ctx(); let from = addD(t, -1); for (let i = 0; i < 20 && !c0.school(from); i++) from = addD(from, -1);
+    const l = bdays(addD(from, 1), addD(t, 7)); if (!l.length) return '';
+    return `<div class="bdays">${l.map(x => x.date === t ? `<b>${esc(bdLabel(x))} aujourd’hui !</b>` : esc(bdLabel(x, true)) + (x.date < t ? ' (passé)' : '')).join(' · ')}</div>`; })()}
   <div class="cols">
   <div class="sheet"><h2>Séances du jour</h2>${occ.length ? `<ul class="plain">${occ.map(o => { const ss = c.occSess[o.key] || [], ad = db.adhoc[o.key]; return `<li><span class="muted small">${hm(o.start)}</span><span class="dot" style="background:${subj((o.hostQ || o.q).split('|')[1]).color}"></span><b>${esc(qname(o.hostQ || o.q))}</b> ${o.ov && o.ov.t === 'lost' ? '<span class="chip red">non fait</span>' : esc(ss.map(s => s.title).join(' + ') || (ad ? ad.title : ''))}</li>`; }).join('')}</ul>
     <p class="np"><button class="btn" data-a="toJournal" data-d="${t}">Ouvrir le cahier journal</button></p>` : `<p class="muted">${esc(c.why(t) || 'Aucun créneau à l’emploi du temps aujourd’hui.')}</p>`}</div>
@@ -69,6 +72,8 @@ V.journal = () => {
   const c = ctx(), d = ui.date, vc = visCls(), occ = (c.byDate[d] || []).filter(o => vc.includes(o.classId));
   return `<div class="head"><h1>Cahier journal</h1><span class="sp"></span><div class="row np"><button class="btn" data-a="day" data-n="-1" aria-label="Jour de classe précédent">‹</button><input type="date" value="${d}" data-c="jdate" aria-label="Date"><button class="btn" data-a="day" data-n="1" aria-label="Jour de classe suivant">›</button><button class="btn" data-a="toJournal" data-d="${TODAY()}">Aujourd’hui</button></div></div>
   <h2 class="cap">${esc(fD(d, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2>
+  ${(() => { const c0 = ctx(); let from = addD(d, -1); for (let i = 0; i < 20 && !c0.school(from); i++) from = addD(from, -1); const l = bdays(addD(from, 1), d);
+    return l.length ? `<p class="bdays">${l.map(x => esc(bdLabel(x, x.date !== d))).join(' · ')}${l.some(x => x.date !== d) ? ' <span class="small muted">(tombés pendant les jours sans classe)</span>' : ''}</p>` : ''; })()}
   ${occ.length ? occ.map(o => occCard(o, c)).join('') : `<div class="sheet"><p class="muted">${esc(c.why(d) || 'Aucun créneau ce jour-là. Posez vos créneaux dans l’emploi du temps.')}</p></div>`}
   <div class="sheet"><h3>Bilan de la journée</h3><textarea rows="3" data-c="dayNote" placeholder="Ce qui a marché, ce qui est à reprendre…">${esc(db.dayNotes[d] || '')}</textarea>
   <p class="np row">${occ.length ? '<button class="btn sm" data-a="printDayFiches">Imprimer les fiches de préparation du jour</button>' : ''}${occ.some(o => !o.ov) ? `<button class="btn sm danger" data-a="missDay">Journée non faite : tout décaler</button>` : ''}</p>
@@ -258,7 +263,8 @@ V.edt = () => {
   const c = ctx(), vc = visCls(), days = [...db.settings.days].sort(), t = TODAY();
   const tabs = `<div class="row np"><button class="btn ${ui.edt === 'week' ? 'pri' : ''}" data-a="edtMode" data-m="week">Semaine</button><button class="btn ${ui.edt === 'model' ? 'pri' : ''}" data-a="edtMode" data-m="model">Modifier les créneaux fixes</button></div>`;
   if (ui.edt === 'week') {
-    const cols = days.map(d => { const date = addD(ui.week, d - 1); return { date, label: fD(date, { weekday: 'short', day: 'numeric', month: 'short' }), off: c.why(date) }; });
+    const bw = bdays(ui.week, addD(ui.week, 6));
+    const cols = days.map(d => { const date = addD(ui.week, d - 1); return { date, label: fD(date, { weekday: 'short', day: 'numeric', month: 'short' }) + (bw.some(x => x.date === date) ? ' 🎂' : ''), off: c.why(date) }; });
     const blocks = cols.flatMap((col, i) => (c.byDate[col.date] || []).filter(o => vc.includes(o.classId)).map(o => {
       const q = o.hostQ || o.q, sb = subj(q.split('|')[1]), ss = c.occSess[o.key] || [], ad = db.adhoc[o.key], lost = o.ov && o.ov.t === 'lost';
       return { col: i, start: o.start, end: o.end, color: sb.color, cls: lost ? 'lost' : o.date < t ? 'past' : '', attrs: `data-a="occRead" data-key="${o.key}"`,
@@ -266,7 +272,7 @@ V.edt = () => {
     }));
     return `<div class="head"><h1>Emploi du temps</h1><span class="sp"></span>${tabs}</div>
      <div class="row" style="margin-bottom:10px"><button class="btn np" data-a="week" data-n="-7" aria-label="Semaine précédente">‹</button><b>Semaine du ${esc(fD(ui.week, { day: 'numeric', month: 'long', year: 'numeric' }))}</b><button class="btn np" data-a="week" data-n="7" aria-label="Semaine suivante">›</button><button class="btn np" data-a="week" data-n="0">Cette semaine</button><span class="sp"></span><button class="btn np" data-a="addExtra">Ajouter un créneau ponctuel</button></div>
-     ${grid(cols, blocks)}<p class="small muted np">Touchez un créneau pour lire la séance ; depuis la lecture, vous pouvez la modifier, ou la  : le <b>remplacer</b> (sortie, intervenant… le motif s’affiche à sa place et la séance se décale), le <b>déplacer</b> à une autre heure ou un autre jour, ou l’ouvrir dans le cahier journal. ↪ = créneau déplacé, ＋ = créneau ponctuel.</p>`;
+     ${bw.length ? `<p class="bdays">${bw.map(x => esc(bdLabel(x, true))).join(' · ')}</p>` : ''}${grid(cols, blocks)}<p class="small muted np">Touchez un créneau pour lire la séance ; depuis la lecture, vous pouvez la modifier, ou la  : le <b>remplacer</b> (sortie, intervenant… le motif s’affiche à sa place et la séance se décale), le <b>déplacer</b> à une autre heure ou un autre jour, ou l’ouvrir dans le cahier journal. ↪ = créneau déplacé, ＋ = créneau ponctuel.</p>`;
   }
   const tts = [...db.timetables].sort((a, b) => a.from < b.from ? -1 : 1), tt = tts.find(x => x.id === ui.tt) || c.ttFor(t) || tts[0]; ui.tt = tt.id;
   const cols = days.map(d => ({ day: d, label: DAYS[d] }));

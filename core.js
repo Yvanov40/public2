@@ -166,6 +166,25 @@ const subj = id => db.subjects.find(s => s.id === id) || { name: '?', color: '#8
 const stu = id => db.students.find(s => s.id === id);
 // « de Lina », mais « d’Adam » : l'élision devant une voyelle ou un h.
 const deN = n => (/^[aeiouyhàâäéèêëîïôöûüAEIOUYHÀÂÄÉÈÊËÎÏÔÖÛÜ]/.test(n) ? 'd’' : 'de ') + n;
+// ---------- Élèves : niveau, âge, anniversaires, contacts ----------
+const LEVELS = ['TPS', 'PS', 'MS', 'GS', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'];
+const ageAt = (b, d = TODAY()) => +d.slice(0, 4) - +b.slice(0, 4) - (d.slice(5) < b.slice(5) ? 1 : 0);
+// Les anniversaires tombant entre deux dates (un 29 février est fêté le 28 les années non bissextiles).
+function bdays(from, to, list) {
+  const out = [], leap = y => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  (list || visStu()).forEach(s => { if (!s.birth) return; for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) {
+    let d = y + s.birth.slice(4); if (s.birth.slice(5) === '02-29' && !leap(y)) d = y + '-02-28';
+    if (d >= from && d <= to) out.push({ s, date: d, age: y - +s.birth.slice(0, 4) }); } });
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+const bdLabel = (x, withDay) => '🎂 ' + x.s.first + ' (' + x.age + ' ans' + (withDay ? ', ' + fD(x.date, { weekday: 'long', day: 'numeric' }) : '') + ')';
+// Un lien d'appel : sur téléphone, toucher le numéro appelle directement.
+const telLink = t => t ? `<a href="tel:${esc(t.replace(/[^\d+]/g, ''))}">${esc(t)}</a>` : '';
+const CONTACTS = [['mom', 'Mère'], ['dad', 'Père'], ['oth', 'Autre contact']];
+function contactsHTML(s) {
+  const rows = CONTACTS.filter(([k]) => s[k + 'N'] || s[k + 'T']).map(([k, l]) => `<li><b>${k === 'oth' && s.othL ? esc(s.othL) : l}</b><span style="flex:1">${esc(s[k + 'N'] || '')}</span>${telLink(s[k + 'T'])}</li>`);
+  return rows.length ? `<ul class="plain">${rows.join('')}</ul>` : '';
+}
 const sname = s => s ? (s.first + ' ' + s.last).trim() : '?';
 const levelsOf = c => (c.level || '').split(/[\s,\/+-]+/).filter(Boolean);
 const allLevels = () => [...new Set([...db.classes.flatMap(levelsOf), ...db.students.map(s => s.level).filter(Boolean)])].sort();

@@ -71,13 +71,19 @@ function demoWritten(T) {
       W('Le verbe : évaluation', 'Évaluer : repérer le verbe et donner son infinitif.', '30\' Évaluation.\n10\' Rattrapage en petit groupe pour ceux qui en ont besoin.')] }
   };
 }
+// Des dates de naissance (CE1 nés en 2019, CE2 en 2018) dont une cette semaine, et des numéros fictifs.
+function demoBirth(i) { if (i === 0) return '2019' + addD(TODAY(), 1).slice(4); if (i === 3) return '2018' + addD(TODAY(), 4).slice(4);
+  return (i % 2 ? 2018 : 2019) + '-' + String(1 + (i * 5) % 12).padStart(2, '0') + '-' + String(1 + (i * 11) % 28).padStart(2, '0'); }
+function demoContacts(i, last) { const n = k => '06 00 00 ' + String(10 + i).padStart(2, '0') + ' ' + String(k).padStart(2, '0');
+  return { momN: ['Sophie', 'Claire', 'Julie', 'Marie', 'Laura'][i % 5] + ' ' + last, momT: n(1), dadN: i % 4 === 3 ? '' : ['Thomas', 'Nicolas', 'Julien', 'Mehdi', 'Pierre'][i % 5] + ' ' + last, dadT: i % 4 === 3 ? '' : n(2),
+    othN: i % 3 === 0 ? 'Mme ' + ['Durand', 'Leroy', 'Moreau'][i % 3] : '', othL: i % 3 === 0 ? ['Grand-mère', 'Assistante maternelle', 'Tante'][i % 3] : '', othT: i % 3 === 0 ? n(3) : '' }; }
 A.demo = () => {
   if ((db.students.length || db.sequences.length) && !confirm('Ajouter la classe d’exemple à vos données actuelles ?')) return;
   loadCycle('c2'); const sid = n => db.subjects.find(s => s.name === n).id;
   const k = db.classes[0]; k.name = 'CE1-CE2'; k.level = 'CE1, CE2';
   'Lina F,Hugo G,Inès F,Noé G,Jade F,Adam G,Zoé F,Liam G,Mila F,Sacha G,Chloé F,Nathan G,Léa F,Gabriel G,Emma F,Louis G,Alice F,Jules G,Rose F,Arthur G,Manon F,Tom G,Lou F,Paul G'.split(',').forEach((x, i) => {
     const [first, sex] = x.split(' '), last = ['Morel', 'Petit', 'Garcia', 'Lambert', 'Rousseau', 'Fontaine', 'Chevalier', 'Faure', 'Girard', 'André', 'Blanc', 'Bonnet', 'Mercier', 'Dupuis', 'Roux', 'Vincent', 'Muller', 'Lefèvre', 'Henry', 'Perrin', 'Robin', 'Masson', 'Marchand', 'Leroy'][i];
-    db.students.push({ id: uid(), first, last, sex, classId: k.id, level: i % 2 ? 'CE2' : 'CE1', birth: '', contacts: '', pai: i === 2 ? 'Allergie aux arachides. Trousse d’urgence dans le bureau, appeler le 15.' : '', needs: i === 7 ? 'PAP : consignes reformulées, temps supplémentaire, AESH le matin.' : '', info: '' });
+    db.students.push({ id: uid(), first, last, sex, classId: k.id, level: i % 2 ? 'CE2' : 'CE1', birth: demoBirth(i), contacts: '', ...demoContacts(i, last), pai: i === 2 ? 'Allergie aux arachides. Trousse d’urgence dans le bureau, appeler le 15.' : '', needs: i === 7 ? 'PAP : consignes reformulées, temps supplémentaire, AESH le matin.' : '', info: '' });
   });
   // L'emploi du temps de la semaine (lundi, mardi, jeudi, vendredi).
   const S = (day, start, end, name, sub = '') => ({ id: uid(), day, start, end, subjectId: sid(name), sub, classId: k.id });

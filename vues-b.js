@@ -112,8 +112,11 @@ A.selBeh = d => { const x = db.settings.behav.find(y => y.id === d.b), ids = [..
 A.etab = d => { ui.etab = d.t; ui.ev = null; render(); };
 function stuForm(s) {
   openForm({ title: s ? 'Modifier la fiche' : 'Nouvel élève', values: s || { classId: defCls(), level: ui.lvl },
-    fields: [{ k: 'first', label: 'Prénom', req: 1 }, { k: 'last', label: 'Nom' }, ...(db.classes.length > 1 ? [{ k: 'classId', label: 'Classe', type: 'select', options: clsOpts() }] : []), { k: 'level', label: 'Niveau (CP, CE1…)' }, { k: 'sex', label: 'Fille ou garçon (pour la mixité des groupes)', type: 'select', options: [['', 'Non précisé'], ['F', 'Fille'], ['G', 'Garçon']] }, { k: 'birth', label: 'Date de naissance', type: 'date' },
-    { k: 'contacts', label: 'Responsables et téléphones', type: 'textarea' },
+    fields: [{ k: 'first', label: 'Prénom', req: 1 }, { k: 'last', label: 'Nom' }, ...(db.classes.length > 1 ? [{ k: 'classId', label: 'Classe', type: 'select', options: clsOpts() }] : []), { k: 'level', label: 'Niveau de classe', type: 'select', options: [['', 'Non précisé'], ...LEVELS.map(x => [x, x]), ...(s && s.level && !LEVELS.includes(s.level) ? [[s.level, s.level]] : [])] },
+    { k: 'sex', label: 'Sexe (sert aussi à la mixité des groupes)', type: 'select', options: [['', 'Non précisé'], ['F', 'Fille'], ['G', 'Garçon']] }, { k: 'birth', label: 'Date de naissance', type: 'date' },
+    { k: 'momN', label: 'Mère : nom' }, { k: 'momT', label: 'Mère : téléphone', type: 'tel' }, { k: 'dadN', label: 'Père : nom' }, { k: 'dadT', label: 'Père : téléphone', type: 'tel' },
+    { k: 'othN', label: 'Autre contact : nom' }, { k: 'othL', label: 'Autre contact : lien (grand-mère, assistante maternelle…)' }, { k: 'othT', label: 'Autre contact : téléphone', type: 'tel' },
+    { k: 'contacts', label: 'Précisions sur les responsables (garde, personnes autorisées…)', type: 'textarea' },
     { k: 'pai', label: 'PAI : pathologie, conduite à tenir, où est la trousse', type: 'textarea' }, { k: 'needs', label: 'Besoins particuliers : PPS, PAP, PPRE, AESH, aménagements', type: 'textarea' },
     { k: 'info', label: 'Autres informations (sortie, garderie, cantine…)', type: 'textarea' }],
     onSave: v => { if (!v.classId) v.classId = s ? s.classId : defCls(); upsert(db.students, s && s.id, v); },
@@ -137,9 +140,9 @@ V.eleve = () => {
   const sec = (title, body, act, label) => `<div class="sheet"><div class="row"><h2>${title}</h2><span class="sp"></span>${act ? `<button class="btn sm np" data-a="${act}">${label}</button>` : ''}</div>${body}</div>`;
   const B = db.settings.behav;
   return `<div class="head"><h1>${esc(sname(s))}</h1><span class="sp"></span><div class="row np"><button class="btn" data-a="go" data-v="eleves">‹ Tous les élèves</button><button class="btn" data-a="editStu">Modifier la fiche</button></div></div>
-  <div class="sheet"><p style="margin:0">${cbadge(s.classId, 1)} ${s.level ? `<span class="chip">${esc(s.level)}</span>` : ''} ${s.birth ? 'Né(e) le ' + esc(fD(s.birth, { day: 'numeric', month: 'long', year: 'numeric' })) : ''}</p>
+  <div class="sheet"><p style="margin:0">${cbadge(s.classId, 1)} ${s.level ? `<span class="chip">${esc(s.level)}</span>` : ''} ${s.birth ? (s.sex === 'G' ? 'Né' : s.sex === 'F' ? 'Née' : 'Né(e)') + ' le ' + esc(fD(s.birth, { day: 'numeric', month: 'long', year: 'numeric' })) + ', ' + ageAt(s.birth) + ' ans' + (() => { const x = bdays(TODAY(), addD(TODAY(), 365), [s])[0]; if (!x) return ''; const n = Math.round((pd(x.date) - pd(TODAY())) / 864e5); return n === 0 ? ' <span class="chip yel">🎂 c’est son anniversaire !</span>' : n <= 14 ? ' <span class="chip yel">🎂 anniversaire ' + esc(fD(x.date, { weekday: 'long', day: 'numeric' })) + '</span>' : ''; })() : ''}</p>
    ${s.pai ? `<p class="warn">PAI : ${nl(s.pai)}</p>` : ''}${s.needs ? `<p><span class="chip yel">Besoins particuliers</span> ${nl(s.needs)}</p>` : ''}
-   ${s.contacts ? `<p><b>Responsables :</b> ${nl(s.contacts)}</p>` : ''}${s.info ? `<p>${nl(s.info)}</p>` : ''}
+   ${contactsHTML(s)}${s.contacts ? `<p class="small">${nl(s.contacts)}</p>` : ''}${s.info ? `<p>${nl(s.info)}</p>` : ''}
    ${!s.pai && !s.needs ? '<p class="small muted np">Ni PAI ni besoin particulier enregistré. « Modifier la fiche » pour en ajouter.</p>' : ''}
    ${imp.length ? `<p>${imp.map(l => `<span class="chip ${l.checked[s.id] ? 'ok' : 'red'}">${l.checked[s.id] ? '✓' : '✗'} ${esc(l.title)}</span>`).join(' ')}</p>` : ''}</div>
   <div class="sheet"><div class="row"><h2>Comportement et points positifs</h2></div>
