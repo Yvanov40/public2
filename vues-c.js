@@ -147,8 +147,8 @@ A.readSess = d => {
     ${s.obj ? `<p><b>Objectif :</b> ${nl(s.obj)}</p>` : '<p class="muted">Objectif à rédiger.</p>'}${s.comp ? `<p><b>Compétences :</b> ${nl(s.comp)}</p>` : ''}${s.mat ? `<p><b>Matériel :</b> ${nl(s.mat)}</p>` : ''}
     ${stepsOrTxt(s) ? '<h3>Déroulé</h3>' + stepsOrTxt(s) : ''}
     ${s.lesson ? `<p><b>📘 Leçon :</b> ${esc(s.lesson)}</p>` : ''}${s.hw ? `<p><b>✏️ Devoirs pour la prochaine fois :</b> ${nl(s.hw)}</p>` : ''}
-    ${o ? difBlock(o.key) : ''}${s.bilan ? `<p><b>Bilan :</b> ${nl(s.bilan)}</p>` : ''}
-    <div class="row end"><button class="btn" data-a="closeModal">Fermer</button><span class="sp"></span>${o ? `<button class="btn" data-a="occMenu" data-key="${o.key}">Non faite ou remplacée…</button>` : ''}<button class="btn" data-a="readPrint">Imprimer</button><button class="btn pri" data-a="readEdit">Modifier</button></div></div>`);
+    ${s.end ? `<p>${endChip(s)}${s.end.why ? ' <span class="small muted">' + esc(s.end.why) + '</span>' : ''}${s.end.left ? '<br><b>Reste à faire :</b> ' + nl(s.end.left) : ''}</p>` : ''}${o ? carryBlock(o.key) + difBlock(o.key) : ''}${s.bilan ? `<p><b>Bilan :</b> ${nl(s.bilan)}</p>` : ''}
+    <div class="row end"><button class="btn" data-a="closeModal">Fermer</button><span class="sp"></span>${o ? `<button class="btn" data-a="endOpen" ${seq ? `data-sid="${s.id}"` : `data-key="${ref.key}"`}>Non terminée ou écourtée…</button><button class="btn" data-a="occMenu" data-key="${o.key}">Non faite ou remplacée…</button>` : ''}<button class="btn" data-a="readPrint">Imprimer</button><button class="btn pri" data-a="readEdit">Modifier</button></div></div>`);
 };
 A.readEdit = () => { closeModal(); A.openSess(ui.readRef); };
 A.readPrint = () => { const keep = ui.sess; ui.sess = ui.readRef; const h = ficheHTML(curSess()); ui.sess = keep; closeModal(); printDoc(h); };
@@ -156,3 +156,71 @@ A.readPrint = () => { const keep = ui.sess; ui.sess = ui.readRef; const h = fich
 A.occRead = d => { const c = ctx(), o = c.byKey[d.key]; if (!o) return; const ss = c.occSess[o.key] || [];
   if (o.ov && o.ov.t === 'lost') return A.occMenu(d);
   if (ss.length) return A.readSess({ sid: ss[0].id }); if (db.adhoc[o.key]) return A.readSess({ key: o.key }); A.occMenu(d); };
+
+// ---------- Séance non terminée ou écourtée ----------
+// On note ce qui reste à faire, puis on choisit comment s'adapter :
+//  « suite » : une séance de suite s'insère juste après, sur le prochain créneau de la matière (le reste se décale) ;
+//  « report » : le reste est rappelé au début de la prochaine séance de la matière (rien ne bouge) ;
+//  « none » : on le note seulement.
+const ENDST = { unfinished: 'Non terminée', short: 'Écourtée' };
+const ENDWHY = ['Manque de temps', 'Plus long que prévu', 'Consigne mal comprise', 'Imprévu', 'Agitation', 'Activité trop difficile'];
+const endChip = s => s && s.end ? `<span class="chip yel" title="${esc(s.end.left || '')}">${ENDST[s.end.st]}${s.end.adapt === 'suite' ? ', suite ajoutée' : s.end.adapt === 'report' ? ', reste reporté' : ''}</span>` : '';
+// Où se trouve une séance (sa séquence ou son créneau hors programmation) et son créneau.
+function endRef(r) { const k = sessInfo(r); if (!k) return null; return { ...k, ref: r }; }
+// Le prochain créneau de la même matière : là où le reste reporté est rappelé.
+function nextSameQ(o) { const c = ctx(), q = o.hostQ || o.q; return c.occs.find(x => (x.hostQ || x.q) === q && !(x.ov && x.ov.t === 'lost') && x.date + x.start > o.date + o.start) || null; }
+function carryMap() {
+  const c = ctx(); if (c.carry) return c.carry; const m = {}, add = (s, o) => { const x = o && nextSameQ(o); if (x) (m[x.key] ??= []).push({ s, o }); };
+  db.sequences.forEach(seq => seq.sessions.forEach(s => { if (s.end && s.end.adapt === 'report') add(s, (c.sess[s.id] || {}).o); }));
+  for (const k in db.adhoc) { const s = db.adhoc[k]; if (s.end && s.end.adapt === 'report') add(s, c.byKey[k]); }
+  return c.carry = m;
+}
+function carryBlock(key) {
+  const l = carryMap()[key]; if (!l || !l.length) return '';
+  return `<div class="difb" style="border-left-color:var(--encre)"><b>↩️ À reprendre de la séance précédente</b><ul class="plain">${l.map(({ s, o }) => `<li><span style="flex:1;min-width:180px"><b>${esc(s.title)}</b> <span class="small muted">(${esc(fS(o.date))}, ${ENDST[s.end.st].toLowerCase()})</span>${s.end.left ? '<br>' + nl(s.end.left) : ''}</span></li>`).join('')}</ul></div>`;
+}
+A.endOpen = d => {
+  const r = d.sid ? { sid: d.sid } : { key: d.key }, k = endRef(r); if (!k) return;
+  const e = k.s.end || {}, steps = (k.s.steps || []).map(p => p.phase).filter(Boolean);
+  ui.end = { r, st: e.st || 'unfinished', why: e.why || '', left: e.left ?? (steps.length ? steps.map(x => '- ' + x).join('\n') : ''), adapt: e.adapt || (k.seq ? 'suite' : 'report'), had: !!k.s.end };
+  showEnd();
+};
+function showEnd() {
+  const u = ui.end, k = endRef(u.r); if (!k) return;
+  const ta = $('#endLeft'); if (ta) u.left = ta.value;
+  let warn = '';
+  if (u.adapt === 'suite' && k.seq && !(k.s.end && k.s.end.suite)) { const out = preview(() => addSuite(k, u.left)); warn = out.length ? `<span class="warn">Sortira de l’année : ${esc(out.join(' ; '))}.</span>` : 'Aucune séance ne sort de l’année.'; }
+  const nx = k.o && nextSameQ(k.o);
+  const tile = (v, t, sub, dis) => `<button type="button" class="dt" style="--c:var(--encre)" data-a="endSet" data-k="adapt" data-v="${v}" aria-pressed="${u.adapt === v}" ${dis ? 'disabled' : ''}><b>${t}</b><small>${sub}</small></button>`;
+  showModal(`<div class="dlg"><h2>${esc(k.s.title)}</h2><p class="small muted" style="margin-top:0">${k.o ? esc(fD(k.o.date)) + ', ' + hm(k.o.start) : ''}</p>
+    <div class="row">${Object.entries(ENDST).map(([v, l]) => `<button type="button" class="qb" data-a="endSet" data-k="st" data-v="${v}" aria-pressed="${u.st === v}">${l}</button>`).join('')}</div>
+    <h3 style="margin-top:12px">Pourquoi ? <span class="small muted">(facultatif)</span></h3><div class="row">${ENDWHY.map(w => `<button type="button" class="qb" data-a="endSet" data-k="why" data-v="${esc(w)}" aria-pressed="${u.why === w}">${esc(w)}</button>`).join('')}</div>
+    <h3 style="margin-top:12px">Ce qui reste à faire</h3><textarea id="endLeft" rows="3" placeholder="ex. La mise en commun et l’entraînement">${esc(u.left)}</textarea>
+    <h3 style="margin-top:12px">Comment s’adapter ?</h3>
+    <div class="dts">${tile('suite', 'Séance de suite', 'insérée juste après', !k.seq)}${tile('report', 'Reprendre au début', nx ? 'de la séance du ' + esc(fS(nx.date)) : 'de la prochaine séance')}${tile('none', 'Ne rien changer', 'juste le noter')}</div>
+    <p class="small">${u.adapt === 'suite' ? (k.seq ? `Une séance « ${esc(k.s.title)} (suite) » est ajoutée juste après, avec ce qui reste à faire. Elle prend le prochain créneau de la matière ; les séances suivantes reculent d’un cran. ${warn}` : 'Possible seulement pour une séance de la programmation.')
+      : u.adapt === 'report' ? 'Rien ne bouge : ce qui reste s’affiche en tête de la prochaine séance de la matière (cahier journal, fiche, lecture), pour l’intégrer ou alléger la séance.' : 'La séance est marquée, sans autre changement.'}</p>
+    <div class="row end">${u.had ? '<button class="btn danger" data-a="endDel">Retirer la mention</button>' : ''}<span class="sp"></span><button class="btn" data-a="closeModal">Annuler</button><button class="btn pri" data-a="endSave">Valider</button></div></div>`);
+}
+A.endSet = d => { const ta = $('#endLeft'); if (ta) ui.end.left = ta.value; ui.end[d.k] = d.k === 'why' && ui.end.why === d.v ? '' : d.v; showEnd(); };
+// La séance de suite : même matière, même objectif, avec ce qui reste en déroulé.
+function addSuite(k, left) {
+  const s = k.s, n = newSess(s.title.replace(/ \(suite\)$/, '') + ' (suite)');
+  Object.assign(n, { obj: s.obj || '', comp: s.comp || '', mat: s.mat || '', txt: left ? 'Reprise : ' + left : '', suiteOf: s.id });
+  if (s.subjectId) Object.assign(n, { subjectId: s.subjectId, sub: s.sub || '' });
+  const seq = db.sequences.find(x => x.id === k.seq.id); seq.sessions.splice(seq.sessions.findIndex(x => x.id === s.id) + 1, 0, n); return n;
+}
+function dropSuite(k) { const id = k.s.end && k.s.end.suite; if (!id) return; const f = findS(id); if (f) f.seq.sessions.splice(f.seq.sessions.indexOf(f.s), 1); }
+A.endSave = () => {
+  const u = ui.end, k = endRef(u.r); u.left = $('#endLeft').value.trim();
+  if (u.adapt === 'suite' && !k.seq) { toast('Choisissez une autre façon de s’adapter.'); return; }
+  const old = k.s.end || {}; let suite = old.suite;
+  if (u.adapt !== 'suite' && suite) { dropSuite(k); suite = ''; }
+  if (u.adapt === 'suite' && !suite) suite = addSuite(k, u.left).id;
+  else if (u.adapt === 'suite' && suite) { const f = findS(suite); if (f && (!f.s.txt || f.s.txt.startsWith('Reprise : '))) f.s.txt = u.left ? 'Reprise : ' + u.left : ''; }
+  k.s.end = { st: u.st, why: u.why, left: u.left, adapt: u.adapt, suite: suite || '' };
+  closeModal(); save();
+  const x = suite && ctx().sess[suite];
+  toast(ENDST[u.st] + ' : ' + (u.adapt === 'suite' ? (x && x.o ? 'suite placée le ' + fS(x.o.date) + ' à ' + hm(x.o.start) + '.' : 'suite ajoutée, mais sans créneau avant la fin de l’année.') : u.adapt === 'report' ? 'le reste sera rappelé à la prochaine séance.' : 'noté.')); render();
+};
+A.endDel = () => { const k = endRef(ui.end.r); if (k.s.end && k.s.end.suite && !confirm('Retirer aussi la séance de suite ajoutée ?')) return; dropSuite(k); delete k.s.end; closeModal(); done(); toast('Mention retirée.'); };

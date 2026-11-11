@@ -51,7 +51,7 @@ C.difDone = (d, el) => { db.notes.forEach(n => { if ((n.gid || n.id) === d.g) n.
 // Le cahier journal ne montre que l'objectif de chaque séance. Le détail (déroulé, étapes) est dans la
 // fiche de préparation, qui s'imprime à part. Les colonnes du déroulé se choisissent dans les réglages.
 const stepsTable = s => { const cs = cols(); return !(s.steps || []).length ? '' : `<div class="tw"><table class="steps"><thead><tr><th>Durée</th>${cs.map(c => `<th>${esc(c.l)}</th>`).join('')}</tr></thead><tbody>${s.steps.map(p => `<tr><td data-l="Durée">${esc(p.dur || '')} min</td>${cs.map(c => `<td data-l="${esc(c.l)}">${nl(p[c.k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`; };
-const sessBody = (s, ref) => `<h3><button class="lnk" data-a="readSess" ${ref}>${esc(s.title)}</button></h3>${s.lesson ? `<p class="small">📘 <b>Leçon :</b> ${esc(s.lesson)}</p>` : ''}${s.hw ? `<p class="small">✏️ <b>Devoirs pour la prochaine fois :</b> ${esc(s.hw)}</p>` : ''}
+const sessBody = (s, ref) => `<h3><button class="lnk" data-a="readSess" ${ref}>${esc(s.title)}</button> ${endChip(s)}</h3>${s.lesson ? `<p class="small">📘 <b>Leçon :</b> ${esc(s.lesson)}</p>` : ''}${s.hw ? `<p class="small">✏️ <b>Devoirs pour la prochaine fois :</b> ${esc(s.hw)}</p>` : ''}
   ${s.obj ? `<p><b>Objectif :</b> ${nl(s.obj)}</p>` : '<p class="muted small np">Objectif à rédiger.</p>'}${s.bilan ? `<p class="small"><b>Bilan :</b> ${nl(s.bilan)}</p>` : ''}`;
 
 function occCard(o, c) {
@@ -60,10 +60,10 @@ function occCard(o, c) {
   if (lost) body = `<p class="warn">${esc(o.ov.why || 'Créneau non fait')}</p><p class="np"><button class="btn sm" data-a="restoreOcc" data-key="${o.key}">Rétablir ce créneau</button></p>`;
   else {
     body = ss.map(s => sessBody(s, `data-sid="${s.id}"`)).join('<hr>') || (ad ? sessBody(ad, `data-key="${o.key}"`) : '<p class="muted">Aucune séance programmée sur ce créneau.</p>');
-    body += `<p class="np row">${!ss.length && !ad ? `<button class="btn sm" data-a="adhoc" data-key="${o.key}">Écrire une séance</button>` : ''}<button class="btn sm" data-a="occMenu" data-key="${o.key}">Séance non faite ou remplacée…</button></p>`;
+    body += `<p class="np row">${!ss.length && !ad ? `<button class="btn sm" data-a="adhoc" data-key="${o.key}">Écrire une séance</button>` : ''}${ss.length || ad ? `<button class="btn sm" data-a="endOpen" ${ss.length ? `data-sid="${ss[ss.length - 1].id}"` : `data-key="${o.key}"`}>Non terminée ou écourtée…</button>` : ''}<button class="btn sm" data-a="occMenu" data-key="${o.key}">Séance non faite ou remplacée…</button></p>`;
   }
   return `<div class="sheet"><div class="mg">${hm(o.start)}<br>${hm(o.end)}</div>
-    <p style="margin:0"><span class="dot" style="background:${sb.color}"></span><b>${esc(sb.name)}</b>${sub ? ' › ' + esc(sub) : ''} ${o.hostQ ? `<span class="chip yel">à la place de ${esc(subj(o.subjectId).name)}</span>` : ''}${o.from ? ` <span class="chip">déplacé du ${esc(fS(o.from.date))} ${hm(o.from.start)}</span>` : ''}${o.extra ? ' <span class="chip">créneau ponctuel</span>' : ''} ${cbadge(o.classId)}</p>${lost ? '' : difBlock(o.key)}${body}</div>`;
+    <p style="margin:0"><span class="dot" style="background:${sb.color}"></span><b>${esc(sb.name)}</b>${sub ? ' › ' + esc(sub) : ''} ${o.hostQ ? `<span class="chip yel">à la place de ${esc(subj(o.subjectId).name)}</span>` : ''}${o.from ? ` <span class="chip">déplacé du ${esc(fS(o.from.date))} ${hm(o.from.start)}</span>` : ''}${o.extra ? ' <span class="chip">créneau ponctuel</span>' : ''} ${cbadge(o.classId)}</p>${lost ? '' : carryBlock(o.key) + difBlock(o.key)}${body}</div>`;
 }
 V.journal = () => {
   const c = ctx(), d = ui.date, vc = visCls(), occ = (c.byDate[d] || []).filter(o => vc.includes(o.classId));
@@ -116,7 +116,7 @@ V.seance = () => {
    <label class="fld"><span>Titre</span><input data-c="sf" data-f="title" value="${esc(s.title)}"></label>
    ${seq ? `<label class="fld np"><span>Matière de cette séance (pour une séquence transversale : lecture, écriture, EPS…)</span><select data-c="sessSubj"><option value="">Comme la séquence : ${esc(subj(seq.subjectId).name + (seq.sub ? ' › ' + seq.sub : ''))}</option>${whatOpts().map(([v, l]) => `<option value="${esc(v)}" ${s.subjectId && v === s.subjectId + '|' + (s.sub || '') ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>` : ''}
    ${ta('obj', 'Objectif de la séance', 2)}${ta('comp', 'Compétences travaillées', 2)}${ta('mat', 'Matériel', 2)}</div>
-  ${o && difBlock(o.key) ? `<div class="sheet">${difBlock(o.key)}</div>` : ''}
+  ${o && (difBlock(o.key) || carryBlock(o.key)) ? `<div class="sheet">${carryBlock(o.key)}${difBlock(o.key)}</div>` : ''}
   ${(() => { const libre = !s.steps.length && (s.mode ? s.mode === 'libre' : db.settings.redac !== 'tableau'); return libre ? `<div class="sheet"><div class="row"><h2>Déroulé</h2><span class="sp"></span><button class="btn sm np" data-a="toSteps">Passer en tableau</button></div>
    <textarea rows="12" data-c="sf" data-f="txt" placeholder="Écrivez comme dans un cahier, une ligne par étape :&#10;10' Calcul mental : furet des nombres de 5 en 5.&#10;20' Recherche en binômes : 37 + 25 avec le matériel. Mise en commun.&#10;15' Entraînement : 4 additions sur le cahier. Défi pour les plus rapides.">${esc(s.txt || '')}</textarea>
    <p class="small muted">En texte libre, rien n’est imposé. « Passer en tableau » découpe ce texte en étapes (une ligne = une étape, la durée en début de ligne).</p></div>` : `<div class="sheet"><div class="row"><h2>Déroulé</h2><span class="sp"></span><button class="btn sm np" data-a="toTxt">Passer en texte libre</button></div>`; })()}
@@ -133,6 +133,7 @@ V.seance = () => {
    ${s.rem.map((r, i) => { const rd = remDate(r, o); return `<div class="row" style="margin:6px 0"><select data-c="rm" data-i="${i}" data-f="type" aria-label="Type de rappel">${Object.entries(REM).map(([a, [ic, l]]) => `<option value="${a}" ${r.type === a ? 'selected' : ''}>${ic} ${l}</option>`).join('')}</select><input data-c="rm" data-i="${i}" data-f="text" value="${esc(r.text)}" placeholder="Quoi ?" style="flex:1;min-width:120px" aria-label="Détail"><input type="date" data-c="rm" data-i="${i}" data-f="date" value="${esc(rd)}" aria-label="Date du rappel">${o && rd > o.date ? '<span class="chip red">après la séance</span>' : ''}<button class="btn sm danger np" data-a="delRem" data-i="${i}" aria-label="Retirer le rappel">✕</button></div>`; }).join('')}
    <p class="np"><button class="btn" data-a="addRem">Ajouter un rappel</button></p></div>
   <div class="sheet">${ta('bilan', 'Bilan après la séance', 2, 'Ce qui est acquis, ce qui est à reprendre…')}
+   <p class="np row">${endChip(s)}<button class="btn sm" data-a="endOpen" ${seq ? `data-sid="${s.id}"` : `data-key="${ui.sess.key}"`}>${s.end ? 'Modifier : non terminée ou écourtée' : 'Séance non terminée ou écourtée…'}</button></p>
    ${seq ? `<label class="fld" style="max-width:260px"><span>Date choisie : ne pas faire avant le (facultatif)</span><input type="date" data-c="sf" data-f="pin" data-r="1" value="${esc(s.pin || '')}"></label>
    <label class="chk"><input type="checkbox" data-c="sf" data-f="merge" ${s.merge ? 'checked' : ''}> Compactée : partage le créneau de la séance précédente</label><label class="chk"><input type="checkbox" data-c="sf" data-f="skip" ${s.skip ? 'checked' : ''}> Séance abandonnée (elle n’occupe plus de créneau)</label>` : ''}
    <p class="np row"><button class="btn" data-a="exportSess">Exporter pour réutiliser</button>${seq ? '<button class="btn" data-a="dupSess">Dupliquer</button>' : ''}<button class="btn danger" data-a="delSess">Supprimer la séance</button></p></div>`;
@@ -386,7 +387,7 @@ V.prog = () => {
     else if (!x.o) { st = 'out'; chip = '<span class="chip red">hors année</span>'; }
     else { st = x.o.date < t ? 'done' : ''; chip = `<span class="small ${x.o.date === t ? 'warn' : 'muted'}">${x.o.date === t ? 'aujourd’hui' : esc(fS(x.o.date))}</span>`; }
     const w = s.obj || s.txt || s.steps.length;
-    return `<li class="srow ${st}"><span class="n">${st === 'done' ? '✓' : i + 1}</span><span class="t">${own ? `<span class="chip" style="border-left:4px solid ${subj(q.split('|')[1]).color}">${esc(qname(q))}</span> ` : ''}<button class="lnk" data-a="readSess" data-sid="${s.id}">${esc(s.title)}</button> ${w ? '' : '<span class="chip yel">à rédiger</span>'}${s.lesson ? ' 📘' : ''}${s.hw ? ' ✏️' : ''}</span>${chip}
+    return `<li class="srow ${st}"><span class="n">${st === 'done' ? '✓' : i + 1}</span><span class="t">${own ? `<span class="chip" style="border-left:4px solid ${subj(q.split('|')[1]).color}">${esc(qname(q))}</span> ` : ''}<button class="lnk" data-a="readSess" data-sid="${s.id}">${esc(s.title)}</button> ${endChip(s)}${w ? '' : '<span class="chip yel">à rédiger</span>'}${s.lesson ? ' 📘' : ''}${s.hw ? ' ✏️' : ''}</span>${chip}
       <span class="np"><button class="btn sm" data-a="openSess" data-sid="${s.id}">Rédiger</button> <button class="btn sm" data-a="mvSess" data-sid="${s.id}" data-n="-1" aria-label="Monter">↑</button> <button class="btn sm" data-a="mvSess" data-sid="${s.id}" data-n="1" aria-label="Descendre">↓</button></span></li>`; };
   const block = seq => {
     const l = shown(seq), d = dates(seq, l), past = d.filter(x => x < t).length, n = l.length, open = ui.pseq === seq.id, sb = subj(seq.subjectId);
