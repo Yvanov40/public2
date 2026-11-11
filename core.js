@@ -33,6 +33,43 @@ const NOTE = { incident: ['🚑', 'Incident'], comportement: ['🙂', 'Comportem
 const INC = ['Dispute', 'Blessure', 'Maladie', 'Communication avec la famille', 'Autre'];
 const LEVELS = ['Non atteint', 'Partiellement atteint', 'Atteint', 'Dépassé'];
 
+// ---------- Apparence : palettes et polices (choisies dans Réglages › Apparence) ----------
+// Chaque palette donne six couleurs : le menu, le fond, les feuilles, le texte, la marge du cahier, l'accent.
+const THEMES = {
+  ardoise: { n: 'Ardoise', c: { ardoise: '#27433d', fond: '#eceef7', papier: '#fcfdff', encre: '#1b2c66', marge: '#d5334b', jaune: '#f2c230' } },
+  violette: { n: 'Encre violette', c: { ardoise: '#3b2a5c', fond: '#f1edf7', papier: '#fffdff', encre: '#2e1f4f', marge: '#c2305a', jaune: '#f0b429' } },
+  ocean: { n: 'Océan', c: { ardoise: '#0f4c5c', fond: '#e6f0f2', papier: '#fbfeff', encre: '#12333d', marge: '#d9541a', jaune: '#f6bd60' } },
+  kraft: { n: 'Kraft', c: { ardoise: '#5b4636', fond: '#f0e9df', papier: '#fffaf2', encre: '#3a2a1e', marge: '#b23a48', jaune: '#e9b44c' } },
+  noir: { n: 'Tableau noir', c: { ardoise: '#121c1a', fond: '#1b2623', papier: '#25332f', encre: '#eef0e4', marge: '#ff8696', jaune: '#f2c230' } },
+  contraste: { n: 'Contraste fort', c: { ardoise: '#000000', fond: '#ffffff', papier: '#ffffff', encre: '#000000', marge: '#b80000', jaune: '#ffd400' } }
+};
+const TCOL = { ardoise: 'Menu', fond: 'Fond', papier: 'Feuilles', encre: 'Texte', marge: 'Marge et alertes', jaune: 'Accent' };
+// Les polices : [nom affiché, pile CSS, famille à charger chez Google Fonts (vide = déjà sur l'appareil)].
+const FONTS = {
+  atkinson: ['Atkinson Hyperlegible (très lisible)', '"Atkinson Hyperlegible",system-ui,sans-serif', ''],
+  lexend: ['Lexend (lecture facilitée)', 'Lexend,system-ui,sans-serif', 'Lexend:wght@400;700'],
+  andika: ['Andika (lettres d’école)', 'Andika,system-ui,sans-serif', 'Andika:wght@400;700'],
+  nunito: ['Nunito (ronde)', 'Nunito,system-ui,sans-serif', 'Nunito:wght@400;700'],
+  merri: ['Merriweather (à empattements)', 'Merriweather,Georgia,serif', 'Merriweather:wght@400;700'],
+  patrick: ['Patrick Hand (manuscrite)', '"Patrick Hand","Comic Sans MS",cursive', 'Patrick+Hand'],
+  bricolage: ['Bricolage Grotesque', '"Bricolage Grotesque","Trebuchet MS",system-ui,sans-serif', ''],
+  systeme: ['Police de l’appareil', 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif', '']
+};
+// Une couleur est-elle sombre ? (pour choisir un texte clair ou foncé par-dessus)
+const dark = h => { const n = parseInt(h.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) < 140; };
+function applyTheme() {
+  const t = db.settings.theme, r = document.documentElement.style;
+  for (const k in TCOL) r.setProperty('--' + k, t[k]);
+  r.setProperty('--craie', dark(t.ardoise) ? '#f3f1e6' : '#16201d');           // texte du menu
+  r.setProperty('--champ', dark(t.papier) ? 'color-mix(in srgb,' + t.papier + ' 88%,#fff)' : '#fff');   // fond des champs de saisie
+  r.setProperty('color-scheme', dark(t.papier) ? 'dark' : 'light');
+  r.setProperty('--taille', (+t.size || 16) + 'px');
+  const f = FONTS[t.font] || FONTS.atkinson, ft = t.titles === 'same' ? f : FONTS[t.titles] || FONTS.bricolage;
+  r.setProperty('--texte', f[1]); r.setProperty('--titre', ft[1]);
+  for (const x of [f, ft]) if (x[2] && !document.getElementById('gf-' + x[2])) { const l = document.createElement('link'); l.id = 'gf-' + x[2]; l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=' + x[2] + '&display=swap'; document.head.appendChild(l); }
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = t.ardoise;
+}
+
 // ---------- 2. Les données ----------
 function blank() {
   const S = (name, color, subs) => ({ id: uid(), name, color, subs });
@@ -42,6 +79,7 @@ function blank() {
       teacher: '', school: '', year: '2026-2027', start: '2026-09-01', end: '2027-07-02', days: [1, 2, 4, 5],
       holidays: [{ from: '2026-10-17', to: '2026-11-01', label: 'Toussaint' }, { from: '2026-12-19', to: '2027-01-03', label: 'Noël' }],
       quotas: { apc: 36, equipe: 48, formation: 18, conseil: 6 }, mark: 'color',
+      theme: { pal: 'ardoise', ...THEMES.ardoise.c, font: 'atkinson', titles: 'bricolage', size: 16 },
       apiKey: '', model: 'claude-sonnet-4-6', subInfo: '', safety: '', lastBackup: '', backupHour: 16
     },
     classes: [{ id: uid(), name: 'Ma classe', level: '', color: '#3355c0', icon: '🦊' }],
@@ -70,6 +108,7 @@ function normalize() {                                 // complète ce qui manqu
   if (!db || !db.settings) { db = b; return; }
   for (const k in b) if (db[k] === undefined) db[k] = b[k];
   for (const k in b.settings) if (db.settings[k] === undefined) db.settings[k] = b.settings[k];
+  db.settings.theme = { ...b.settings.theme, ...db.settings.theme };
 }
 normalize();
 
@@ -191,6 +230,7 @@ window.addEventListener('popstate', () => { const v = location.hash.slice(1); ui
 const needBackup = () => db.dirty && new Date().getHours() >= (+db.settings.backupHour || 16) && (db.settings.lastBackup || '').slice(0, 10) !== TODAY() && ui.snooze !== TODAY();
 
 function render() {
+  applyTheme();
   const cur = PARENT[ui.view] || ui.view;
   $('#nav').innerHTML = `<div class="logo">Cahier de classe<small>${esc(db.settings.year)}</small></div>` + VIEWS.map(([k, ic, l]) => `<button data-a="go" data-v="${k}" ${cur === k ? 'aria-current="page"' : ''}><span class="ic">${ic}</span>${l}</button>`).join('');
   const lv = allLevels();

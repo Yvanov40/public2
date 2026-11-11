@@ -210,7 +210,19 @@ C.chk = (d, el) => { const l = db.lists.find(x => x.id === d.l); if (el.checked)
 // ---------- Réglages ----------
 V.reglages = () => {
   const S = db.settings, inp = (k, l, type = 'text', ph = '') => `<label class="fld"><span>${l}</span><input type="${type}" data-c="set" data-k="${k}" value="${esc(S[k])}" placeholder="${ph}"></label>`;
-  return `<div class="head"><h1>Réglages</h1></div><div class="cols">
+  const T = S.theme, fopt = (cur, keys) => keys.map(k => `<option value="${k}" ${cur === k ? 'selected' : ''}>${esc(FONTS[k][0])}</option>`).join('');
+  return `<div class="head"><h1>Réglages</h1></div>
+  <div class="sheet"><div class="mg">Aa</div><h2>Apparence</h2>
+   <p class="small muted" style="margin-bottom:4px">Palette</p>
+   <div class="row">${Object.entries(THEMES).map(([k, p]) => `<button class="pal" data-a="pal" data-p="${k}" aria-pressed="${T.pal === k}"><span>${Object.values(p.c).map(x => `<i style="background:${x}"></i>`).join('')}</span>${p.n}</button>`).join('')}</div>
+   <p class="small muted" style="margin:12px 0 4px">Couleurs sur mesure${T.pal === 'perso' ? ' (palette personnelle)' : ''}</p>
+   <div class="row">${Object.entries(TCOL).map(([k, l]) => `<label class="small" style="text-align:center">${l}<br><input type="color" data-c="tcol" data-k="${k}" value="${esc(T[k])}"></label>`).join('')}</div>
+   <div class="row" style="margin-top:10px;align-items:flex-end"><label class="fld" style="flex:1;min-width:200px"><span>Police du texte</span><select data-c="tfont" data-k="font">${fopt(T.font, ['atkinson', 'lexend', 'andika', 'nunito', 'merri', 'patrick', 'systeme'])}</select></label>
+    <label class="fld" style="flex:1;min-width:200px"><span>Police des titres</span><select data-c="tfont" data-k="titles"><option value="same" ${T.titles === 'same' ? 'selected' : ''}>La même que le texte</option>${fopt(T.titles, ['bricolage', 'atkinson', 'lexend', 'andika', 'nunito', 'merri', 'patrick', 'systeme'])}</select></label>
+    <label class="fld" style="flex:1;min-width:200px"><span>Taille du texte : <b id="tsz">${esc(T.size)}</b> px</span><input type="range" min="13" max="22" step="1" data-c="tsize" value="${esc(T.size)}" style="padding:0"></label></div>
+   <p class="small muted">Les changements s’appliquent tout de suite, sur cet appareil. L’impression reste toujours en noir sur blanc. Hors connexion, une police pas encore chargée est remplacée par celle de l’appareil.</p>
+   <p class="np"><button class="btn sm" data-a="pal" data-p="ardoise" data-all="1">Revenir à l’apparence d’origine</button></p></div>
+  <div class="cols">
   <div class="sheet"><h2>L’école</h2>${inp('teacher', 'Enseignant(e)')}${inp('school', 'École')}${inp('year', 'Année scolaire')}</div>
   <div class="sheet"><div class="row"><h2>Classes</h2><span class="sp"></span><button class="btn sm" data-a="newCls">Ajouter une classe</button></div>
    <ul class="plain">${db.classes.map(c => `<li>${cbadge(c.id, 1)} <span class="muted small">${esc(c.level)}</span><span class="sp"></span><button class="btn sm" data-a="editCls" data-id="${c.id}">Modifier</button></li>`).join('')}</ul>
@@ -234,6 +246,10 @@ V.reglages = () => {
    <p class="row"><button class="btn" data-a="newYear">Préparer l’année suivante</button><button class="btn danger" data-a="wipe">Tout effacer</button></p>
    <p class="small muted">Les données vivent dans ce navigateur, sur cet appareil. Sans sauvegarde, elles sont perdues si l’on vide l’historique ou si l’on change d’appareil.</p></div></div>`;
 };
+A.pal = d => { const T = db.settings.theme; Object.assign(T, THEMES[d.p].c, { pal: d.p }); if (d.all) Object.assign(T, { font: 'atkinson', titles: 'bricolage', size: 16 }); done(); };
+C.tcol = (d, el) => { const T = db.settings.theme; T[d.k] = el.value; T.pal = 'perso'; applyTheme(); saveSoon(); };     // sans réafficher : le sélecteur de couleur reste ouvert
+C.tfont = (d, el) => { db.settings.theme[d.k] = el.value; applyTheme(); saveSoon(); };
+C.tsize = (d, el) => { db.settings.theme.size = +el.value; $('#tsz').textContent = el.value; applyTheme(); saveSoon(); };
 C.set = (d, el) => { db.settings[d.k] = el.value; if (d.r) done(); else saveSoon(); };
 C.quota = (d, el) => { db.settings.quotas[d.k] = +el.value || 0; saveSoon(); };
 C.sday = (d, el) => { const n = +d.d, a = db.settings.days; if (el.checked) { if (!a.includes(n)) a.push(n); } else if (a.length > 1) a.splice(a.indexOf(n), 1); done(); };
@@ -260,7 +276,7 @@ A.restore = () => pickFile(j => {
   if (!confirm('Remplacer toutes les données de cet appareil par cette sauvegarde ?')) return;
   const key = db.settings.apiKey; db = j; normalize(); db.settings.apiKey = key; save(); db.dirty = false; localStorage.setItem(KEY, JSON.stringify(db)); ui.stu = ui.sess = ui.tt = null; ui.cls = ''; render(); toast('Sauvegarde restaurée.');
 });
-A.wipe = () => { if (confirm('Effacer toutes les données de cet appareil ? Faites une sauvegarde avant.') && confirm('Vraiment tout effacer ?')) { const key = db.settings.apiKey; db = blank(); db.settings.apiKey = key; save(); ui.cls = ''; ui.tt = null; go('home'); } };
+A.wipe = () => { if (confirm('Effacer toutes les données de cet appareil ? Faites une sauvegarde avant.') && confirm('Vraiment tout effacer ?')) { const key = db.settings.apiKey, th = db.settings.theme; db = blank(); db.settings.apiKey = key; db.settings.theme = th; save(); ui.cls = ''; ui.tt = null; go('home'); } };
 // Année suivante : on garde ce qui se réutilise (matières, emploi du temps, blocs et séances, listes), on vide le reste.
 A.newYear = () => { const y = +db.settings.end.slice(0, 4);
   openForm({ title: 'Préparer l’année suivante', ok: 'Créer la nouvelle année', intro: '<p>Sont <b>reportés</b> : classes, matières, emploi du temps, tous les blocs et leurs séances (fiches complètes), titres des listes administratives.<br>Sont <b>vidés</b> : appel, notes, résultats, réunions, agenda, créneaux non faits.</p><p class="warn">Enregistrez d’abord une sauvegarde de l’année qui se termine : elle servira d’archive.</p>',

@@ -23,12 +23,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap" rel="stylesheet">
 <style>
 /* Les couleurs : l'ardoise (menu), le papier, l'encre bleue, les lignes Seyès, la marge rouge, la craie jaune. */
-:root{color-scheme:light;--ardoise:#27433d;--ardoise2:#1c322d;--craie:#f1efe2;--fond:#eceef7;--papier:#fcfdff;--ligne:#d3d7ee;--encre:#1b2c66;
-  --marge:#d5334b;--jaune:#f2c230;--gris:#59607c;--ok:#23795b;--bord:#c9cde3;
+/* Les six premières se règlent dans Réglages › Apparence ; les suivantes s'en déduisent toutes seules. */
+:root{color-scheme:light;--ardoise:#27433d;--fond:#eceef7;--papier:#fcfdff;--encre:#1b2c66;--marge:#d5334b;--jaune:#f2c230;
+  --craie:#f1efe2;--champ:#fff;--taille:16px;--ok:#23795b;
+  --ardoise2:color-mix(in srgb,var(--ardoise) 76%,#000);--ligne:color-mix(in srgb,var(--encre) 18%,var(--papier));--bord:color-mix(in srgb,var(--encre) 24%,var(--papier));
+  --gris:color-mix(in srgb,var(--encre) 68%,var(--papier));--teinte:color-mix(in srgb,var(--encre) 8%,var(--papier));--teinte2:color-mix(in srgb,var(--encre) 13%,var(--papier));
   --titre:"Bricolage Grotesque","Trebuchet MS",system-ui,sans-serif;--texte:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 *{box-sizing:border-box}
-html{height:100%}
-body{margin:0;min-height:100%;background:var(--fond);color:var(--encre);font:16px/1.5 var(--texte);display:grid;grid-template-columns:232px 1fr;grid-template-rows:auto 1fr}
+html{height:100%;font-size:var(--taille)}
+body{margin:0;min-height:100%;background:var(--fond);color:var(--encre);font:1rem/1.5 var(--texte);display:grid;grid-template-columns:232px 1fr;grid-template-rows:auto 1fr}
 h1,h2,h3{font-family:var(--titre);line-height:1.15;margin:0}
 h1{font-size:1.7rem;font-weight:700}h2{font-size:1.25rem;font-weight:700}h3{font-size:1.02rem;font-weight:700}
 p{margin:.4em 0}a{color:inherit}
@@ -42,7 +45,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 #nav .logo small{display:block;font:400 .8rem var(--texte);opacity:.75}
 #nav button{all:unset;cursor:pointer;display:flex;gap:10px;align-items:center;padding:9px 10px;border-radius:8px;font-size:.98rem}
 #nav button:hover{background:var(--ardoise2)}
-#nav button[aria-current]{background:var(--craie);color:var(--ardoise2);font-weight:700}
+#nav button[aria-current]{background:var(--craie);color:var(--ardoise);font-weight:700}
 #nav button:focus-visible{outline:3px solid var(--jaune)}
 #nav .ic{width:1.4em;text-align:center}
 
@@ -52,14 +55,14 @@ button,input,select,textarea{font:inherit;color:inherit}
 
 /* Les boutons et champs. */
 .btn{border:1.5px solid var(--encre);background:var(--papier);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:700;font-size:.92rem;white-space:nowrap}
-.btn:hover{background:#eef1ff}
-.btn.pri{background:var(--encre);color:#fff}.btn.pri:hover{background:#27408f}
+.btn:hover{background:var(--teinte2)}
+.btn.pri{background:var(--encre);color:var(--papier)}.btn.pri:hover{background:color-mix(in srgb,var(--encre) 82%,var(--papier))}
 .btn.danger{border-color:var(--marge);color:var(--marge)}
 .btn.sm{padding:3px 8px;font-size:.82rem}
 .btn.ghost{border-color:transparent;font-weight:400;text-decoration:underline}
 .lnk{all:unset;cursor:pointer;text-decoration:underline;text-decoration-color:var(--ligne);text-underline-offset:3px}
 .lnk:hover{text-decoration-color:var(--encre)}.lnk:focus-visible{outline:3px solid var(--jaune)}
-input,select,textarea{border:1.5px solid var(--bord);border-radius:7px;padding:6px 9px;background:#fff;max-width:100%}
+input,select,textarea{border:1.5px solid var(--bord);border-radius:7px;padding:6px 9px;background:var(--champ);max-width:100%}
 textarea{width:100%;resize:vertical;min-height:2.6em}
 input[type=checkbox]{width:1.15em;height:1.15em;accent-color:var(--encre);vertical-align:-2px}
 .fld{display:block;margin:.55em 0}.fld>span{display:block;font-size:.85rem;color:var(--gris);margin-bottom:2px}
@@ -79,7 +82,7 @@ input[type=checkbox]{width:1.15em;height:1.15em;accent-color:var(--encre);vertic
 .head{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:0 0 16px;padding-bottom:10px;
   background:repeating-linear-gradient(to bottom,transparent 0 9px,var(--ligne) 9px 10px);background-size:100% 40px;background-repeat:repeat-x;background-position:bottom}
 .head h1{background:var(--fond);padding-right:12px}
-.chip{display:inline-block;border-radius:99px;padding:1px 9px;font-size:.78rem;font-weight:700;background:#e4e8fb;white-space:nowrap}
+.chip{display:inline-block;border-radius:99px;padding:1px 9px;font-size:.78rem;font-weight:700;background:var(--teinte2);white-space:nowrap}
 .chip.red{background:#fde3e7;color:#a11c33}.chip.ok{background:#dcf2e8;color:#17573f}.chip.yel{background:#fdf0c3;color:#6a4d00}
 .cb{display:inline-flex;gap:5px;align-items:center;font-size:.8rem;font-weight:700;white-space:nowrap}
 .cb i{width:.8em;height:.8em;border-radius:50%;display:inline-block}
@@ -94,7 +97,7 @@ ul.plain>li:last-child{border-bottom:0}
 .tw{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:.92rem}
 th,td{border:1px solid var(--bord);padding:5px 7px;text-align:left;vertical-align:top}
-th{background:#eef0fa;font-family:var(--titre);font-weight:700;font-size:.85rem}
+th{background:var(--teinte);font-family:var(--titre);font-weight:700;font-size:.85rem}
 table.steps td:first-child{white-space:nowrap}
 td.c,th.c{text-align:center}
 
@@ -105,19 +108,19 @@ td.c,th.c{text-align:center}
 .grid .hr span{position:absolute;left:4px;top:-.7em;font-size:.72rem;color:var(--gris);background:var(--papier);padding:0 2px}
 .grid .col{position:absolute;top:0;bottom:0;border-left:1px solid var(--bord)}
 .grid .col[data-a]{cursor:copy}
-.grid .col.off{background:repeating-linear-gradient(135deg,#f1f2f9 0 8px,#fafbff 8px 16px)}
-.grid .colh{height:34px;display:flex;align-items:center;justify-content:center;font:700 .85rem var(--titre);border-bottom:1px solid var(--bord);background:#eef0fa}
+.grid .col.off{background:repeating-linear-gradient(135deg,var(--teinte) 0 8px,var(--papier) 8px 16px)}
+.grid .colh{height:34px;display:flex;align-items:center;justify-content:center;font:700 .85rem var(--titre);border-bottom:1px solid var(--bord);background:var(--teinte)}
 .grid .offl{text-align:center;color:var(--gris);font-size:.8rem;margin-top:30px}
-.blk{position:absolute;border:0;border-left:5px solid var(--c);background:color-mix(in srgb,var(--c) 17%,#fff);border-radius:5px;padding:2px 5px;text-align:left;overflow:hidden;cursor:pointer;font-size:.76rem;line-height:1.2}
+.blk{position:absolute;border:0;border-left:5px solid var(--c);background:color-mix(in srgb,var(--c) 17%,var(--papier));border-radius:5px;padding:2px 5px;text-align:left;overflow:hidden;cursor:pointer;font-size:.76rem;line-height:1.2}
 .blk b{display:block;font-family:var(--titre)}
-.blk.lost{background:repeating-linear-gradient(135deg,#fde3e7 0 6px,#fff 6px 12px);border-left-color:var(--marge);text-decoration:line-through}
+.blk.lost{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--marge) 22%,var(--papier)) 0 6px,var(--papier) 6px 12px);border-left-color:var(--marge);text-decoration:line-through}
 .blk.past{opacity:.72}
 
 /* Programmation. */
-.srow .n{width:1.8em;height:1.8em;border-radius:50%;background:#e4e8fb;display:inline-grid;place-items:center;font:700 .8rem var(--titre);flex:none}
+.srow .n{width:1.8em;height:1.8em;border-radius:50%;background:var(--teinte2);display:inline-grid;place-items:center;font:700 .8rem var(--titre);flex:none}
 .srow.done .n{background:var(--ok);color:#fff}.srow.out .n{background:var(--marge);color:#fff}
 .srow .t{flex:1;min-width:140px}
-.bar{height:10px;border-radius:99px;background:#e1e4f3;overflow:hidden;display:flex}
+.bar{height:10px;border-radius:99px;background:var(--teinte2);overflow:hidden;display:flex}
 .bar i{display:block;height:100%}
 
 /* Tuiles élèves. */
@@ -136,7 +139,7 @@ td.c,th.c{text-align:center}
 .dlg{position:relative;background:var(--papier);border-radius:14px;padding:18px 20px;width:min(560px,100%);max-height:92vh;overflow:auto}
 .dlg h2{margin-bottom:8px}
 .opt{display:block;border:1.5px solid var(--bord);border-radius:10px;padding:9px 11px;margin:8px 0;cursor:pointer}
-.opt:has(input:checked){border-color:var(--encre);background:#eef1ff}
+.opt:has(input:checked){border-color:var(--encre);background:var(--teinte)}
 .opt small{display:block;color:var(--gris);margin-left:1.7em}
 
 /* La note vocale : quatre bulles autour du texte dicté. */
@@ -154,10 +157,15 @@ td.c,th.c{text-align:center}
 
 #toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ardoise2);color:var(--craie);padding:10px 16px;border-radius:10px;z-index:30;max-width:92vw}
 .banner{background:var(--jaune);color:#3d2d00;border-radius:10px;padding:10px 14px;margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-weight:700}
-.step{border:1px solid var(--bord);border-radius:10px;padding:8px 10px;margin:8px 0;display:grid;grid-template-columns:90px 1fr 1fr;gap:6px 10px;background:#fff}
+.step{border:1px solid var(--bord);border-radius:10px;padding:8px 10px;margin:8px 0;display:grid;grid-template-columns:90px 1fr 1fr;gap:6px 10px;background:var(--champ)}
 .step label{font-size:.78rem;color:var(--gris);display:block}
 .step .x{grid-column:1/-1;text-align:right}
 #print{display:none}
+/* Réglages › Apparence : les pastilles de palette. */
+.pal{all:unset;cursor:pointer;border:2px solid var(--bord);border-radius:10px;padding:6px 8px;text-align:center;font-size:.8rem;font-weight:700}
+.pal[aria-pressed=true]{border-color:var(--encre);background:var(--teinte)}.pal:focus-visible{outline:3px solid var(--jaune)}
+.pal span{display:flex;border-radius:6px;overflow:hidden;margin-bottom:4px;border:1px solid var(--bord)}.pal i{width:18px;height:22px;display:block}
+input[type=color]{padding:2px;width:3.2em;height:2.2em}
 
 /* Téléphone : le menu passe en bas, la marge du cahier se resserre. */
 @media (max-width:820px){
@@ -179,6 +187,7 @@ td.c,th.c{text-align:center}
 
 /* Impression : on ne garde que le contenu. */
 @media print{
+  :root{--papier:#fff!important;--fond:#fff!important;--encre:#14204d!important;--champ:#fff!important;--marge:#b3122c!important;--taille:16px!important;color-scheme:light!important}
   body{display:block;background:#fff;font-size:11pt}
   #nav,#top,#modal,#voice,#toast,.np,.banner{display:none!important}
   #main{padding:0;max-width:none}
