@@ -28,7 +28,11 @@ const hm = t => t.replace(':', 'h');
 const DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 
 const REM = { imp: ['🖨️', 'Impression'], mat: ['🧰', 'Matériel'], mot: ['✉️', 'Mot aux parents'], equ: ['🎒', 'Équipement des élèves'] };
-const CATS = { apc: ['APC', '#23795b'], equipe: ['Équipe pédagogique et parents', '#3355c0'], formation: ['Formation pédagogique', '#a2630c'], conseil: ['Conseil d’école', '#8a3b9c'], classe: ['Vie de la classe', '#27433d'], perso: ['Autre (hors 108 h)', '#59607c'] };
+const CATS = { apc: ['APC', '#23795b'], equipe: ['Équipe pédagogique', '#3355c0'], parents: ['Parents (réunions, rendez-vous)', '#0e7c96'], formation: ['Formation pédagogique', '#a2630c'], conseil: ['Conseil d’école', '#8a3b9c'], classe: ['Vie de la classe', '#27433d'], perso: ['Autre (hors 108 h)', '#59607c'] };
+// Les 108 h : « équipe pédagogique » et « parents » sont deux catégories distinctes de rendez-vous,
+// mais elles puisent dans la même enveloppe de 48 heures.
+const qcat = k => k === 'parents' ? 'equipe' : k;
+const qlab = k => k === 'equipe' ? 'Équipe pédagogique et parents' : CATS[k][0];
 const NOTE = { incident: ['🚑', 'Incident'], comportement: ['🙂', 'Comportement'], evaluation: ['📝', 'Évaluation'], commentaire: ['💬', 'Commentaire'] };
 const INC = ['Dispute', 'Blessure', 'Maladie', 'Communication avec la famille', 'Autre'];
 // Les niveaux d'acquisition, et leur version affinée avec + et −.
@@ -290,15 +294,34 @@ function field(f, val) {
   else inp = `<input type="${f.type || 'text'}" name="${f.k}" value="${esc(val)}" placeholder="${esc(f.ph || '')}" ${f.req ? 'required' : ''} ${f.type === 'number' ? 'step="any" inputmode="decimal"' : ''}>`;
   return `<label class="fld"><span>${esc(f.label)}</span>${inp}</label>`;
 }
-function openForm(o) {
-  ui.form = o; const v = o.values || {};
-  showModal(`<form class="dlg" id="frm"><h2>${esc(o.title)}</h2>${o.intro || ''}${o.fields.map(f => field(f, v[f.k])).join('')}<div class="row end">${o.onDelete ? '<button type="button" class="btn danger" data-a="formDel">Supprimer</button>' : ''}<span class="sp"></span><button type="button" class="btn" data-a="closeModal">Annuler</button><button class="btn pri">${esc(o.ok || 'Enregistrer')}</button></div></form>`);
-  const first = $('#frm input,#frm textarea,#frm select'); if (first) first.focus();
+// Brouillons : tout ce qu'on tape dans un formulaire est gardé au fur et à mesure. Si on sort sans enregistrer
+// (clic à côté, touche Échap, page rechargée), on retrouve sa saisie en rouvrant le même formulaire.
+// Seul le bouton « Annuler » jette le brouillon.
+const DKEY = 'cahier-classe-brouillons';
+let drafts = {};
+try { drafts = JSON.parse(localStorage.getItem(DKEY)) || {}; } catch (e) { drafts = {}; }
+for (const k in drafts) if (Date.now() - (drafts[k].t || 0) > 7 * 864e5) delete drafts[k];          // on oublie les brouillons de plus d'une semaine
+const draftKey = o => o.dk ??= [o.title, (o.values || {}).id || '', ui.view, ui.view === 'eleve' ? ui.stu : '', ui.view === 'seance' ? JSON.stringify(ui.sess) : ''].join('|');
+const putDrafts = () => { try { localStorage.setItem(DKEY, JSON.stringify(drafts)); } catch (e) { } };
+function saveDraft() {
+  const f = $('#frm'); if (!ui.form || !f) return; const v = {};
+  ui.form.fields.forEach(x => { const el = f.elements[x.k]; if (el) v[x.k] = x.type === 'checkbox' ? el.checked : el.value; });
+  drafts[draftKey(ui.form)] = { t: Date.now(), v }; putDrafts();
 }
-function showModal(html) { const m = $('#modal'); m.innerHTML = '<div class="ov" data-a="closeModal"></div>' + html; m.hidden = false; }
+function dropDraft(o) { if (o && drafts[draftKey(o)]) { delete drafts[draftKey(o)]; putDrafts(); } }
+function openForm(o) {
+  ui.form = o; const d = drafts[draftKey(o)], v = { ...(o.values || {}), ...(d ? d.v : {}) };
+  showModal(`<form class="dlg" id="frm" novalidate><h2>${esc(o.title)}</h2>${d ? '<p class="banner" style="font-weight:400;font-size:.9rem">Saisie non enregistrée retrouvée.<span class="sp"></span><button type="button" class="btn sm" data-a="draftDrop">Repartir de zéro</button></p>' : ''}${o.intro || ''}${o.fields.map(f => field(f, v[f.k])).join('')}<div class="row end">${o.onDelete ? '<button type="button" class="btn danger" data-a="formDel">Supprimer</button>' : ''}<span class="sp"></span><button type="button" class="btn" data-a="formCancel">Annuler</button><button class="btn pri">${esc(o.ok || 'Enregistrer')}</button></div></form>`);
+  const first = $('#frm input:not([type=date]):not([type=time]):not([type=hidden]),#frm textarea,#frm select'); if (first && !d) first.focus();
+}
+A.formCancel = () => { dropDraft(ui.form); closeModal(); };
+A.draftDrop = () => { const o = ui.form; dropDraft(o); openForm(o); };
+// Clic à côté de la fenêtre ou touche Échap : on ferme, mais la saisie en cours est gardée.
+A.modalOut = () => { if (ui.form && drafts[draftKey(ui.form)]) toast('Saisie gardée : rouvrez le formulaire pour la retrouver.'); closeModal(); };
+function showModal(html) { const m = $('#modal'); m.innerHTML = '<div class="ov" data-a="modalOut"></div>' + html; m.hidden = false; }
 function closeModal() { $('#modal').hidden = true; $('#modal').innerHTML = ''; ui.form = null; }
 A.closeModal = closeModal;
-A.formDel = () => { if (confirm('Supprimer définitivement ?')) { ui.form.onDelete(); closeModal(); done(); } };
+A.formDel = () => { if (confirm('Supprimer définitivement ?')) { ui.form.onDelete(); dropDraft(ui.form); closeModal(); done(); } };
 // Ajoute ou modifie une fiche dans une liste.
 function upsert(arr, id, vals) { const x = id && arr.find(a => a.id === id); if (x) Object.assign(x, vals); else arr.push({ id: uid(), ...vals }); }
 const remove = (arr, id) => { const i = arr.findIndex(a => a.id === id); if (i >= 0) arr.splice(i, 1); };
@@ -306,17 +329,73 @@ const remove = (arr, id) => { const i = arr.findIndex(a => a.id === id); if (i >
 document.addEventListener('submit', e => {
   e.preventDefault();
   if (e.target.id !== 'frm' || !ui.form) return;
-  const vals = {};
+  const vals = {}, miss = ui.form.fields.find(f => f.req && !e.target.elements[f.k].value.trim());
+  if (miss) { toast('Il manque : ' + miss.label.replace(/\s*\(.*$/, '') + '.'); return; }
   ui.form.fields.forEach(f => { const el = e.target.elements[f.k]; vals[f.k] = f.type === 'checkbox' ? el.checked : f.type === 'number' ? (el.value === '' ? '' : +el.value) : el.value.trim(); });
-  if (ui.form.onSave(vals) !== false) { closeModal(); done(); }
+  const o = ui.form; if (o.onSave(vals) !== false) { dropDraft(o); closeModal(); done(); }
 });
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-a]'); if (!el) return;
   if (ui.held) { ui.held = false; return; }             // on vient de finir un appui long : ce n'est pas un clic
   const f = A[el.dataset.a]; if (f) f(el.dataset, el, e);
 });
-document.addEventListener('input', e => { const el = e.target.closest('[data-c]'); if (el && C[el.dataset.c]) C[el.dataset.c](el.dataset, el); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#modal').hidden) closeModal(); if (!$('#voice').hidden) A.voiceCancel(); } });
+document.addEventListener('input', e => { if (e.target.closest('#frm')) saveDraft(); const el = e.target.closest('[data-c]'); if (el && C[el.dataset.c]) C[el.dataset.c](el.dataset, el); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#pick').hidden) { A.pickClose(); return; } if (!$('#modal').hidden) A.modalOut(); if (!$('#voice').hidden) A.voiceCancel(); } });
+
+// ---------- Choisir une date ou une heure ----------
+// Les champs date et heure du navigateur sont remplacés partout par un bouton qui ouvre notre propre
+// sélecteur : un calendrier du mois (vacances et jours sans classe grisés) ou une grille d'heures et de minutes.
+// Le champ d'origine reste dans la page, caché : il garde la valeur (2026-11-12 ou 16:45) pour le reste du code.
+function pkLabel(inp) {
+  const b = inp.nextElementSibling; if (!b || !b.classList.contains('pk')) return;
+  const d = inp.dataset.kind === 'date';
+  b.innerHTML = `<span aria-hidden="true">${d ? '📅' : '🕒'}</span> ` + (inp.value ? esc(d ? fD(inp.value, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : hm(inp.value)) : `<span class="muted">${d ? 'Choisir une date' : 'Choisir l’heure'}</span>`);
+}
+function enhance(root) {
+  if (!root.querySelectorAll) return;
+  root.querySelectorAll('input[type=date],input[type=time]').forEach(inp => {
+    inp.dataset.kind = inp.type; if (inp.required) { inp.dataset.req = 1; inp.required = false; }
+    inp.type = 'hidden';
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'pk'; b.dataset.a = 'pick';
+    if (inp.getAttribute('aria-label')) b.setAttribute('aria-label', inp.getAttribute('aria-label'));
+    inp.after(b); pkLabel(inp);
+  });
+}
+new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) enhance(n.parentNode || n); }).observe(document.body, { childList: true, subtree: true });
+A.pick = (d, el) => {
+  const inp = el.previousElementSibling, v = inp.value;
+  ui.pk = inp.dataset.kind === 'date' ? { inp, kind: 'date', ym: (v || TODAY()).slice(0, 7) } : { inp, kind: 'time', hh: v ? +v.slice(0, 2) : null, mm: v ? +v.slice(3) : 0 };
+  showPick();
+};
+function showPick() {
+  const p = ui.pk, el = $('#pick'), v = p.inp.value, opt = !p.inp.dataset.req; let h;
+  if (p.kind === 'date') {
+    const c = ctx(), t = TODAY(), first = p.ym + '-01', pad = (wd(first) + 6) % 7; let cells = '<span></span>'.repeat(pad);
+    for (let d = first; d.slice(0, 7) === p.ym; d = addD(d, 1)) cells += `<button type="button" class="${d === v ? 'sel' : ''} ${d === t ? 'today' : ''} ${c.why(d) ? 'off' : ''}" data-a="pkDay" data-d="${d}" ${c.why(d) ? `title="${esc(c.why(d))}"` : ''}>${+d.slice(8)}</button>`;
+    h = `<div class="row"><button type="button" class="btn" data-a="pkNav" data-n="-1" aria-label="Mois précédent">‹</button><b class="sp pkm">${esc(fD(first, { month: 'long', year: 'numeric' }))}</b><button type="button" class="btn" data-a="pkNav" data-n="1" aria-label="Mois suivant">›</button></div>
+      <div class="cal">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(x => `<i>${x}</i>`).join('')}${cells}</div>
+      <p class="small muted" style="margin:6px 0 0">En gris : vacances, jours fériés, jours sans classe.</p>
+      <div class="row end"><button type="button" class="btn sm" data-a="pkDay" data-d="${t}">Aujourd’hui</button><button type="button" class="btn sm" data-a="pkDay" data-d="${addD(t, 1)}">Demain</button>${opt && v ? '<button type="button" class="btn sm" data-a="pkDay" data-d="">Effacer</button>' : ''}<span class="sp"></span><button type="button" class="btn sm" data-a="pickClose">Fermer</button></div>`;
+  } else {
+    const hs = p.more ? [...Array(24).keys()] : [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+    h = `<p class="pkt">${p.hh == null ? '<span class="muted">-- h --</span>' : hm(toT(p.hh * 60 + p.mm))}</p>
+      <p class="small muted" style="margin:0 0 4px">Heure</p><div class="tg" style="--n:${p.more ? 6 : 7}">${hs.map(x => `<button type="button" class="${p.hh === x ? 'sel' : ''}" data-a="pkH" data-h="${x}">${x}</button>`).join('')}</div>
+      ${p.more ? '' : '<p style="margin:4px 0 0"><button type="button" class="lnk small" data-a="pkMore">Plus tôt ou plus tard</button></p>'}
+      <p class="small muted" style="margin:8px 0 4px">Minutes</p><div class="tg" style="--n:6">${[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(x => `<button type="button" class="${p.hh != null && p.mm === x ? 'sel' : ''}" data-a="pkM" data-m="${x}">${String(x).padStart(2, '0')}</button>`).join('')}</div>
+      <div class="row end">${opt && v ? '<button type="button" class="btn sm" data-a="pkSet" data-v="">Effacer</button>' : ''}<span class="sp"></span><button type="button" class="btn sm" data-a="pickClose">Fermer</button><button type="button" class="btn sm pri" data-a="pkOk">Valider</button></div>`;
+  }
+  el.innerHTML = `<div class="ov" data-a="pickClose"></div><div class="pkp" role="dialog" aria-label="${p.kind === 'date' ? 'Choisir une date' : 'Choisir une heure'}">${h}</div>`; el.hidden = false;
+}
+// La valeur choisie est écrite dans le champ caché, qui prévient le reste de l'appli comme si on l'avait tapée.
+function pkSet(v) { const inp = ui.pk.inp; A.pickClose(); if (!document.contains(inp)) return; inp.value = v; pkLabel(inp); inp.dispatchEvent(new Event('input', { bubbles: true })); }
+A.pickClose = () => { $('#pick').hidden = true; $('#pick').innerHTML = ''; };
+A.pkNav = d => { const p = ui.pk, x = new Date(+p.ym.slice(0, 4), +p.ym.slice(5) - 1 + +d.n, 1); p.ym = iso(x).slice(0, 7); showPick(); };
+A.pkDay = d => pkSet(d.d);
+A.pkSet = d => pkSet(d.v);
+A.pkMore = () => { ui.pk.more = true; showPick(); };
+A.pkH = d => { ui.pk.hh = +d.h; showPick(); };                                   // on choisit l'heure…
+A.pkM = d => { const p = ui.pk; p.mm = +d.m; if (p.hh == null) showPick(); else pkSet(toT(p.hh * 60 + p.mm)); };   // …puis les minutes, et c'est validé
+A.pkOk = () => { const p = ui.pk; if (p.hh == null) { toast('Choisissez d’abord l’heure.'); return; } pkSet(toT(p.hh * 60 + p.mm)); };
 
 // Imprime un document à part (fiche de préparation, registre, feuille du remplaçant…).
 function printDoc(html) { $('#print').innerHTML = html; document.body.classList.add('pdoc'); setTimeout(() => window.print(), 60); }

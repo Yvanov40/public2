@@ -6,13 +6,13 @@
 
 // ---------- Agenda de la classe ----------
 const fmtH = h => { const m = Math.round(h * 60); return Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + String(m % 60).padStart(2, '0') : ''); };
-function h108() {                                      // heures faites et prévues, par catégorie des obligations de service
+function h108() {                                      // heures faites et prévues, par enveloppe des obligations de service
   const q = db.settings.quotas, r = {}, t = TODAY();
-  for (const k in q) r[k] = { quota: +q[k] || 0, done: 0, plan: 0 };
-  for (const e of db.events) if (r[e.cat]) r[e.cat][e.date <= t ? 'done' : 'plan'] += +e.hours || 0;
+  for (const k in q) r[k] = { quota: +q[k] || 0, done: 0, plan: 0, parts: {} };
+  for (const e of db.events) { const x = r[qcat(e.cat)]; if (!x) continue; const h = +e.hours || 0; x[e.date <= t ? 'done' : 'plan'] += h; x.parts[e.cat] = (x.parts[e.cat] || 0) + h; }
   return r;
 }
-const evLi = e => `<li><span class="dot" style="background:${CATS[e.cat][1]}"></span><button class="lnk" data-a="editEv" data-id="${e.id}">${e.start ? hm(e.start) + ' ' : ''}<b>${esc(e.title)}</b></button> ${+e.hours && db.settings.quotas[e.cat] !== undefined ? `<span class="chip">${fmtH(+e.hours)}</span>` : ''} ${cbadge(e.classId)}</li>`;
+const evLi = e => `<li><span class="dot" style="background:${CATS[e.cat][1]}"></span><button class="lnk" data-a="editEv" data-id="${e.id}">${e.start ? hm(e.start) + ' ' : ''}<b>${esc(e.title)}</b></button> ${+e.hours && db.settings.quotas[qcat(e.cat)] !== undefined ? `<span class="chip">${fmtH(+e.hours)}</span>` : ''} ${cbadge(e.classId)}</li>`;
 const weekNav = () => `<div class="row" style="margin-bottom:10px"><button class="btn np" data-a="week" data-n="-7" aria-label="Semaine précédente">‹</button><b>Semaine du ${esc(fD(ui.week, { day: 'numeric', month: 'long', year: 'numeric' }))}</b><button class="btn np" data-a="week" data-n="7" aria-label="Semaine suivante">›</button><button class="btn np" data-a="week" data-n="0">Cette semaine</button></div>`;
 const visEv = () => db.events.filter(e => !ui.cls || !e.classId || e.classId === ui.cls);
 V.agenda = () => {
@@ -50,20 +50,35 @@ V.hors = () => {
   const blocks = days.flatMap((d, i) => [
     ...db.prep.filter(p => p.day === wd(d)).map(p => ({ col: i, start: p.start, end: p.end, color: '#59607c', attrs: `data-a="editPrep" data-id="${p.id}"`, html: `<b>${esc(p.title)}</b>${hm(p.start)}-${hm(p.end)}` })),
     ...evs.filter(e => e.date === d && e.start && e.end && e.end > e.start).map(e => ({ col: i, start: e.start, end: e.end, color: CATS[e.cat][1], attrs: `data-a="editEv" data-id="${e.id}"`, html: `<b>${esc(e.title)}</b>${esc(CATS[e.cat][0])}` }))]);
+  // On resserre le temps de classe pour ne montrer que le temps hors classe (matin, midi, soir).
+  // Une plage de classe sans rien dedans est repliée en une bande. Si un créneau hors classe y tombe
+  // (préparation du mercredi matin, par exemple), elle reste ouverte mais à échelle réduite, et les
+  // colonnes des jours de classe y sont hachurées.
+  const c = ctx(), tt = c.ttFor(ui.week), iv = [];
+  (tt ? tt.slots : []).filter(s => vc.includes(s.classId)).map(s => [mins(s.start), mins(s.end)]).sort((x, y) => x[0] - y[0]).forEach(([s, e]) => { const l = iv[iv.length - 1]; if (l && s - l[1] <= 30) l[1] = Math.max(l[1], e); else iv.push([s, e]); });
+  const cuts = blocks.map(x => [Math.floor(mins(x.start) / 15) * 15, Math.ceil(mins(x.end) / 15) * 15]);
+  const fold = [], shade = [];
+  iv.forEach(seg => {
+    const libre = cuts.reduce((parts, [x, y]) => parts.flatMap(([p, q]) => y <= p || x >= q ? [[p, q]] : [[p, Math.max(p, x)], [Math.min(q, y), q]].filter(([u, v]) => v > u)), [seg]).filter(([u, v]) => v - u >= 30);
+    let cur = seg[0];
+    const ouvert = (u, v) => { if (v <= u) return; fold.push([u, v, (v - u) * .5]); days.forEach((d, col) => { if (c.school(d)) shade.push({ col, a: u, b: v }); }); };
+    libre.forEach(([u, v]) => { ouvert(cur, u); fold.push([u, v]); cur = v; }); ouvert(cur, seg[1]);
+  });
+  const gopt = { fold, shade, foldLabel: 'En classe', lo: iv.length ? Math.min(450, iv[0][0] - 60) : 480, hi: iv.length ? Math.max(1140, iv[iv.length - 1][1] + 120) : 1140 };
   const wk = evs.filter(e => e.date >= ui.week && e.date <= end).sort((a, b) => (a.date + (a.start || '')).localeCompare(b.date + (b.start || '')));
   const rems = reminders().filter(r => vc.includes(r.o.classId) && ((r.date >= ui.week && r.date <= end) || (r.date < t && !db.remDone[r.key])));
   const prepH = db.prep.reduce((a, p) => a + (mins(p.end) - mins(p.start)) / 60, 0);
   const sum = Object.values(H).reduce((a, x) => a + x.done + x.plan, 0), quota = Object.values(H).reduce((a, x) => a + x.quota, 0);
   return `<div class="head"><h1>Hors classe</h1><span class="sp"></span><div class="row np"><button class="btn pri" data-a="newEv">Ajouter un rendez-vous</button><button class="btn" data-a="addPrep" data-day="1">Ajouter un créneau de préparation</button></div></div>
-  ${weekNav()}${grid(colsG, blocks, 'addPrep')}
-  <p class="small muted np">En gris, vos créneaux de préparation : ils reviennent chaque semaine${prepH ? ' (' + fmtH(prepH) + ' par semaine)' : ''}. Touchez une colonne pour en ajouter un, ou un créneau pour le modifier. En couleur, les rendez-vous datés.</p>
+  ${weekNav()}${grid(colsG, blocks, 'addPrep', gopt)}
+  <p class="small muted np">En gris, vos créneaux de préparation : ils reviennent chaque semaine${prepH ? ' (' + fmtH(prepH) + ' par semaine)' : ''}. Touchez une colonne pour en ajouter un, ou un créneau pour le modifier. En couleur, les rendez-vous datés. Les heures de classe sont repliées ou resserrées (zones hachurées) pour ne montrer que le temps hors classe.</p>
   <div class="cols" style="margin-top:14px"><div class="sheet"><h2>À préparer</h2>${rems.length ? `<ul class="plain">${rems.map(r => remLi(r, t)).join('')}</ul>` : '<p class="muted">Rien à préparer cette semaine. Les rappels viennent des fiches de séance (impression, matériel, mots, équipement).</p>'}</div>
   <div class="sheet"><h2>Rendez-vous de la semaine</h2>${wk.length ? `<ul class="plain">${wk.map(e => `<li><span class="small muted">${esc(fD(e.date, { weekday: 'short', day: 'numeric' }))}</span>${evLi(e).slice(4, -5)}</li>`).join('')}</ul>` : '<p class="muted">Aucun rendez-vous cette semaine.</p>'}</div></div>
   <div class="sheet" style="margin-top:16px"><div class="mg">108 h</div><h2>Obligations de service : ${fmtH(sum)} inscrites sur ${quota} h</h2>
    ${sum >= quota ? '<p class="chip ok">Les ' + quota + ' heures sont atteintes : rien n’est dû au-delà.</p>' : `<p class="small muted">Il reste ${fmtH(quota - sum)} à inscrire d’ici la fin de l’année.</p>`}
-   ${Object.entries(H).map(([k, x]) => `<div style="margin:10px 0"><div class="row"><b>${CATS[k][0]}</b><span class="sp"></span><span class="small">${fmtH(x.done)} faites${x.plan ? ', ' + fmtH(x.plan) + ' prévues' : ''}, sur ${x.quota} h ${x.done + x.plan > x.quota ? '<span class="chip yel">dépassé de ' + fmtH(x.done + x.plan - x.quota) + '</span>' : ''}</span></div>
+   ${Object.entries(H).map(([k, x]) => `<div style="margin:10px 0"><div class="row"><b>${qlab(k)}</b>${k === 'equipe' ? `<span class="small muted">équipe ${fmtH(x.parts.equipe || 0)}, parents ${fmtH(x.parts.parents || 0)}</span>` : ''}<span class="sp"></span><span class="small">${fmtH(x.done)} faites${x.plan ? ', ' + fmtH(x.plan) + ' prévues' : ''}, sur ${x.quota} h ${x.done + x.plan > x.quota ? '<span class="chip yel">dépassé de ' + fmtH(x.done + x.plan - x.quota) + '</span>' : ''}</span></div>
      <div class="bar"><i style="width:${Math.min(100, x.done / (x.quota || 1) * 100)}%;background:${CATS[k][1]}"></i><i style="width:${Math.min(100 - Math.min(100, x.done / (x.quota || 1) * 100), x.plan / (x.quota || 1) * 100)}%;background:${CATS[k][1]};opacity:.4"></i></div></div>`).join('')}</div>
-  <div class="sheet"><h2>Détail des heures de l’année</h2>${db.events.some(e => H[e.cat]) ? `<div class="tw"><table><thead><tr><th>Date</th><th>Objet</th><th>Catégorie</th><th>Durée</th></tr></thead><tbody>${[...db.events].filter(e => H[e.cat]).sort((a, b) => a.date.localeCompare(b.date)).map(e => `<tr><td>${esc(fS(e.date))}</td><td>${esc(e.title)}${e.note ? '<br><span class="small muted">' + nl(e.note) + '</span>' : ''}</td><td>${CATS[e.cat][0]}</td><td>${fmtH(+e.hours || 0)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Ajoutez vos APC, réunions, rendez-vous de parents, formations et conseils d’école : le décompte se fait tout seul.</p>'}</div>`;
+  <div class="sheet"><h2>Détail des heures de l’année</h2>${db.events.some(e => H[qcat(e.cat)]) ? `<div class="tw"><table><thead><tr><th>Date</th><th>Objet</th><th>Catégorie</th><th>Durée</th></tr></thead><tbody>${[...db.events].filter(e => H[qcat(e.cat)]).sort((a, b) => a.date.localeCompare(b.date)).map(e => `<tr><td>${esc(fS(e.date))}</td><td>${esc(e.title)}${e.note ? '<br><span class="small muted">' + nl(e.note) + '</span>' : ''}</td><td>${CATS[e.cat][0]}</td><td>${fmtH(+e.hours || 0)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Ajoutez vos APC, réunions, rendez-vous de parents, formations et conseils d’école : le décompte se fait tout seul.</p>'}</div>`;
 };
 function prepForm(p, day, start) {
   openForm({ title: p ? 'Créneau de préparation' : 'Nouveau créneau de préparation', intro: '<p class="small">Il revient chaque semaine dans votre emploi du temps hors classe.</p>', values: p || { title: 'Préparation', day, start: toT(start), end: toT(start + 60) },
@@ -276,7 +291,7 @@ function attStats() {                                  // absences par élève e
 const fM = ym => fD(ym + '-01', { month: 'long', year: 'numeric' });
 function statsHTML() {
   const { st, per, months } = attStats(), n = st.length || 1;
-  return `<div class="row np" style="margin-bottom:10px"><label>Registre du mois <input type="month" value="${ui.month}" data-c="month"></label><button class="btn" data-a="register">Imprimer le registre du mois</button></div>
+  return `<div class="row np" style="margin-bottom:10px"><label>Registre du mois <select data-c="month">${(() => { const S = db.settings, o = []; for (let d = S.start.slice(0, 7) + '-01'; d <= S.end; d = iso(new Date(+d.slice(0, 4), +d.slice(5, 7), 1))) o.push(d.slice(0, 7)); return o.map(m => `<option value="${m}" ${ui.month === m ? 'selected' : ''}>${esc(fM(m))}</option>`).join(''); })()}</select></label><button class="btn" data-a="register">Imprimer le registre du mois</button></div>
   <div class="cols"><div class="sheet"><h2>Absences de la classe</h2><div class="tw"><table><thead><tr><th>Mois</th><th>Jours de classe</th><th>Demi-journées d’absence</th><th>Taux d’absence</th></tr></thead><tbody>
    ${Object.entries(months).map(([ym, m]) => `<tr><td style="text-transform:capitalize">${esc(fM(ym))}</td><td>${m.days}</td><td>${m.A}</td><td>${(m.A / (m.days * 2 * n) * 100).toFixed(1).replace('.', ',')} %</td></tr>`).join('') || '<tr><td colspan="4" class="muted">L’année n’a pas commencé.</td></tr>'}</tbody></table></div></div>
   <div class="sheet"><h2>Absences par élève</h2><div class="tw"><table><thead><tr><th>Élève</th><th>Absences</th><th>Justifiées</th><th>Non justifiées</th><th>Retards</th></tr></thead><tbody>
@@ -372,7 +387,7 @@ V.reglages = () => {
    <div class="row" style="margin-top:12px"><h3>Vacances</h3><span class="sp"></span><button class="btn sm" data-a="newHol">Ajouter une période</button></div>
    <ul class="plain">${S.holidays.map((h, i) => `<li><b>${esc(h.label)}</b><span class="small" style="flex:1">du ${esc(fD(h.from, { day: 'numeric', month: 'short', year: 'numeric' }))} au ${esc(fD(h.to, { day: 'numeric', month: 'short', year: 'numeric' }))} inclus</span><button class="btn sm" data-a="editHol" data-i="${i}">Modifier</button></li>`).join('')}</ul>
    <p class="small muted">Les jours fériés sont déjà comptés. Les dates dépendent de votre zone : vérifiez-les et ajoutez les vacances d’hiver et de printemps, sinon des séances seront placées pendant les vacances.</p></div>
-  <div class="sheet"><h2>108 heures</h2><div class="row">${Object.keys(S.quotas).map(k => `<label class="fld" style="flex:1;min-width:120px"><span>${CATS[k][0]}</span><input type="number" min="0" data-c="quota" data-k="${k}" value="${esc(S.quotas[k])}" style="width:100%"></label>`).join('')}</div>
+  <div class="sheet"><h2>108 heures</h2><div class="row">${Object.keys(S.quotas).map(k => `<label class="fld" style="flex:1;min-width:120px"><span>${qlab(k)}</span><input type="number" min="0" data-c="quota" data-k="${k}" value="${esc(S.quotas[k])}" style="width:100%"></label>`).join('')}</div>
    <p class="small ${Object.values(S.quotas).reduce((a, b) => a + +b, 0) === 108 ? 'muted' : 'warn'}">Total : ${Object.values(S.quotas).reduce((a, b) => a + +b, 0)} h.</p></div>
   <div class="sheet"><h2>Option IA</h2><p class="small muted">Pour faire rédiger une fiche de préparation en un clic. Sans clé, le bouton propose de copier la demande dans l’IA de votre choix. La clé reste sur cet appareil et n’est jamais copiée dans les sauvegardes.</p>${inp('apiKey', 'Clé API Anthropic', 'password', 'sk-ant-…')}${inp('model', 'Modèle')}</div>
   <div class="sheet"><h2>Pour le remplaçant</h2><label class="fld"><span>Informations pratiques (horaires, récréations, cantine, sortie, codes, collègues à qui s’adresser)</span><textarea rows="4" data-c="set" data-k="subInfo">${esc(S.subInfo)}</textarea></label>

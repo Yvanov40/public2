@@ -213,24 +213,41 @@ function applyAI(text) {
 // Le modèle peut avoir plusieurs versions, chacune valable à partir d'une date (piscine en période 3…).
 // Dans la semaine réelle, chaque créneau peut être modifié pour ce jour-là seulement : remplacé
 // (le motif s'affiche à sa place), déplacé à une autre heure ou un autre jour, ou ajouté ponctuellement.
-function grid(cols, blocks, addable) {
-  const P = 1.25; let lo = 540, hi = 960;
+// opt.fold : des plages horaires à resserrer (le temps de classe, dans l'agenda hors classe) pour gagner de la place.
+// Chaque plage est [début, fin, hauteur en pixels] ; sans hauteur, elle est repliée en une simple bande.
+// opt.shade : des zones hachurées dans une colonne ({ col, a, b }), pour montrer « en classe » là où la plage reste ouverte.
+const FOLD_H = 24;                                       // hauteur d'une plage repliée, en pixels
+function grid(cols, blocks, addable, opt = {}) {
+  const P = 1.25; let lo = opt.lo ?? 540, hi = opt.hi ?? 960;
   blocks.forEach(b => { lo = Math.min(lo, mins(b.start)); hi = Math.max(hi, mins(b.end)); });
   lo = Math.floor(lo / 60) * 60; hi = Math.ceil(hi / 60) * 60;
+  const F = (opt.fold || []).filter(([a, b]) => a >= lo && b <= hi).sort((x, y) => x[0] - y[0]);
+  // Y : à quelle hauteur se trouve une heure donnée (en minutes), en tenant compte des plages repliées.
+  const fh = f => f[2] ?? FOLD_H;
+  const Y = m => { let cur = lo, y = 0; for (const f of F) { const [a, b] = f; if (m <= a) break; y += (a - cur) * P; if (m < b) return y + fh(f) * (m - a) / (b - a); y += fh(f); cur = b; } return y + (m - cur) * P; };
+  ui.gmap = { lo, P, F };
   cols.forEach((c, ci) => {                             // créneaux simultanés (plusieurs classes) : côte à côte
     const bs = blocks.filter(b => b.col === ci).sort((a, b) => mins(a.start) - mins(b.start)), ends = [];
     bs.forEach(b => { let l = ends.findIndex(e => e <= mins(b.start)); if (l < 0) l = ends.length; ends[l] = mins(b.end); b.lane = l; });
     bs.forEach(b => b.lanes = ends.length);
   });
   const W = `(100% - 40px) / ${cols.length || 1}`;
-  let h = `<div class="gridw"><div class="grid" style="height:${(hi - lo) * P + 40}px">`;
+  let h = `<div class="gridw"><div class="grid" style="height:${Y(hi) + 40}px">`;
   cols.forEach((c, i) => h += `<div class="col ${c.off ? 'off' : ''}" style="left:calc(40px + ${W} * ${i});width:calc(${W})" ${addable ? `data-a="${addable}" data-day="${c.day}" data-lo="${lo}" data-p="${P}"` : ''}><div class="colh">${esc(c.label)}</div>${c.off ? `<div class="offl">${esc(c.off)}</div>` : ''}</div>`);
-  for (let m = lo; m <= hi; m += 60) h += `<div class="hr" style="top:${34 + (m - lo) * P}px"><span>${m / 60} h</span></div>`;
-  blocks.forEach(b => h += `<button class="blk ${b.cls || ''}" style="--c:${b.color};left:calc(40px + ${W} * ${b.col} + (${W} - 4px) * ${b.lane} / ${b.lanes} + 2px);width:calc((${W} - 4px) / ${b.lanes} - 2px);top:${35 + (mins(b.start) - lo) * P}px;height:${Math.max(14, (mins(b.end) - mins(b.start)) * P - 2)}px" ${b.attrs}>${b.html}</button>`);
+  for (let m = lo; m <= hi; m += 60) if (!F.some(f => fh(f) === FOLD_H && m > f[0] && m < f[1])) h += `<div class="hr" style="top:${34 + Y(m)}px"><span>${m / 60} h</span></div>`;
+  const hh = m => hm(toT(m)).replace(/^0/, '');
+  F.filter(f => fh(f) === FOLD_H).forEach(([a, b]) => h += `<div class="foldb" style="top:${34 + Y(a)}px;height:${FOLD_H}px"><span>${esc(opt.foldLabel || 'Replié')}, ${hh(a)} à ${hh(b)}</span></div>`);
+  (opt.shade || []).forEach(s => h += `<div class="foldc" style="left:calc(40px + ${W} * ${s.col});width:calc(${W});top:${34 + Y(s.a)}px;height:${Y(s.b) - Y(s.a)}px"><span>${esc(opt.foldLabel || '')}</span></div>`);
+  blocks.forEach(b => h += `<button class="blk ${b.cls || ''}" style="--c:${b.color};left:calc(40px + ${W} * ${b.col} + (${W} - 4px) * ${b.lane} / ${b.lanes} + 2px);width:calc((${W} - 4px) / ${b.lanes} - 2px);top:${35 + Y(mins(b.start))}px;height:${Math.max(14, Y(mins(b.end)) - Y(mins(b.start)) - 2)}px" ${b.attrs}>${b.html}</button>`);
   return h + '</div></div>';
 }
-// L'heure visée quand on touche une colonne vide de la grille (arrondie au quart d'heure).
-const clickT = (d, el, e) => d.lo ? Math.max(+d.lo, Math.round((+d.lo + (e.clientY - el.getBoundingClientRect().top - 34) / +d.p) / 15) * 15) : 510;
+const clickT = (d, el, e) => {
+  if (!d.lo) return 510;
+  const { lo, P, F } = ui.gmap; let y = e.clientY - el.getBoundingClientRect().top - 34, cur = lo, m = null;
+  for (const [a, b, fh = FOLD_H] of F) { const seg = (a - cur) * P; if (y <= seg) { m = cur + y / P; break; } y -= seg; if (y <= fh) { m = fh === FOLD_H ? b : a + y / fh * (b - a); break; } y -= fh; cur = b; }
+  if (m == null) m = cur + y / P;
+  return Math.max(lo, Math.round(m / 15) * 15);
+};
 const cmark = id => { const c = cls(id); return !c || db.classes.length < 2 ? '' : db.settings.mark === 'icon' ? esc(c.icon || '') + ' ' : `<i class="dot" style="background:${esc(c.color)};border-radius:50%;margin-right:3px"></i>`; };
 V.edt = () => {
   if (!db.timetables.length) db.timetables.push({ id: uid(), from: db.settings.start, label: 'Emploi du temps de base', slots: [] });
