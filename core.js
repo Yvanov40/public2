@@ -31,7 +31,18 @@ const REM = { imp: ['🖨️', 'Impression'], mat: ['🧰', 'Matériel'], mot: [
 const CATS = { apc: ['APC', '#23795b'], equipe: ['Équipe pédagogique et parents', '#3355c0'], formation: ['Formation pédagogique', '#a2630c'], conseil: ['Conseil d’école', '#8a3b9c'], classe: ['Vie de la classe', '#27433d'], perso: ['Autre (hors 108 h)', '#59607c'] };
 const NOTE = { incident: ['🚑', 'Incident'], comportement: ['🙂', 'Comportement'], evaluation: ['📝', 'Évaluation'], commentaire: ['💬', 'Commentaire'] };
 const INC = ['Dispute', 'Blessure', 'Maladie', 'Communication avec la famille', 'Autre'];
-const LEVELS = ['Non atteint', 'Partiellement atteint', 'Atteint', 'Dépassé'];
+// Les niveaux d'acquisition, et leur version affinée avec + et −.
+const LV = { NA: ['Non atteint', 'red'], EVA: ['En voie d’acquisition', 'yel'], A: ['Acquis', 'ok'], D: ['Dépassé', ''] };
+const FINE = ['NA', 'NA+', 'EVA-', 'EVA', 'EVA+', 'A-', 'A', 'A+', 'D'];
+const lvBase = v => String(v).replace(/[+-]$/, '');
+const lvLabel = v => LV[lvBase(v)] ? LV[lvBase(v)][0] + (/\+$/.test(v) ? ' +' : /-$/.test(v) ? ' −' : '') : '';
+const numToLv = (x, max) => { const p = x / (max || 20) * 100, s = db.settings.seuils; return p >= s.d ? 'D' : p >= s.a ? 'A' : p >= s.eva ? 'EVA' : 'NA'; };
+function gradeView(e, g) {                              // affichage d'un résultat : niveau, ou note + niveau équivalent
+  if (!g || g.v === '' || g.v == null) return '';
+  if (e.mode === 'num') { const lv = numToLv(+g.v, e.max); return `${esc(String(g.v).replace('.', ','))}/${esc(e.max)} <span class="chip ${LV[lv][1]}">${LV[lv][0]}</span>`; }
+  return LV[lvBase(g.v)] ? `<span class="chip ${LV[lvBase(g.v)][1]}">${lvLabel(g.v)}</span>` : '';
+}
+const cols = () => db.settings.cols.filter(c => c.on);  // rubriques du déroulé choisies dans les réglages
 
 // ---------- Apparence : palettes et polices (choisies dans Réglages › Apparence) ----------
 // Chaque palette donne six couleurs : le menu, le fond, les feuilles, le texte, la marge du cahier, l'accent.
@@ -80,6 +91,9 @@ function blank() {
       holidays: [{ from: '2026-10-17', to: '2026-11-01', label: 'Toussaint' }, { from: '2026-12-19', to: '2027-01-03', label: 'Noël' }],
       quotas: { apc: 36, equipe: 48, formation: 18, conseil: 6 }, mark: 'color',
       theme: { pal: 'ardoise', ...THEMES.ardoise.c, font: 'atkinson', titles: 'bricolage', size: 16 },
+      cols: [{ k: 'phase', l: 'Étape', on: true }, { k: 'ens', l: 'Rôle de l’enseignant', on: true }, { k: 'cons', l: 'Consignes', on: true }, { k: 'att', l: 'Attendus', on: true }, { k: 'elv', l: 'Rôle des élèves', on: true }, { k: 'x1', l: 'Différenciation', on: false }, { k: 'x2', l: 'Matériel', on: false }],
+      behav: [{ id: 'b1', l: 'Travail', pos: true }, { id: 'b2', l: 'Progrès', pos: true }, { id: 'b3', l: 'Écoute', pos: true }, { id: 'b4', l: 'Autonomie', pos: true }, { id: 'b5', l: 'Entraide', pos: true }, { id: 'b6', l: 'Bavardage', pos: false }, { id: 'b7', l: 'Travail non fait', pos: false }, { id: 'b8', l: 'Matériel oublié', pos: false }],
+      seuils: { eva: 50, a: 75, d: 95 },
       apiKey: '', model: 'claude-sonnet-4-6', subInfo: '', safety: '', lastBackup: '', backupHour: 16
     },
     classes: [{ id: uid(), name: 'Ma classe', level: '', color: '#3355c0', icon: '🦊' }],
@@ -98,6 +112,11 @@ function blank() {
     notes: [], results: [], meetings: [], lists: [], events: [],
     ov: {},              // créneaux non faits ou prêtés : « date|créneau » → { t:'lost' | 'host', … }
     adhoc: {},           // séances écrites directement dans le cahier journal, hors programmation
+    prep: [],            // créneaux de préparation hors classe, chaque semaine : { id, title, day, start, end }
+    extra: [],           // créneaux ponctuels ajoutés à l'emploi du temps : { id, date, start, end, subjectId, sub, classId }
+    evals: [],           // évaluations : { id, classId, subjectId, sub, title, date, mode:'niv'|'fin'|'num', max }
+    grades: {},          // résultats : « évaluation|élève » → { v, c }
+    bilans: {},          // appréciations des bilans : « élève|du|au » → texte
     remDone: {}, dayNotes: {}, dirty: false
   };
 }
@@ -109,6 +128,13 @@ function normalize() {                                 // complète ce qui manqu
   for (const k in b) if (db[k] === undefined) db[k] = b[k];
   for (const k in b.settings) if (db.settings[k] === undefined) db.settings[k] = b.settings[k];
   db.settings.theme = { ...b.settings.theme, ...db.settings.theme };
+  // Anciennes versions : la santé devient le PAI ; les résultats saisis élève par élève deviennent des évaluations.
+  db.students.forEach(s => { if (s.pai === undefined) { s.pai = s.health || ''; delete s.health; } if (s.needs === undefined) s.needs = ''; });
+  if (db.results.length) {
+    const map = { 'Non atteint': 'NA', 'Partiellement atteint': 'EVA', 'Atteint': 'A', 'Dépassé': 'D' };
+    db.results.forEach(r => { const st = db.students.find(s => s.id === r.sid); if (!st) return; const e = { id: uid(), classId: st.classId, subjectId: r.subjectId, sub: '', title: r.title, date: r.date, mode: 'niv', max: 20 }; db.evals.push(e); db.grades[e.id + '|' + r.sid] = { v: map[r.level] || '', c: [r.score, r.comment].filter(Boolean).join(' ') }; });
+    db.results = [];
+  }
 }
 normalize();
 
@@ -171,6 +197,9 @@ function ctx() {
     const t = ttFor(d), w = wd(d); if (!t) continue;
     for (const s of t.slots) if (s.day === w) occs.push({ key: d + '|' + s.id, date: d, slot: s, start: s.start, end: s.end, classId: s.classId, subjectId: s.subjectId, sub: s.sub || '', q: qk(s) });
   }
+  // Créneaux ponctuels ajoutés à la main, puis créneaux déplacés pour un seul jour.
+  for (const x of db.extra) if (x.date >= S.start && x.date <= S.end) occs.push({ key: x.date + '|x' + x.id, date: x.date, slot: x, start: x.start, end: x.end, classId: x.classId, subjectId: x.subjectId, sub: x.sub || '', q: qk(x), extra: x.id });
+  for (const o of occs) { const v = db.ov[o.key]; if (v && v.t === 'mv') { o.from = { date: o.date, start: o.start }; o.date = v.date; o.start = v.start; o.end = v.end; } }
   occs.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
   for (const o of occs) {
     byKey[o.key] = o; (byDate[o.date] ??= []).push(o); (base[o.q] ??= []).push(o);
@@ -188,6 +217,7 @@ function ctx() {
       for (const s of seq.sessions) {
         if (s.skip) { sess[s.id] = { seq, q, skip: true }; continue; }
         total++;
+        if (s.pin && !(s.merge && prev)) { while (i < Aq.length && Aq[i].date < s.pin) i++; while (j < B.length && B[j].date < s.pin) j++; }   // date choisie à la main
         const bo = B[j++] || null;                                  // la date « idéale »
         const o = (s.merge && prev) ? prev : (Aq[i++] || null);     // la date réelle
         prev = o; sess[s.id] = { seq, q, o, bo };
@@ -202,7 +232,7 @@ function ctx() {
 // Tous les rappels (impression, matériel, mots, équipement), datés d'après la date réelle de chaque séance.
 function reminders() {
   const c = ctx(), out = [];
-  const push = (s, o, label) => (s.rem || []).forEach(r => out.push({ key: r.id, date: addD(o.date, -(+r.days || 0)), r, s, o, label }));
+  const push = (s, o, label) => (s.rem || []).forEach(r => out.push({ key: r.id, date: r.date || addD(o.date, -(+r.days || 0)), r, s, o, label }));
   for (const seq of db.sequences) for (const s of seq.sessions) { const x = c.sess[s.id]; if (x && x.o) push(s, x.o, qname(x.q)); }
   for (const k in db.adhoc) if (c.byKey[k]) push(db.adhoc[k], c.byKey[k], qname(c.byKey[k].q));
   return out.sort((a, b) => a.date.localeCompare(b.date));
@@ -223,7 +253,7 @@ function restoreOcc(key) {
 }
 
 // ---------- 4. L'écran : menu, bandeau, fenêtres, impression ----------
-const VIEWS = [['home', '🏠', 'Aujourd’hui'], ['journal', '📓', 'Cahier journal'], ['edt', '🗓️', 'Emploi du temps'], ['prog', '🧭', 'Programmation'], ['agenda', '⏰', 'Agenda, 108 h'], ['eleves', '🧒', 'Élèves'], ['appel', '✅', 'Appel'], ['admin', '🗂️', 'Administratif'], ['reglages', '⚙️', 'Réglages']];
+const VIEWS = [['home', '🏠', 'Aujourd’hui'], ['journal', '📓', 'Cahier journal'], ['edt', '🗓️', 'Emploi du temps'], ['prog', '🧭', 'Programmation'], ['agenda', '⏰', 'Agenda de classe'], ['hors', '💼', 'Hors classe'], ['eleves', '🧒', 'Élèves'], ['appel', '✅', 'Appel'], ['admin', '🗂️', 'Administratif'], ['reglages', '⚙️', 'Réglages']];
 const PARENT = { eleve: 'eleves', seance: 'journal' };
 function go(v) { ui.view = v; if (location.hash.slice(1) !== v) history.pushState(null, '', '#' + v); render(); window.scrollTo(0, 0); }
 window.addEventListener('popstate', () => { const v = location.hash.slice(1); ui.view = V[v] && !((v === 'eleve' && !ui.stu) || (v === 'seance' && !ui.sess)) ? v : 'home'; render(); });

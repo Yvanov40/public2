@@ -1,9 +1,10 @@
 'use strict';
 // =====================================================================================
-//  vues-b.js — agenda et 108 heures, dossiers élèves, appel, administratif, réglages.
+//  vues-b.js — agenda de classe, hors classe et 108 heures, élèves, évaluations, bilans,
+//  appel, administratif, réglages.
 // =====================================================================================
 
-// ---------- Agenda et 108 heures ----------
+// ---------- Agenda de la classe ----------
 const fmtH = h => { const m = Math.round(h * 60); return Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + String(m % 60).padStart(2, '0') : ''); };
 function h108() {                                      // heures faites et prévues, par catégorie des obligations de service
   const q = db.settings.quotas, r = {}, t = TODAY();
@@ -11,104 +12,229 @@ function h108() {                                      // heures faites et prév
   for (const e of db.events) if (r[e.cat]) r[e.cat][e.date <= t ? 'done' : 'plan'] += +e.hours || 0;
   return r;
 }
+const evLi = e => `<li><span class="dot" style="background:${CATS[e.cat][1]}"></span><button class="lnk" data-a="editEv" data-id="${e.id}">${e.start ? hm(e.start) + ' ' : ''}<b>${esc(e.title)}</b></button> ${+e.hours && db.settings.quotas[e.cat] !== undefined ? `<span class="chip">${fmtH(+e.hours)}</span>` : ''} ${cbadge(e.classId)}</li>`;
+const weekNav = () => `<div class="row" style="margin-bottom:10px"><button class="btn np" data-a="week" data-n="-7" aria-label="Semaine précédente">‹</button><b>Semaine du ${esc(fD(ui.week, { day: 'numeric', month: 'long', year: 'numeric' }))}</b><button class="btn np" data-a="week" data-n="7" aria-label="Semaine suivante">›</button><button class="btn np" data-a="week" data-n="0">Cette semaine</button></div>`;
+const visEv = () => db.events.filter(e => !ui.cls || !e.classId || e.classId === ui.cls);
 V.agenda = () => {
-  const c = ctx(), t = TODAY(), vc = visCls(), H = h108(), rems = reminders().filter(r => vc.includes(r.o.classId));
-  const sum = Object.values(H).reduce((a, x) => a + x.done + x.plan, 0), quota = Object.values(H).reduce((a, x) => a + x.quota, 0);
-  const evs = db.events.filter(e => !ui.cls || !e.classId || e.classId === ui.cls);
-  const ev = e => `<li><span class="dot" style="background:${CATS[e.cat][1]}"></span><button class="lnk" data-a="editEv" data-id="${e.id}">${e.start ? hm(e.start) + ' ' : ''}<b>${esc(e.title)}</b></button> ${+e.hours && db.settings.quotas[e.cat] !== undefined ? `<span class="chip">${fmtH(+e.hours)}</span>` : ''} ${cbadge(e.classId)}</li>`;
-  const days = [0, 1, 2, 3, 4, 5, 6].map(i => addD(ui.week, i));
-  return `<div class="head"><h1>Agenda</h1><span class="sp"></span><div class="row np"><button class="btn pri" data-a="newEv">Ajouter un rendez-vous</button></div></div>
-  <div class="sheet"><div class="mg">108 h</div><h2>Obligations de service : ${fmtH(sum)} inscrites sur ${quota} h</h2>
-   ${sum >= quota ? '<p class="chip ok">Les ' + quota + ' heures sont atteintes : rien n’est dû au-delà.</p>' : `<p class="small muted">Il reste ${fmtH(quota - sum)} à inscrire d’ici la fin de l’année.</p>`}
-   ${Object.entries(H).map(([k, x]) => `<div style="margin:10px 0"><div class="row"><b>${CATS[k][0]}</b><span class="sp"></span><span class="small">${fmtH(x.done)} faites${x.plan ? ', ' + fmtH(x.plan) + ' prévues' : ''}, sur ${x.quota} h ${x.done + x.plan > x.quota ? '<span class="chip yel">dépassé de ' + fmtH(x.done + x.plan - x.quota) + '</span>' : ''}</span></div>
-     <div class="bar"><i style="width:${Math.min(100, x.done / (x.quota || 1) * 100)}%;background:${CATS[k][1]}"></i><i style="width:${Math.min(100 - Math.min(100, x.done / (x.quota || 1) * 100), x.plan / (x.quota || 1) * 100)}%;background:${CATS[k][1]};opacity:.4"></i></div></div>`).join('')}</div>
-  <div class="row" style="margin-bottom:10px"><button class="btn np" data-a="week" data-n="-7" aria-label="Semaine précédente">‹</button><b>Semaine du ${esc(fD(ui.week, { day: 'numeric', month: 'long', year: 'numeric' }))}</b><button class="btn np" data-a="week" data-n="7" aria-label="Semaine suivante">›</button><button class="btn np" data-a="week" data-n="0">Cette semaine</button></div>
-  ${days.map(d => {
-    const occ = (c.byDate[d] || []).filter(o => vc.includes(o.classId)), dr = rems.filter(r => r.date === d), de = evs.filter(e => e.date === d).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-    const inC = de.filter(e => e.cat === 'classe'), out = de.filter(e => e.cat !== 'classe');
+  const c = ctx(), t = TODAY(), vc = visCls(), rems = reminders().filter(r => vc.includes(r.o.classId)), evs = visEv().filter(e => e.cat === 'classe');
+  return `<div class="head"><h1>Agenda de la classe</h1><span class="sp"></span><div class="row np"><button class="btn pri" data-a="newEv" data-cat="classe">Ajouter un événement de classe</button></div></div>
+  ${weekNav()}
+  ${[0, 1, 2, 3, 4, 5, 6].map(i => addD(ui.week, i)).map(d => {
+    const occ = (c.byDate[d] || []).filter(o => vc.includes(o.classId)), dr = rems.filter(r => r.date === d), de = evs.filter(e => e.date === d).sort((a, b) => (a.start || '').localeCompare(b.start || '')), repl = occ.filter(o => o.ov && o.ov.t === 'lost' && o.ov.why);
     if (!occ.length && !dr.length && !de.length && (wd(d) === 0 || wd(d) === 6)) return '';
-    return `<div class="sheet" ${d === t ? 'style="border-color:var(--encre);border-width:2px"' : ''}><div class="mg">${esc(fD(d, { weekday: 'short' }))}<br>${esc(fD(d, { day: 'numeric', month: 'short' }))}</div>
-     <div class="cols" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))"><div><h3>En classe</h3><ul class="plain">
+    return `<div class="sheet" ${d === t ? 'style="border-color:var(--encre);border-width:2px"' : ''}><div class="mg">${esc(fD(d, { weekday: 'short' }))}<br>${esc(fD(d, { day: 'numeric', month: 'short' }))}</div><ul class="plain">
        ${occ.length ? `<li><button class="lnk" data-a="toJournal" data-d="${d}">${occ.filter(o => !(o.ov && o.ov.t === 'lost')).length} séance(s) au cahier journal</button></li>` : `<li class="muted small">${esc(c.why(d) || 'Pas de créneau')}</li>`}
-       ${inC.map(ev).join('')}${dr.map(r => remLi(r, t)).join('')}</ul></div>
-     <div><h3>Hors classe</h3><ul class="plain">${out.map(ev).join('') || '<li class="muted small">Rien de prévu</li>'}</ul>
-       <p class="np"><button class="btn sm" data-a="newEv" data-d="${d}">Ajouter ce jour-là</button></p></div></div></div>`;
+       ${repl.map(o => `<li><span class="chip yel">${hm(o.start)} ${esc(o.ov.why)}</span></li>`).join('')}${de.map(evLi).join('')}${dr.map(r => remLi(r, t)).join('')}</ul>
+       <p class="np"><button class="btn sm" data-a="newEv" data-d="${d}" data-cat="classe">Ajouter ce jour-là</button></p></div>`;
   }).join('')}
-  <div class="sheet"><h2>Détail des heures de l’année</h2>${db.events.some(e => H[e.cat]) ? `<div class="tw"><table><thead><tr><th>Date</th><th>Objet</th><th>Catégorie</th><th>Durée</th></tr></thead><tbody>${[...db.events].filter(e => H[e.cat]).sort((a, b) => a.date.localeCompare(b.date)).map(e => `<tr><td>${esc(fS(e.date))}</td><td>${esc(e.title)}${e.note ? '<br><span class="small muted">' + nl(e.note) + '</span>' : ''}</td><td>${CATS[e.cat][0]}</td><td>${fmtH(+e.hours || 0)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Ajoutez vos APC, réunions, rendez-vous de parents, formations et conseils d’école : le décompte se fait tout seul.</p>'}</div>`;
+  <p class="small muted np">Réunions, APC, formations, temps de préparation et suivi des 108 heures sont dans l’onglet <button class="lnk" data-a="go" data-v="hors">Hors classe</button>.</p>`;
 };
-function evForm(e, date) {
-  openForm({ title: e ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous', values: e || { date: date || TODAY(), cat: 'equipe', classId: '' },
+function evForm(e, date, cat) {
+  openForm({ title: e ? 'Modifier' : cat === 'classe' ? 'Nouvel événement de classe' : 'Nouveau rendez-vous', values: e || { date: date || TODAY(), cat: cat || 'equipe', classId: '' },
     fields: [{ k: 'title', label: 'Objet', req: 1 }, { k: 'cat', label: 'Catégorie', type: 'select', options: Object.entries(CATS).map(([k, v]) => [k, v[0]]) }, { k: 'date', label: 'Date', type: 'date', req: 1 }, { k: 'start', label: 'Début', type: 'time' }, { k: 'end', label: 'Fin', type: 'time' },
     { k: 'hours', label: 'Durée comptée en heures (vide : calculée d’après début et fin)', type: 'number' }, ...(db.classes.length > 1 ? [{ k: 'classId', label: 'Classe concernée', type: 'select', options: [['', 'Aucune en particulier'], ...clsOpts()] }] : []), { k: 'note', label: 'Notes, compte rendu', type: 'textarea' }],
     onSave: v => { if (v.hours === '' && v.start && v.end) v.hours = Math.max(0, (mins(v.end) - mins(v.start)) / 60); upsert(db.events, e && e.id, v); },
     onDelete: e ? () => remove(db.events, e.id) : null });
 }
-A.newEv = d => evForm(null, d.d);
+A.newEv = d => evForm(null, d.d, d.cat);
 A.editEv = d => evForm(db.events.find(e => e.id === d.id));
 
+// ---------- Hors classe ----------
+// Un emploi du temps à part pour le travail hors de la classe : les créneaux de préparation qui
+// reviennent chaque semaine (corrections, préparation, photocopies…) et les rendez-vous datés
+// (réunions, APC, formations, conseils d'école). Le suivi des 108 heures est en bas de la page.
+V.hors = () => {
+  const t = TODAY(), H = h108(), evs = visEv().filter(e => e.cat !== 'classe'), vc = visCls();
+  const days = [0, 1, 2, 3, 4, 5, 6].map(i => addD(ui.week, i)), end = days[6];
+  const colsG = days.map(d => ({ day: wd(d), label: fD(d, { weekday: 'short', day: 'numeric', month: 'short' }) }));
+  const blocks = days.flatMap((d, i) => [
+    ...db.prep.filter(p => p.day === wd(d)).map(p => ({ col: i, start: p.start, end: p.end, color: '#59607c', attrs: `data-a="editPrep" data-id="${p.id}"`, html: `<b>${esc(p.title)}</b>${hm(p.start)}-${hm(p.end)}` })),
+    ...evs.filter(e => e.date === d && e.start && e.end && e.end > e.start).map(e => ({ col: i, start: e.start, end: e.end, color: CATS[e.cat][1], attrs: `data-a="editEv" data-id="${e.id}"`, html: `<b>${esc(e.title)}</b>${esc(CATS[e.cat][0])}` }))]);
+  const wk = evs.filter(e => e.date >= ui.week && e.date <= end).sort((a, b) => (a.date + (a.start || '')).localeCompare(b.date + (b.start || '')));
+  const rems = reminders().filter(r => vc.includes(r.o.classId) && ((r.date >= ui.week && r.date <= end) || (r.date < t && !db.remDone[r.key])));
+  const prepH = db.prep.reduce((a, p) => a + (mins(p.end) - mins(p.start)) / 60, 0);
+  const sum = Object.values(H).reduce((a, x) => a + x.done + x.plan, 0), quota = Object.values(H).reduce((a, x) => a + x.quota, 0);
+  return `<div class="head"><h1>Hors classe</h1><span class="sp"></span><div class="row np"><button class="btn pri" data-a="newEv">Ajouter un rendez-vous</button><button class="btn" data-a="addPrep" data-day="1">Ajouter un créneau de préparation</button></div></div>
+  ${weekNav()}${grid(colsG, blocks, 'addPrep')}
+  <p class="small muted np">En gris, vos créneaux de préparation : ils reviennent chaque semaine${prepH ? ' (' + fmtH(prepH) + ' par semaine)' : ''}. Touchez une colonne pour en ajouter un, ou un créneau pour le modifier. En couleur, les rendez-vous datés.</p>
+  <div class="cols" style="margin-top:14px"><div class="sheet"><h2>À préparer</h2>${rems.length ? `<ul class="plain">${rems.map(r => remLi(r, t)).join('')}</ul>` : '<p class="muted">Rien à préparer cette semaine. Les rappels viennent des fiches de séance (impression, matériel, mots, équipement).</p>'}</div>
+  <div class="sheet"><h2>Rendez-vous de la semaine</h2>${wk.length ? `<ul class="plain">${wk.map(e => `<li><span class="small muted">${esc(fD(e.date, { weekday: 'short', day: 'numeric' }))}</span>${evLi(e).slice(4, -5)}</li>`).join('')}</ul>` : '<p class="muted">Aucun rendez-vous cette semaine.</p>'}</div></div>
+  <div class="sheet" style="margin-top:16px"><div class="mg">108 h</div><h2>Obligations de service : ${fmtH(sum)} inscrites sur ${quota} h</h2>
+   ${sum >= quota ? '<p class="chip ok">Les ' + quota + ' heures sont atteintes : rien n’est dû au-delà.</p>' : `<p class="small muted">Il reste ${fmtH(quota - sum)} à inscrire d’ici la fin de l’année.</p>`}
+   ${Object.entries(H).map(([k, x]) => `<div style="margin:10px 0"><div class="row"><b>${CATS[k][0]}</b><span class="sp"></span><span class="small">${fmtH(x.done)} faites${x.plan ? ', ' + fmtH(x.plan) + ' prévues' : ''}, sur ${x.quota} h ${x.done + x.plan > x.quota ? '<span class="chip yel">dépassé de ' + fmtH(x.done + x.plan - x.quota) + '</span>' : ''}</span></div>
+     <div class="bar"><i style="width:${Math.min(100, x.done / (x.quota || 1) * 100)}%;background:${CATS[k][1]}"></i><i style="width:${Math.min(100 - Math.min(100, x.done / (x.quota || 1) * 100), x.plan / (x.quota || 1) * 100)}%;background:${CATS[k][1]};opacity:.4"></i></div></div>`).join('')}</div>
+  <div class="sheet"><h2>Détail des heures de l’année</h2>${db.events.some(e => H[e.cat]) ? `<div class="tw"><table><thead><tr><th>Date</th><th>Objet</th><th>Catégorie</th><th>Durée</th></tr></thead><tbody>${[...db.events].filter(e => H[e.cat]).sort((a, b) => a.date.localeCompare(b.date)).map(e => `<tr><td>${esc(fS(e.date))}</td><td>${esc(e.title)}${e.note ? '<br><span class="small muted">' + nl(e.note) + '</span>' : ''}</td><td>${CATS[e.cat][0]}</td><td>${fmtH(+e.hours || 0)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Ajoutez vos APC, réunions, rendez-vous de parents, formations et conseils d’école : le décompte se fait tout seul.</p>'}</div>`;
+};
+function prepForm(p, day, start) {
+  openForm({ title: p ? 'Créneau de préparation' : 'Nouveau créneau de préparation', intro: '<p class="small">Il revient chaque semaine dans votre emploi du temps hors classe.</p>', values: p || { title: 'Préparation', day, start: toT(start), end: toT(start + 60) },
+    fields: [{ k: 'title', label: 'Quoi (préparation, corrections, photocopies…)', req: 1 }, { k: 'day', label: 'Jour', type: 'select', options: [1, 2, 3, 4, 5, 6, 0].map(d => [d, DAYS[d]]) }, { k: 'start', label: 'Début', type: 'time', req: 1 }, { k: 'end', label: 'Fin', type: 'time', req: 1 }],
+    onSave: v => { if (v.end <= v.start) { toast('L’heure de fin doit être après le début.'); return false; } v.day = +v.day; upsert(db.prep, p && p.id, v); }, onDelete: p ? () => remove(db.prep, p.id) : null });
+}
+A.addPrep = (d, el, e) => prepForm(null, +d.day, d.lo ? clickT(d, el, e) : 1020);
+A.editPrep = d => prepForm(db.prep.find(p => p.id === d.id));
+
 // ---------- Élèves ----------
+// Trois volets : la classe (tuiles et fiches), les évaluations (saisie en liste de classe), les bilans pour les parents.
 const initials = s => ((s.first || '?')[0] + (s.last || '')[0]).toUpperCase();
 V.eleves = () => {
+  const tab = ui.etab || 'classe', tb = (k, l) => `<button class="btn ${tab === k ? 'pri' : ''}" data-a="etab" data-t="${k}">${l}</button>`;
+  const head = `<div class="head"><h1>Élèves</h1><span class="sp"></span><div class="row np">${tb('classe', 'La classe')}${tb('evals', 'Évaluations')}${tb('bilans', 'Bilans pour les parents')}</div></div>`;
+  if (tab === 'evals') return head + (db.evals.find(e => e.id === ui.ev) ? evalGrid(db.evals.find(e => e.id === ui.ev)) : evalList());
+  if (tab === 'bilans') return head + bilansHTML();
   const t = TODAY(), vc = visCls();
-  return `<div class="head"><h1>Élèves</h1><span class="sp"></span><div class="row np"><button class="btn pri" data-a="newStu">Ajouter un élève</button><button class="btn" data-a="newStuList">Ajouter une liste</button></div></div>
+  return head + `<div class="row np" style="margin-bottom:8px"><button class="btn pri" data-a="newStu">Ajouter un élève</button><button class="btn" data-a="newStuList">Ajouter une liste</button></div>
   <p class="np small muted">Touchez une tuile pour ouvrir la fiche. <b>Maintenez le doigt dessus</b> pour dicter une note : l’heure est notée, et vous choisissez ensuite incident, comportement, évaluation ou commentaire.</p>
   ${vc.map(cid => {
     const st = visStu().filter(s => s.classId === cid);
     return `${db.classes.length > 1 ? `<h2 style="margin:14px 0 8px">${cbadge(cid, 1)} <span class="small muted">${st.length} élèves</span></h2>` : ''}
     ${st.length ? `<div class="tiles">${st.map(s => { const ab = db.att[t + '|M|' + s.id] === 'A' || db.att[t + '|S|' + s.id] === 'A', n = db.notes.filter(x => x.sid === s.id && x.date === t).length;
-      return `<button class="tile" data-a="openStu" data-id="${s.id}"><span class="av" style="background:${esc(cls(cid).color)}">${esc(db.settings.mark === 'icon' ? cls(cid).icon || initials(s) : initials(s))}</span><b>${esc(s.first)}<br>${esc(s.last)}</b>${s.level ? `<span class="chip">${esc(s.level)}</span>` : ''}${ab ? '<span class="chip red">absent</span>' : ''}${n ? `<span class="chip yel">${n} note${n > 1 ? 's' : ''} ce jour</span>` : ''}</button>`; }).join('')}</div>` : '<div class="sheet"><p class="muted">Aucun élève. Ajoutez-les un par un, ou collez toute la liste.</p></div>'}`;
+      return `<button class="tile" data-a="openStu" data-id="${s.id}"><span class="av" style="background:${esc(cls(cid).color)}">${esc(db.settings.mark === 'icon' ? cls(cid).icon || initials(s) : initials(s))}</span><b>${esc(s.first)}<br>${esc(s.last)}</b>${s.level ? `<span class="chip">${esc(s.level)}</span>` : ''}${s.pai ? '<span class="chip red">PAI</span>' : ''}${s.needs ? '<span class="chip yel">besoins particuliers</span>' : ''}${ab ? '<span class="chip red">absent</span>' : ''}${n ? `<span class="chip yel">${n} note${n > 1 ? 's' : ''} ce jour</span>` : ''}</button>`; }).join('')}</div>` : '<div class="sheet"><p class="muted">Aucun élève. Ajoutez-les un par un, ou collez toute la liste.</p></div>'}`;
   }).join('')}`;
 };
+A.etab = d => { ui.etab = d.t; ui.ev = null; render(); };
 function stuForm(s) {
   openForm({ title: s ? 'Modifier la fiche' : 'Nouvel élève', values: s || { classId: defCls(), level: ui.lvl },
     fields: [{ k: 'first', label: 'Prénom', req: 1 }, { k: 'last', label: 'Nom' }, ...(db.classes.length > 1 ? [{ k: 'classId', label: 'Classe', type: 'select', options: clsOpts() }] : []), { k: 'level', label: 'Niveau (CP, CE1…)' }, { k: 'birth', label: 'Date de naissance', type: 'date' },
-    { k: 'contacts', label: 'Responsables et téléphones', type: 'textarea' }, { k: 'health', label: 'Santé, PAI, allergies, besoins particuliers', type: 'textarea' }, { k: 'info', label: 'Autres informations (sortie, garderie, cantine…)', type: 'textarea' }],
+    { k: 'contacts', label: 'Responsables et téléphones', type: 'textarea' },
+    { k: 'pai', label: 'PAI : pathologie, conduite à tenir, où est la trousse', type: 'textarea' }, { k: 'needs', label: 'Besoins particuliers : PPS, PAP, PPRE, AESH, aménagements', type: 'textarea' },
+    { k: 'info', label: 'Autres informations (sortie, garderie, cantine…)', type: 'textarea' }],
     onSave: v => { if (!v.classId) v.classId = s ? s.classId : defCls(); upsert(db.students, s && s.id, v); },
     onDelete: s ? () => { remove(db.students, s.id); ui.stu = null; ui.view = 'eleves'; } : null });
 }
 A.newStu = () => stuForm(null);
 A.editStu = () => stuForm(stu(ui.stu));
 A.newStuList = () => openForm({ title: 'Ajouter une liste d’élèves', values: { classId: defCls(), level: ui.lvl }, fields: [{ k: 'list', label: 'Un élève par ligne : Prénom Nom', type: 'textarea', rows: 10 }, ...(db.classes.length > 1 ? [{ k: 'classId', label: 'Classe', type: 'select', options: clsOpts() }] : []), { k: 'level', label: 'Niveau (facultatif)' }],
-  onSave: v => v.list.split('\n').map(x => x.trim()).filter(Boolean).forEach(l => { const p = l.split(/\s+/); db.students.push({ id: uid(), first: p[0], last: p.slice(1).join(' '), classId: v.classId || defCls(), level: v.level, birth: '', contacts: '', health: '', info: '' }); }) });
+  onSave: v => v.list.split('\n').map(x => x.trim()).filter(Boolean).forEach(l => { const p = l.split(/\s+/); db.students.push({ id: uid(), first: p[0], last: p.slice(1).join(' '), classId: v.classId || defCls(), level: v.level, birth: '', contacts: '', pai: '', needs: '', info: '' }); }) });
 A.openStu = d => { ui.stu = d.id; go('eleve'); };
 
 // La fiche d'un élève : tout son dossier sur une page, imprimable.
+const stuGrades = (s, from, to) => db.evals.filter(e => db.grades[e.id + '|' + s.id] && (!from || (e.date >= from && e.date <= to))).sort((a, b) => b.date.localeCompare(a.date));
 V.eleve = () => {
   const s = stu(ui.stu); if (!s) return V.eleves();
-  const notes = db.notes.filter(n => n.sid === s.id).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)), obs = notes.filter(n => n.type !== 'incident'), inc = notes.filter(n => n.type === 'incident');
-  const res = db.results.filter(r => r.sid === s.id).sort((a, b) => b.date.localeCompare(a.date)), meet = db.meetings.filter(m => m.sid === s.id).sort((a, b) => b.date.localeCompare(a.date));
+  const notes = db.notes.filter(n => n.sid === s.id).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)), pos = notes.filter(n => n.type !== 'incident' && n.pos === true), obs = notes.filter(n => n.type !== 'incident' && n.pos !== true), inc = notes.filter(n => n.type === 'incident');
+  const res = stuGrades(s), meet = db.meetings.filter(m => m.sid === s.id).sort((a, b) => b.date.localeCompare(a.date));
   const lists = db.lists.filter(l => !l.classId || l.classId === s.classId), imp = lists.filter(l => l.important);
   const abs = Object.keys(db.att).filter(k => k.endsWith('|' + s.id)).sort(), nA = abs.filter(k => db.att[k] === 'A'), nJ = nA.filter(k => (db.absInfo[k.slice(0, 10) + '|' + s.id] || {}).just);
-  const nli = n => `<li><span class="small muted">${esc(fS(n.date))}${n.time ? ' ' + hm(n.time) : ''}</span><span class="chip">${NOTE[n.type][0]} ${esc(n.sub || NOTE[n.type][1])}</span><button class="lnk" data-a="editNote" data-id="${n.id}" style="flex:1;min-width:160px">${nl(n.text)}</button></li>`;
+  const nli = n => `<li><span class="small muted">${esc(fS(n.date))}${n.time ? ' ' + hm(n.time) : ''}</span><span class="chip ${n.pos === true ? 'ok' : n.pos === false ? 'yel' : ''}">${NOTE[n.type][0]} ${esc(n.sub || NOTE[n.type][1])}</span><button class="lnk" data-a="editNote" data-id="${n.id}" style="flex:1;min-width:160px">${n.text ? nl(n.text) : '<span class="muted small">Ajouter un détail</span>'}</button></li>`;
   const sec = (title, body, act, label) => `<div class="sheet"><div class="row"><h2>${title}</h2><span class="sp"></span>${act ? `<button class="btn sm np" data-a="${act}">${label}</button>` : ''}</div>${body}</div>`;
+  const B = db.settings.behav;
   return `<div class="head"><h1>${esc(sname(s))}</h1><span class="sp"></span><div class="row np"><button class="btn" data-a="go" data-v="eleves">‹ Tous les élèves</button><button class="btn" data-a="editStu">Modifier la fiche</button></div></div>
   <div class="sheet"><p style="margin:0">${cbadge(s.classId, 1)} ${s.level ? `<span class="chip">${esc(s.level)}</span>` : ''} ${s.birth ? 'Né(e) le ' + esc(fD(s.birth, { day: 'numeric', month: 'long', year: 'numeric' })) : ''}</p>
-   ${s.contacts ? `<p><b>Responsables :</b> ${nl(s.contacts)}</p>` : ''}${s.health ? `<p class="warn">Santé : ${nl(s.health)}</p>` : ''}${s.info ? `<p>${nl(s.info)}</p>` : ''}
+   ${s.pai ? `<p class="warn">PAI : ${nl(s.pai)}</p>` : ''}${s.needs ? `<p><span class="chip yel">Besoins particuliers</span> ${nl(s.needs)}</p>` : ''}
+   ${s.contacts ? `<p><b>Responsables :</b> ${nl(s.contacts)}</p>` : ''}${s.info ? `<p>${nl(s.info)}</p>` : ''}
+   ${!s.pai && !s.needs ? '<p class="small muted np">Ni PAI ni besoin particulier enregistré. « Modifier la fiche » pour en ajouter.</p>' : ''}
    ${imp.length ? `<p>${imp.map(l => `<span class="chip ${l.checked[s.id] ? 'ok' : 'red'}">${l.checked[s.id] ? '✓' : '✗'} ${esc(l.title)}</span>`).join(' ')}</p>` : ''}</div>
-  ${sec('Résultats', res.length ? `<div class="tw"><table><thead><tr><th>Date</th><th>Matière</th><th>Évaluation</th><th>Résultat</th><th>Commentaire</th></tr></thead><tbody>${res.map(r => `<tr><td>${esc(fS(r.date))}</td><td>${esc(subj(r.subjectId).name)}</td><td><button class="lnk" data-a="editRes" data-id="${r.id}">${esc(r.title)}</button></td><td>${esc(r.level)}${r.score ? ' ' + esc(r.score) : ''}</td><td>${nl(r.comment)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Aucun résultat noté.</p>', 'newRes', 'Ajouter un résultat')}
+  <div class="sheet np"><h2>Observation en un geste</h2><p class="small muted">Un appui enregistre l’observation, datée et horodatée. Vous pourrez y ajouter un détail ensuite.</p>
+   <div class="row">${B.filter(b => b.pos).map(b => `<button class="btn sm" style="border-color:var(--ok)" data-a="quickObs" data-b="${b.id}">＋ ${esc(b.l)}</button>`).join('')}</div>
+   <div class="row" style="margin-top:8px">${B.filter(b => !b.pos).map(b => `<button class="btn sm" style="border-color:var(--marge)" data-a="quickObs" data-b="${b.id}">${esc(b.l)}</button>`).join('')}</div></div>
+  ${sec('Points positifs', pos.length ? `<ul class="plain">${pos.map(nli).join('')}</ul>` : '<p class="muted">Travail, progrès, écoute, autonomie… Notez ici ce qui va bien.</p>', 'newPos', 'Ajouter un point positif')}
+  ${sec('Résultats', res.length ? `<div class="tw"><table><thead><tr><th>Date</th><th>Matière</th><th>Compétence ou évaluation</th><th>Résultat</th><th>Commentaire</th></tr></thead><tbody>${res.map(e => { const g = db.grades[e.id + '|' + s.id]; return `<tr><td>${esc(fS(e.date))}</td><td>${esc(subj(e.subjectId).name)}${e.sub ? ' › ' + esc(e.sub) : ''}</td><td><button class="lnk" data-a="openEval" data-id="${e.id}">${esc(e.title)}</button></td><td>${gradeView(e, g)}</td><td>${nl(g.c)}</td></tr>`; }).join('')}</tbody></table></div>` : '<p class="muted">Aucun résultat. Les notes se saisissent pour toute la classe dans Élèves › Évaluations.</p>')}
   ${sec('Observations', obs.length ? `<ul class="plain">${obs.map(nli).join('')}</ul>` : '<p class="muted">Aucune observation.</p>', 'newObs', 'Ajouter une observation')}
   ${sec('Incidents', inc.length ? `<ul class="plain">${inc.map(nli).join('')}</ul>` : '<p class="muted">Aucun incident (dispute, blessure, maladie, échange avec la famille).</p>', 'newInc', 'Ajouter un incident')}
   ${sec('Réunions avec les parents', meet.length ? `<ul class="plain">${meet.map(m => `<li><span class="small muted">${esc(fS(m.date))}</span><button class="lnk" data-a="editMeet" data-id="${m.id}" style="flex:1;min-width:160px"><b>${esc(m.who || 'Rendez-vous')}</b><br>${nl(m.text)}</button></li>`).join('')}</ul>` : '<p class="muted">Aucun compte rendu.</p>', 'newMeet', 'Ajouter un compte rendu')}
   ${sec('Absences', `<p><b>${nA.length}</b> demi-journée${nA.length > 1 ? 's' : ''} d’absence, dont ${nJ.length} justifiée${nJ.length > 1 ? 's' : ''} ; ${abs.length - nA.length} retard${abs.length - nA.length > 1 ? 's' : ''}.</p>${abs.length ? `<p class="small">${abs.map(k => { const [d, h] = k.split('|'), i = db.absInfo[d + '|' + s.id] || {}; return esc(fD(d, { day: 'numeric', month: 'short' })) + ' ' + (h === 'M' ? 'matin' : 'après-midi') + (db.att[k] === 'R' ? ' (retard)' : '') + (i.motif ? ' : ' + esc(i.motif) : '') + (db.att[k] === 'A' && !i.just ? ' <span class="warn">non justifiée</span>' : ''); }).join(' ; ')}</p>` : ''}`)}
   ${sec('Administratif', lists.length ? `<ul class="plain">${lists.map(l => `<li><label><input type="checkbox" data-c="chk" data-l="${l.id}" data-s="${s.id}" ${l.checked[s.id] ? 'checked' : ''}> ${esc(l.title)}</label>${l.important ? '<span class="chip yel">important</span>' : ''}</li>`).join('')}</ul>` : '<p class="muted">Aucune liste. Créez-les dans Administratif.</p>')}`;
 };
-function noteForm(n, type) {
-  openForm({ title: n ? 'Modifier la note' : type === 'incident' ? 'Nouvel incident' : 'Nouvelle observation', values: n || { type, date: TODAY(), time: new Date().toTimeString().slice(0, 5), sub: '' },
-    fields: [{ k: 'type', label: 'Type', type: 'select', options: Object.entries(NOTE).map(([k, v]) => [k, v[1]]) }, { k: 'sub', label: 'Nature (pour un incident)', type: 'select', options: [['', 'Sans précision'], ...INC.map(x => [x, x])] }, { k: 'date', label: 'Date', type: 'date', req: 1 }, { k: 'time', label: 'Heure', type: 'time' }, { k: 'text', label: 'Note', type: 'textarea', rows: 4 }],
-    onSave: v => upsert(db.notes, n && n.id, { ...v, sid: ui.stu }), onDelete: n ? () => remove(db.notes, n.id) : null });
+A.quickObs = d => { const b = db.settings.behav.find(x => x.id === d.b); db.notes.push({ id: uid(), sid: ui.stu, type: 'comportement', sub: b.l, pos: b.pos, text: '', date: TODAY(), time: new Date().toTimeString().slice(0, 5) }); done(); toast('« ' + b.l + ' » noté pour ' + sname(stu(ui.stu)) + '.'); };
+function noteForm(n, type, pos) {
+  const B = db.settings.behav;
+  openForm({ title: n ? 'Modifier la note' : type === 'incident' ? 'Nouvel incident' : pos ? 'Nouveau point positif' : 'Nouvelle observation', values: n ? { ...n, pos: n.pos === true ? '1' : n.pos === false ? '0' : '' } : { type, date: TODAY(), time: new Date().toTimeString().slice(0, 5), sub: '', pos: pos || '' },
+    fields: [{ k: 'type', label: 'Type', type: 'select', options: Object.entries(NOTE).map(([k, v]) => [k, v[1]]) }, { k: 'sub', label: 'Nature', type: 'select', options: [['', 'Sans précision'], ...B.map(b => [b.l, b.l]), ...INC.map(x => [x, x])] },
+    { k: 'pos', label: 'Appréciation', type: 'select', options: [['', 'D’après la nature choisie, sinon neutre'], ['1', 'Point positif'], ['0', 'Point à travailler']] }, { k: 'date', label: 'Date', type: 'date', req: 1 }, { k: 'time', label: 'Heure', type: 'time' }, { k: 'text', label: 'Note', type: 'textarea', rows: 4 }],
+    onSave: v => { const b = B.find(x => x.l === v.sub); v.pos = v.pos === '' ? (b && v.type !== 'incident' ? b.pos : null) : v.pos === '1'; upsert(db.notes, n && n.id, { ...v, sid: ui.stu }); }, onDelete: n ? () => remove(db.notes, n.id) : null });
 }
-A.newObs = () => noteForm(null, 'commentaire'); A.newInc = () => noteForm(null, 'incident'); A.editNote = d => noteForm(db.notes.find(n => n.id === d.id));
-function resForm(r) {
-  openForm({ title: r ? 'Modifier le résultat' : 'Nouveau résultat', values: r || { date: TODAY(), level: 'Atteint', subjectId: (db.subjects[0] || {}).id },
-    fields: [{ k: 'title', label: 'Évaluation ou compétence', req: 1 }, { k: 'subjectId', label: 'Matière', type: 'select', options: db.subjects.map(s => [s.id, s.name]) }, { k: 'date', label: 'Date', type: 'date', req: 1 }, { k: 'level', label: 'Résultat', type: 'select', options: [['', 'Sans positionnement'], ...LEVELS.map(x => [x, x])] }, { k: 'score', label: 'Score (facultatif, ex. 8/10)' }, { k: 'comment', label: 'Commentaire', type: 'textarea' }],
-    onSave: v => upsert(db.results, r && r.id, { ...v, sid: ui.stu }), onDelete: r ? () => remove(db.results, r.id) : null });
-}
-A.newRes = () => resForm(null); A.editRes = d => resForm(db.results.find(r => r.id === d.id));
+A.newObs = () => noteForm(null, 'commentaire'); A.newPos = () => noteForm(null, 'comportement', '1'); A.newInc = () => noteForm(null, 'incident'); A.editNote = d => noteForm(db.notes.find(n => n.id === d.id));
 function meetForm(m) {
   openForm({ title: m ? 'Modifier le compte rendu' : 'Réunion avec les parents', values: m || { date: TODAY() }, fields: [{ k: 'date', label: 'Date', type: 'date', req: 1 }, { k: 'who', label: 'Personnes présentes' }, { k: 'text', label: 'Compte rendu, décisions prises', type: 'textarea', rows: 6 }],
     onSave: v => upsert(db.meetings, m && m.id, { ...v, sid: ui.stu }), onDelete: m ? () => remove(db.meetings, m.id) : null });
 }
 A.newMeet = () => meetForm(null); A.editMeet = d => meetForm(db.meetings.find(m => m.id === d.id));
+
+// ---------- Évaluations ----------
+// Une évaluation = une matière + l'intitulé de la compétence (ou de l'évaluation) + une date.
+// La saisie se fait en liste de classe. Trois façons de noter : quatre niveaux, niveaux affinés
+// avec + et −, ou note chiffrée (l'équivalent en niveau est calculé d'après les seuils des réglages).
+const EMODE = { niv: 'Niveaux', fin: 'Niveaux affinés (+ et −)', num: 'Note chiffrée' };
+const evalStu = e => visStu().filter(s => s.classId === e.classId);
+function evalList() {
+  const vc = visCls(), evs = db.evals.filter(e => vc.includes(e.classId)).sort((a, b) => b.date.localeCompare(a.date));
+  return `<div class="row np" style="margin-bottom:10px"><button class="btn pri" data-a="newEval">Nouvelle évaluation</button></div>
+  ${evs.length ? `<div class="sheet flat"><div class="tw"><table><thead><tr><th>Date</th><th>Matière</th><th>Compétence ou évaluation</th><th>Notation</th><th>Répartition de la classe</th></tr></thead><tbody>${evs.map(e => {
+    const n = { NA: 0, EVA: 0, A: 0, D: 0 }; let tot = 0; db.students.filter(s => s.classId === e.classId).forEach(s => { const g = db.grades[e.id + '|' + s.id]; if (g && g.v !== '' && g.v != null) { n[e.mode === 'num' ? numToLv(+g.v, e.max) : lvBase(g.v)]++; tot++; } });
+    return `<tr><td>${esc(fS(e.date))}</td><td><span class="dot" style="background:${subj(e.subjectId).color}"></span>${esc(subj(e.subjectId).name)}${e.sub ? ' › ' + esc(e.sub) : ''} ${cbadge(e.classId)}</td><td><button class="lnk" data-a="openEval" data-id="${e.id}"><b>${esc(e.title)}</b></button></td><td>${EMODE[e.mode]}${e.mode === 'num' ? ' sur ' + esc(e.max) : ''}</td><td>${tot ? Object.keys(LV).filter(k => n[k]).map(k => `<span class="chip ${LV[k][1]}">${n[k]} ${LV[k][0].toLowerCase()}</span>`).join(' ') : '<span class="muted small">à saisir</span>'}</td></tr>`; }).join('')}</tbody></table></div></div>` : '<div class="sheet"><p>Créez une évaluation (matière et compétence évaluée), puis saisissez les résultats de toute la classe sur une seule liste : niveau ou note, et un commentaire si besoin.</p></div>'}`;
+}
+function evalForm(e) {
+  openForm({ title: e ? 'Modifier l’évaluation' : 'Nouvelle évaluation', values: e ? { ...e, what: e.subjectId + '|' + (e.sub || '') } : { date: TODAY(), mode: 'niv', max: 20, classId: defCls(), what: (db.subjects[0] || {}).id + '|' },
+    fields: [{ k: 'title', label: 'Compétence évaluée, ou intitulé de l’évaluation', req: 1 }, { k: 'what', label: 'Matière', type: 'select', options: whatOpts() }, ...(db.classes.length > 1 ? [{ k: 'classId', label: 'Classe', type: 'select', options: clsOpts() }] : []), { k: 'date', label: 'Date', type: 'date', req: 1 },
+    { k: 'mode', label: 'Notation', type: 'select', options: [['niv', 'Niveaux : non atteint, en voie d’acquisition, acquis, dépassé'], ['fin', 'Niveaux affinés, avec des intermédiaires + et −'], ['num', 'Note chiffrée, avec son équivalent en niveau']] }, { k: 'max', label: 'Barème, pour une note chiffrée (sur combien ?)', type: 'number' }],
+    onSave: v => { const [subjectId, sub] = v.what.split('|'), n = { title: v.title, subjectId, sub, classId: v.classId || (e ? e.classId : defCls()), date: v.date, mode: v.mode, max: +v.max || 20 }; if (e) Object.assign(e, n); else { const id = uid(); db.evals.push({ id, ...n }); ui.ev = id; } },
+    onDelete: e ? () => { remove(db.evals, e.id); for (const k in db.grades) if (k.startsWith(e.id + '|')) delete db.grades[k]; ui.ev = null; } : null });
+}
+A.newEval = () => evalForm(null);
+A.editEval = () => evalForm(db.evals.find(e => e.id === ui.ev));
+A.openEval = d => { ui.ev = d.id; ui.etab = 'evals'; go('eleves'); };
+A.closeEval = () => { ui.ev = null; render(); };
+function evalGrid(e) {
+  const st = evalStu(e), opts = e.mode === 'fin' ? FINE : Object.keys(LV);
+  return `<div class="row np" style="margin-bottom:10px"><button class="btn" data-a="closeEval">‹ Toutes les évaluations</button><button class="btn" data-a="editEval">Modifier l’évaluation</button></div>
+  <div class="sheet flat"><h2><span class="dot" style="background:${subj(e.subjectId).color}"></span>${esc(subj(e.subjectId).name)}${e.sub ? ' › ' + esc(e.sub) : ''} : ${esc(e.title)}</h2><p class="small muted">${esc(fD(e.date, { day: 'numeric', month: 'long', year: 'numeric' }))}, ${esc(cls(e.classId) ? cls(e.classId).name : '')}, ${EMODE[e.mode].toLowerCase()}${e.mode === 'num' ? ' sur ' + esc(e.max) : ''}. La saisie s’enregistre toute seule.</p>
+  <div class="tw"><table><thead><tr><th>Élève</th><th>${e.mode === 'num' ? 'Note sur ' + esc(e.max) : 'Niveau'}</th>${e.mode === 'num' ? '<th>Équivalent</th>' : ''}<th style="width:45%">Commentaire</th></tr></thead><tbody>
+  ${st.map(s => { const g = db.grades[e.id + '|' + s.id] || {}, v = g.v ?? '';
+    return `<tr><td>${esc(sname(s))}</td><td>${e.mode === 'num' ? `<input type="number" min="0" max="${esc(e.max)}" step="0.5" inputmode="decimal" data-c="grade" data-s="${s.id}" value="${esc(v)}" style="width:5.5em" aria-label="Note de ${esc(sname(s))}">` : `<select data-c="grade" data-s="${s.id}" aria-label="Niveau de ${esc(sname(s))}"><option value="">Non évalué</option>${opts.map(o => `<option value="${o}" ${v === o ? 'selected' : ''}>${esc(lvLabel(o))}</option>`).join('')}</select>`}</td>${e.mode === 'num' ? `<td id="eq-${s.id}">${gradeView(e, g).replace(/^[^<]*/, '')}</td>` : ''}<td><input data-c="gcom" data-s="${s.id}" value="${esc(g.c)}" style="width:100%;min-width:140px" aria-label="Commentaire pour ${esc(sname(s))}"></td></tr>`; }).join('') || '<tr><td colspan="4" class="muted">Aucun élève dans cette classe.</td></tr>'}
+  </tbody></table></div>${e.mode === 'num' ? `<p class="small muted">Équivalences (réglages) : en voie d’acquisition à partir de ${esc(db.settings.seuils.eva)} % de la note, acquis à partir de ${esc(db.settings.seuils.a)} %, dépassé à partir de ${esc(db.settings.seuils.d)} %.</p>` : ''}</div>`;
+}
+const gradeOf = s => db.grades[ui.ev + '|' + s] ??= { v: '', c: '' };
+C.grade = (d, el) => { const g = gradeOf(d.s), e = db.evals.find(x => x.id === ui.ev); g.v = el.value; if (e.mode === 'num') $('#eq-' + d.s).innerHTML = gradeView(e, g).replace(/^[^<]*/, ''); if (g.v === '' && !g.c) delete db.grades[ui.ev + '|' + d.s]; saveSoon(); };
+C.gcom = (d, el) => { const g = gradeOf(d.s); g.c = el.value; if (g.v === '' && !g.c) delete db.grades[ui.ev + '|' + d.s]; saveSoon(); };
+
+// ---------- Bilans pour les parents ----------
+// On choisit la périodicité (entre deux vacances, trimestre, semestre, année, ou dates libres). Le bilan
+// reprend les résultats de la période, les points positifs, l'assiduité et une appréciation à rédiger.
+ui.bil = { kind: 'periode', i: -1, from: db.settings.start, to: TODAY(), res: true, pos: true, neg: false, abs: true };
+function periods(kind) {
+  const S = db.settings, y = +S.start.slice(0, 4), P = (l, from, to) => ({ l, from, to });
+  if (kind === 'trimestre') return [P('1er trimestre', S.start, y + '-11-30'), P('2e trimestre', y + '-12-01', (y + 1) + '-03-31'), P('3e trimestre', (y + 1) + '-04-01', S.end)];
+  if (kind === 'semestre') return [P('1er semestre', S.start, (y + 1) + '-01-31'), P('2e semestre', (y + 1) + '-02-01', S.end)];
+  if (kind === 'annee') return [P('Année ' + S.year, S.start, S.end)];
+  const H = S.holidays.filter(h => h.from > S.start && h.to < S.end).sort((a, b) => a.from.localeCompare(b.from)), out = []; let a = S.start;
+  H.forEach((h, i) => { out.push(P('Période ' + (i + 1), a, addD(h.from, -1))); a = addD(h.to, 1); }); out.push(P('Période ' + (H.length + 1), a, S.end)); return out;
+}
+function bilRange() {
+  const b = ui.bil; if (b.kind === 'libre') return { l: 'Bilan', from: b.from, to: b.to };
+  const ps = periods(b.kind); if (b.i < 0 || b.i >= ps.length) { const t = TODAY(); b.i = Math.max(0, ps.findIndex(p => t <= p.to)); if (t > ps[ps.length - 1].to) b.i = ps.length - 1; }
+  return ps[b.i];
+}
+function bilData(s, r) {
+  const notes = db.notes.filter(n => n.sid === s.id && n.date >= r.from && n.date <= r.to && n.type !== 'incident');
+  const abs = Object.keys(db.att).filter(k => k.endsWith('|' + s.id) && k.slice(0, 10) >= r.from && k.slice(0, 10) <= r.to), nA = abs.filter(k => db.att[k] === 'A');
+  return { res: stuGrades(s, r.from, r.to).reverse(), pos: notes.filter(n => n.pos === true), neg: notes.filter(n => n.pos === false), nA: nA.length, nJ: nA.filter(k => (db.absInfo[k.slice(0, 10) + '|' + s.id] || {}).just).length, nR: abs.length - nA.length };
+}
+const fRange = r => 'du ' + fD(r.from, { day: 'numeric', month: 'long', year: 'numeric' }) + ' au ' + fD(r.to, { day: 'numeric', month: 'long', year: 'numeric' });
+function bilansHTML() {
+  const b = ui.bil, r = bilRange(), ps = b.kind === 'libre' ? [] : periods(b.kind), st = visStu(), ck = (k, l) => `<label><input type="checkbox" data-c="bil" data-k="${k}" ${b[k] ? 'checked' : ''}> ${l}</label>`;
+  return `<div class="sheet np"><h2>Quel bilan ?</h2><div class="row" style="align-items:flex-end">
+    <label class="fld"><span>Périodicité</span><select data-c="bil" data-k="kind">${[['periode', 'Par période (entre deux vacances)'], ['trimestre', 'Par trimestre'], ['semestre', 'Par semestre'], ['annee', 'Une fois par an'], ['libre', 'Dates libres']].map(([k, l]) => `<option value="${k}" ${b.kind === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    ${b.kind === 'libre' ? `<label class="fld"><span>Du</span><input type="date" data-c="bil" data-k="from" value="${b.from}"></label><label class="fld"><span>Au</span><input type="date" data-c="bil" data-k="to" value="${b.to}"></label>` : ps.length > 1 ? `<label class="fld"><span>Laquelle</span><select data-c="bil" data-k="i">${ps.map((p, i) => `<option value="${i}" ${b.i === i ? 'selected' : ''}>${esc(p.l)}</option>`).join('')}</select></label>` : ''}</div>
+   <p class="small muted">${esc(r.l)} : ${esc(fRange(r))}.${b.kind === 'periode' ? ' Les périodes suivent les vacances saisies dans les réglages.' : ''}</p>
+   <div class="row">${ck('res', 'Résultats')}${ck('pos', 'Points positifs')}${ck('neg', 'Points à travailler')}${ck('abs', 'Absences et retards')}</div>
+   <p style="margin-top:10px"><button class="btn pri" data-a="printBil">Imprimer les bilans de toute la classe</button></p></div>
+  ${st.map(s => { const d = bilData(s, r); return `<div class="sheet"><div class="row"><h3>${esc(sname(s))}</h3><span class="small muted">${d.res.length} résultat${d.res.length > 1 ? 's' : ''}, ${d.pos.length} point${d.pos.length > 1 ? 's' : ''} positif${d.pos.length > 1 ? 's' : ''}, ${d.nA} demi-journée${d.nA > 1 ? 's' : ''} d’absence</span><span class="sp"></span><button class="btn sm np" data-a="printBil" data-id="${s.id}">Imprimer ce bilan</button></div>
+    <label class="fld"><span>Appréciation générale pour les parents</span><textarea rows="3" data-c="bilTxt" data-s="${s.id}" placeholder="Ce qui est réussi, les progrès, ce qui reste à consolider, un conseil pour la maison…">${esc(db.bilans[s.id + '|' + r.from + '|' + r.to] || '')}</textarea></label></div>`; }).join('') || '<div class="sheet"><p class="muted">Ajoutez d’abord vos élèves.</p></div>'}`;
+}
+C.bil = (d, el) => { const b = ui.bil; if (el.type === 'checkbox') b[d.k] = el.checked; else if (d.k === 'i') b.i = +el.value; else { if (!el.value) return; b[d.k] = el.value; if (d.k === 'kind') b.i = -1; } render(); };
+C.bilTxt = (d, el) => { const r = bilRange(); db.bilans[d.s + '|' + r.from + '|' + r.to] = el.value; saveSoon(); };
+const tally = a => { const m = {}; a.forEach(n => { const k = n.sub || NOTE[n.type][1]; (m[k] ??= { n: 0, t: [] }).n++; if (n.text) m[k].t.push(n.text); }); return Object.entries(m).map(([k, v]) => `<li><b>${esc(k)}</b>${v.n > 1 ? ' (' + v.n + ' fois)' : ''}${v.t.length ? ' : ' + v.t.map(esc).join(' ; ') : ''}</li>`).join(''); };
+function bilanHTML(s, r) {
+  const b = ui.bil, d = bilData(s, r), k = cls(s.classId), bySub = {}; d.res.forEach(e => (bySub[subj(e.subjectId).name] ??= []).push(e));
+  return docHead('Bilan de ' + sname(s)) + `<p>${esc(k ? k.name : '')}${s.level ? ', ' + esc(s.level) : ''}. ${esc(r.l)}, ${esc(fRange(r))}.</p>
+  ${b.res ? `<h2>Résultats</h2>${d.res.length ? `<table><thead><tr><th>Matière</th><th>Compétence ou évaluation</th><th>Résultat</th><th>Commentaire</th></tr></thead><tbody>${Object.entries(bySub).map(([n, es]) => es.map((e, i) => { const g = db.grades[e.id + '|' + s.id]; return `<tr>${i ? '' : `<td rowspan="${es.length}"><b>${esc(n)}</b></td>`}<td>${esc(e.title)}</td><td>${gradeView(e, g)}</td><td>${nl(g.c)}</td></tr>`; }).join('')).join('')}</tbody></table><p style="font-size:9pt">Niveaux : non atteint, en voie d’acquisition, acquis, dépassé. Les signes + et − affinent le niveau.</p>` : '<p>Pas d’évaluation sur cette période.</p>'}` : ''}
+  ${b.pos ? `<h2>Points positifs</h2>${d.pos.length ? `<ul>${tally(d.pos)}</ul>` : '<div class="blank" style="min-height:36pt"></div>'}` : ''}
+  ${b.neg && d.neg.length ? `<h2>Points à travailler</h2><ul>${tally(d.neg)}</ul>` : ''}
+  ${b.abs ? `<h2>Assiduité</h2><p>${d.nA} demi-journée${d.nA > 1 ? 's' : ''} d’absence${d.nA ? ', dont ' + d.nJ + ' justifiée' + (d.nJ > 1 ? 's' : '') : ''} ; ${d.nR} retard${d.nR > 1 ? 's' : ''}.</p>` : ''}
+  <h2>Appréciation générale</h2>${db.bilans[s.id + '|' + r.from + '|' + r.to] ? `<p>${nl(db.bilans[s.id + '|' + r.from + '|' + r.to])}</p>` : '<div class="blank" style="min-height:80pt"></div>'}
+  <table style="margin-top:18pt"><tbody><tr><td style="height:60pt;width:50%">L’enseignant(e) :</td><td>Vu et pris connaissance, les responsables :</td></tr></tbody></table>`;
+}
+A.printBil = d => { const r = bilRange(), st = d.id ? [stu(d.id)] : visStu(); if (!st.length) return; printDoc(st.map((s, i) => `<div class="${i ? 'pb' : ''}">${bilanHTML(s, r)}</div>`).join('')); };
 
 // ---------- Appel ----------
 // À la demi-journée. Chaque appel se valide (l'heure est gardée) ; chaque absence a son motif et sa justification.
@@ -169,25 +295,30 @@ A.register = () => {
   }).join(''));
 };
 // Feuille pour le remplaçant : tout ce qu'il faut pour tenir la classe, avec les zones à remplir à la main.
-A.subSheet = () => {
+// On choisit ce qu'on y met : les séances passées, et (ou non) les séances à venir.
+A.subSheet = () => openForm({ title: 'Feuille du remplaçant', ok: 'Imprimer', values: { past: true, next: true, pai: true },
+  fields: [{ k: 'pai', label: 'PAI et besoins particuliers des élèves', type: 'checkbox' }, { k: 'past', label: 'Dernières séances menées', type: 'checkbox' }, { k: 'next', label: 'Séances à venir (décochez pour ne donner que ce qui a été fait)', type: 'checkbox' }],
+  onSave: v => { printSub(v); } });
+function printSub(opt) {
   const c = ctx(), t = TODAY(), S = db.settings, days = [...S.days].sort();
   printDoc(visCls().map((cid, i) => {
     const k = cls(cid), st = db.students.filter(s => s.classId === cid).sort((a, b) => (a.last + a.first).localeCompare(b.last + b.first, 'fr')), tt = c.ttFor(t);
-    const lists = db.lists.filter(l => l.important && (!l.classId || l.classId === cid));
-    const prog = Object.entries(c.queues).filter(([q]) => q.startsWith(cid + '|')).map(([q, v]) => { const all = v.seqs.flatMap(x => x.sessions).filter(x => c.sess[x.id].o), past = all.filter(x => c.sess[x.id].o.date < t).slice(-2), next = all.filter(x => c.sess[x.id].o.date >= t).slice(0, 4); return `<tr><td><b>${esc(qname(q))}</b></td><td>${past.map(x => esc(x.title)).join('<br>') || '-'}</td><td>${next.map(x => `<b>${esc(fD(c.sess[x.id].o.date, { day: 'numeric', month: 'short' }))}</b> ${esc(x.title)}${x.obj ? ' : ' + esc(x.obj) : ''}`).join('<br>') || '-'}</td><td class="w"></td></tr>`; }).join('');
+    const lists = db.lists.filter(l => l.important && (!l.classId || l.classId === cid)), part = st.filter(s => s.pai || s.needs), autres = st.filter(s => s.info);
+    const prog = Object.entries(c.queues).filter(([q]) => q.startsWith(cid + '|')).map(([q, v]) => { const all = v.seqs.flatMap(x => x.sessions).filter(x => c.sess[x.id].o), past = all.filter(x => c.sess[x.id].o.date < t).slice(-3), next = all.filter(x => c.sess[x.id].o.date >= t).slice(0, 4);
+      return `<tr><td><b>${esc(qname(q))}</b></td>${opt.past ? `<td>${past.map(x => `<b>${esc(fD(c.sess[x.id].o.date, { day: 'numeric', month: 'short' }))}</b> ${esc(x.title)}${x.bilan ? ' (' + esc(x.bilan) + ')' : ''}`).join('<br>') || '-'}</td>` : ''}${opt.next ? `<td>${next.map(x => `<b>${esc(fD(c.sess[x.id].o.date, { day: 'numeric', month: 'short' }))}</b> ${esc(x.title)}${x.obj ? ' : ' + esc(x.obj) : ''}`).join('<br>') || '-'}</td>` : ''}<td class="w" style="width:30%"></td></tr>`; }).join('');
     return `<div class="${i ? 'pb' : ''}">${docHead('Feuille du remplaçant')}<p>Classe : <b>${esc(k.name)}</b> ${esc(k.level || '')}, ${st.length} élèves. Imprimée le ${esc(fD(t, { day: 'numeric', month: 'long', year: 'numeric' }))}. Remplaçant(e) : ............................ du ........... au ...........</p>
+    ${opt.pai ? `<h2>PAI et besoins particuliers</h2>${part.length ? `<table><thead><tr><th>Élève</th><th>PAI (santé, conduite à tenir)</th><th>Besoins particuliers (aménagements)</th></tr></thead><tbody>${part.map(s => `<tr><td><b>${esc(sname(s))}</b></td><td>${nl(s.pai)}</td><td>${nl(s.needs)}</td></tr>`).join('')}</tbody></table>` : '<p>Aucun PAI ni besoin particulier enregistré.</p>'}` : ''}
     <h2>Informations pratiques</h2>${S.subInfo ? `<p>${nl(S.subInfo)}</p>` : '<div class="blank"></div>'}
     <h2>Sécurité : incendie, confinement, évacuation</h2>${S.safety ? `<p>${nl(S.safety)}</p>` : '<div class="blank"></div>'}<p>Exercice ou alerte pendant le remplacement : ☐ non ☐ oui, le ........... Remarques : ........................................</p>
-    <h2>Élèves à connaître</h2>${st.some(s => s.health || s.info) ? `<table><tbody>${st.filter(s => s.health || s.info).map(s => `<tr><td><b>${esc(sname(s))}</b></td><td>${nl(s.health)}${s.health && s.info ? '<br>' : ''}${nl(s.info)}</td></tr>`).join('')}</tbody></table>` : '<p>Aucune information particulière enregistrée.</p>'}
-    ${lists.map(l => { const no = st.filter(s => !l.checked[s.id]); return `<p><b>${esc(l.title)}</b>, non coché pour : ${no.map(sname).map(esc).join(', ') || 'personne'}.</p>`; }).join('')}
+    ${autres.length || lists.length ? `<h2>À savoir sur les élèves</h2>${autres.length ? `<table><tbody>${autres.map(s => `<tr><td><b>${esc(sname(s))}</b></td><td>${nl(s.info)}</td></tr>`).join('')}</tbody></table>` : ''}${lists.map(l => { const no = st.filter(s => !l.checked[s.id]); return `<p><b>${esc(l.title)}</b>, non coché pour : ${no.map(sname).map(esc).join(', ') || 'personne'}.</p>`; }).join('')}` : ''}
     <h2>Emploi du temps</h2><table><thead><tr>${days.map(d => `<th>${DAYS[d]}</th>`).join('')}</tr></thead><tbody><tr>${days.map(d => `<td>${tt ? tt.slots.filter(s => s.day === d && s.classId === cid).sort((a, b) => a.start.localeCompare(b.start)).map(s => `${hm(s.start)}-${hm(s.end)} ${esc(subj(s.subjectId).name)}${s.sub ? ' › ' + esc(s.sub) : ''}`).join('<br>') : ''}</td>`).join('')}</tr></tbody></table>
-    <h2>Programme : où en est la classe</h2><table><thead><tr><th>Matière</th><th>Dernières séances menées</th><th>Séances à venir</th><th>Ce que vous avez fait</th></tr></thead><tbody>${prog || '<tr><td colspan="4">Programmation non renseignée.</td></tr>'}</tbody></table>
+    <h2>Programme${opt.past && opt.next ? ' : où en est la classe' : opt.past ? ' : ce qui a été fait' : ''}</h2><table><thead><tr><th>Matière</th>${opt.past ? '<th>Dernières séances menées</th>' : ''}${opt.next ? '<th>Séances à venir</th>' : ''}<th>Ce que vous avez fait</th></tr></thead><tbody>${prog || '<tr><td colspan="4">Programmation non renseignée.</td></tr>'}</tbody></table>
     <h2 class="pb">Appel (A = absent, R = retard ; M = matin, AM = après-midi)</h2><table><thead><tr><th rowspan="2">Élève</th>${days.map(d => `<th colspan="2" class="c">${DAYS[d]} ......</th>`).join('')}<th rowspan="2">Motif, maladie</th></tr><tr>${days.map(() => '<th class="c">M</th><th class="c">AM</th>').join('')}</tr></thead><tbody>${st.map(s => `<tr><td>${esc(sname(s))}</td>${days.map(() => '<td></td><td></td>').join('')}<td style="width:26%"></td></tr>`).join('')}</tbody></table>
     <h2 class="pb">Observations par élève</h2><table><tbody>${st.map(s => `<tr><td style="width:28%">${esc(sname(s))}</td><td class="w"></td></tr>`).join('')}</tbody></table>
     <h2>Incidents, soins, échanges avec les familles (date, heure, élève, faits)</h2><div class="blank" style="min-height:110pt"></div>
     <h2>Mot pour l’enseignant(e)</h2><div class="blank" style="min-height:90pt"></div></div>`;
   }).join(''));
-};
+}
 
 // ---------- Administratif ----------
 // Des listes à cocher par élève (droit à l'image, coopérative, assurance…). Une liste « importante »
@@ -230,6 +361,12 @@ V.reglages = () => {
    <p class="small muted">Avec plusieurs classes ou niveaux, un filtre apparaît en haut de chaque page.</p></div>
   <div class="sheet"><div class="row"><h2>Matières</h2><span class="sp"></span><button class="btn sm" data-a="newSubj">Ajouter une matière</button></div>
    <ul class="plain">${db.subjects.map(s => `<li><span class="dot" style="background:${esc(s.color)}"></span><b>${esc(s.name)}</b><span class="small muted" style="flex:1">${esc((s.subs || []).join(', '))}</span><button class="btn sm" data-a="editSubj" data-id="${s.id}">Modifier</button></li>`).join('')}</ul></div>
+  <div class="sheet"><h2>Fiche de préparation</h2><p class="small muted">Cochez les rubriques du déroulé que vous voulez, et renommez-les à votre façon. La durée de chaque étape est toujours affichée.</p>
+   ${S.cols.map((c, i) => `<div class="row" style="margin:5px 0"><input type="checkbox" data-c="colOn" data-i="${i}" ${c.on ? 'checked' : ''} aria-label="Afficher la rubrique ${esc(c.l)}"><input data-c="colL" data-i="${i}" value="${esc(c.l)}" style="flex:1;min-width:140px" aria-label="Nom de la rubrique"></div>`).join('')}</div>
+  <div class="sheet"><div class="row"><h2>Comportements</h2><span class="sp"></span><button class="btn sm" data-a="newBehav">Ajouter</button></div><p class="small muted">Ils servent de boutons sur la fiche de chaque élève : un appui, et l’observation est notée.</p>
+   <ul class="plain">${S.behav.map(x => `<li><span class="chip ${x.pos ? 'ok' : 'yel'}">${x.pos ? 'positif' : 'à travailler'}</span><b style="flex:1">${esc(x.l)}</b><button class="btn sm" data-a="editBehav" data-id="${x.id}">Modifier</button></li>`).join('')}</ul></div>
+  <div class="sheet"><h2>Évaluations</h2><p class="small muted">Pour une note chiffrée, le niveau équivalent est donné à partir de ce pourcentage de la note maximale. En dessous du premier seuil : non atteint.</p>
+   <div class="row">${[['eva', 'En voie d’acquisition'], ['a', 'Acquis'], ['d', 'Dépassé']].map(([k, l]) => `<label class="fld" style="flex:1;min-width:120px"><span>${l}, dès (%)</span><input type="number" min="0" max="100" data-c="seuil" data-k="${k}" value="${esc(S.seuils[k])}" style="width:100%"></label>`).join('')}</div></div>
   <div class="sheet"><h2>Calendrier</h2>${inp('start', 'Premier jour de classe', 'date')}${inp('end', 'Dernier jour de classe', 'date')}
    <p style="margin-bottom:2px" class="small muted">Jours de classe</p><div class="row">${[1, 2, 3, 4, 5, 6].map(d => `<label><input type="checkbox" data-c="sday" data-d="${d}" ${S.days.includes(d) ? 'checked' : ''}> ${DAYS[d]}</label>`).join('')}</div>
    <div class="row" style="margin-top:12px"><h3>Vacances</h3><span class="sp"></span><button class="btn sm" data-a="newHol">Ajouter une période</button></div>
@@ -251,6 +388,14 @@ C.tcol = (d, el) => { const T = db.settings.theme; T[d.k] = el.value; T.pal = 'p
 C.tfont = (d, el) => { db.settings.theme[d.k] = el.value; applyTheme(); saveSoon(); };
 C.tsize = (d, el) => { db.settings.theme.size = +el.value; $('#tsz').textContent = el.value; applyTheme(); saveSoon(); };
 C.set = (d, el) => { db.settings[d.k] = el.value; if (d.r) done(); else saveSoon(); };
+C.colOn = (d, el) => { db.settings.cols[d.i].on = el.checked; saveSoon(); };
+C.colL = (d, el) => { db.settings.cols[d.i].l = el.value; saveSoon(); };
+C.seuil = (d, el) => { db.settings.seuils[d.k] = +el.value || 0; saveSoon(); };
+function behavForm(x) {
+  openForm({ title: x ? 'Modifier le comportement' : 'Nouveau comportement', values: x ? { l: x.l, pos: x.pos ? '1' : '0' } : { pos: '1' }, fields: [{ k: 'l', label: 'Intitulé (ex. Persévérance)', req: 1 }, { k: 'pos', label: 'Rangé dans', type: 'select', options: [['1', 'Points positifs'], ['0', 'Points à travailler']] }],
+    onSave: v => upsert(db.settings.behav, x && x.id, { l: v.l, pos: v.pos === '1' }), onDelete: x ? () => remove(db.settings.behav, x.id) : null });
+}
+A.newBehav = () => behavForm(null); A.editBehav = d => behavForm(db.settings.behav.find(x => x.id === d.id));
 C.quota = (d, el) => { db.settings.quotas[d.k] = +el.value || 0; saveSoon(); };
 C.sday = (d, el) => { const n = +d.d, a = db.settings.days; if (el.checked) { if (!a.includes(n)) a.push(n); } else if (a.length > 1) a.splice(a.indexOf(n), 1); done(); };
 function clsForm(c) {
@@ -279,17 +424,17 @@ A.restore = () => pickFile(j => {
 A.wipe = () => { if (confirm('Effacer toutes les données de cet appareil ? Faites une sauvegarde avant.') && confirm('Vraiment tout effacer ?')) { const key = db.settings.apiKey, th = db.settings.theme; db = blank(); db.settings.apiKey = key; db.settings.theme = th; save(); ui.cls = ''; ui.tt = null; go('home'); } };
 // Année suivante : on garde ce qui se réutilise (matières, emploi du temps, blocs et séances, listes), on vide le reste.
 A.newYear = () => { const y = +db.settings.end.slice(0, 4);
-  openForm({ title: 'Préparer l’année suivante', ok: 'Créer la nouvelle année', intro: '<p>Sont <b>reportés</b> : classes, matières, emploi du temps, tous les blocs et leurs séances (fiches complètes), titres des listes administratives.<br>Sont <b>vidés</b> : appel, notes, résultats, réunions, agenda, créneaux non faits.</p><p class="warn">Enregistrez d’abord une sauvegarde de l’année qui se termine : elle servira d’archive.</p>',
+  openForm({ title: 'Préparer l’année suivante', ok: 'Créer la nouvelle année', intro: '<p>Sont <b>reportés</b> : classes, matières, emploi du temps, tous les blocs et leurs séances (fiches complètes), créneaux de préparation, titres des listes administratives. Vous choisirez ensuite la date de départ de chaque bloc.<br>Sont <b>vidés</b> : appel, notes, évaluations, bilans, réunions, agenda, créneaux non faits ou déplacés, dates des rappels.</p><p class="warn">Enregistrez d’abord une sauvegarde de l’année qui se termine : elle servira d’archive.</p>',
     values: { year: y + '-' + (y + 1), start: y + '-09-01', end: (y + 1) + '-07-06', keep: false },
     fields: [{ k: 'year', label: 'Année scolaire', req: 1 }, { k: 'start', label: 'Premier jour de classe', type: 'date', req: 1 }, { k: 'end', label: 'Dernier jour de classe', type: 'date', req: 1 }, { k: 'keep', label: 'Garder les élèves (je suis ma classe)', type: 'checkbox' }],
     onSave: v => {
       const b = blank(), S = db.settings; Object.assign(S, { year: v.year, start: v.start, end: v.end, holidays: [] });
       const tt = ctx().ttFor(TODAY()) || db.timetables[0]; db.timetables = tt ? [{ ...tt, from: v.start, label: 'Emploi du temps de base' }] : [];
-      db.sequences.forEach(q => { q.start = ''; q.sessions.forEach(s => { s.merge = s.skip = false; s.bilan = ''; }); });
+      db.sequences.forEach(q => { q.start = ''; q.sessions.forEach(s => { s.merge = s.skip = false; s.bilan = ''; s.pin = ''; (s.rem || []).forEach(r => { r.date = ''; delete r.days; }); }); });
       db.lists.forEach(l => { if (!v.keep) l.checked = {}; });
       if (!v.keep) db.students = [];
-      for (const k of ['att', 'absInfo', 'calls', 'notes', 'results', 'meetings', 'events', 'ov', 'adhoc', 'remDone', 'dayNotes']) db[k] = b[k];
-      ui.tt = null; toast('Nouvelle année créée. Saisissez les vacances dans les réglages.');
+      for (const k of ['att', 'absInfo', 'calls', 'notes', 'results', 'meetings', 'events', 'ov', 'adhoc', 'remDone', 'dayNotes', 'extra', 'evals', 'grades', 'bilans']) db[k] = b[k];
+      ui.tt = null; ui.ev = null; setTimeout(() => { go('prog'); A.planSeqs(); toast('Nouvelle année créée. Choisissez la date de départ de chaque bloc, puis saisissez les vacances dans les réglages.'); }, 60);
     } }); };
 
 // Une petite classe d'exemple, pour découvrir l'appli.
@@ -297,7 +442,7 @@ A.demo = () => {
   if ((db.students.length || db.sequences.length) && !confirm('Ajouter les données d’exemple à vos données actuelles ?')) return;
   const S = n => { let s = db.subjects.find(x => x.name === n); if (!s) { s = { id: uid(), name: n, color: '#59607c', subs: [] }; db.subjects.push(s); } return s; };
   const k = db.classes[0]; k.name = 'CE1-CE2'; k.level = 'CE1, CE2';
-  'Lina Morel,Hugo Petit,Inès Garcia,Noé Lambert,Jade Rousseau,Adam Fontaine,Zoé Chevalier,Liam Faure,Mila Girard,Sacha André'.split(',').forEach((n, i) => { const [first, last] = n.split(' '); db.students.push({ id: uid(), first, last, classId: k.id, level: i % 2 ? 'CE2' : 'CE1', birth: '', contacts: '', health: i === 2 ? 'PAI : allergie aux arachides, trousse dans le bureau' : '', info: '' }); });
+  'Lina Morel,Hugo Petit,Inès Garcia,Noé Lambert,Jade Rousseau,Adam Fontaine,Zoé Chevalier,Liam Faure,Mila Girard,Sacha André'.split(',').forEach((n, i) => { const [first, last] = n.split(' '); db.students.push({ id: uid(), first, last, classId: k.id, level: i % 2 ? 'CE2' : 'CE1', birth: '', contacts: '', pai: i === 2 ? 'Allergie aux arachides. Trousse d’urgence dans le bureau, appeler le 15.' : '', needs: i === 5 ? 'PAP : consignes lues à voix haute, temps majoré.' : '', info: '' }); });
   const fr = S('Français'), ma = S('Mathématiques'), qlm = S('Questionner le monde'), eps = S('EPS'), art = S('Arts plastiques');
   const slot = (day, start, end, sb, sub) => ({ id: uid(), day, start, end, subjectId: sb.id, sub: sub || '', classId: k.id });
   const slots = [];[1, 2, 4, 5].forEach(d => { slots.push(slot(d, '08:30', '09:15', fr, 'Lecture'), slot(d, '09:15', '10:00', ma, 'Calcul'), slot(d, '10:20', '11:05', fr, d % 2 ? 'Grammaire' : 'Orthographe'), slot(d, '13:30', '14:15', d === 1 || d === 4 ? qlm : eps), slot(d, '14:15', '15:00', d === 2 ? art : ma, d === 2 ? '' : 'Problèmes')); });
@@ -305,7 +450,7 @@ A.demo = () => {
   const seq = (title, sb, sub, n, pre) => db.sequences.push({ id: uid(), title, subjectId: sb.id, sub, classId: k.id, level: '', start: '', sessions: Array.from({ length: n }, (_, i) => newSess(pre + ' ' + (i + 1))) });
   seq('L’addition posée avec retenue', ma, 'Calcul', 40, 'Addition posée, séance'); seq('La soustraction posée', ma, 'Calcul', 60, 'Soustraction, séance'); seq('Le groupe nominal', fr, 'Grammaire', 30, 'Groupe nominal, séance'); seq('Le cycle de l’eau', qlm, '', 30, 'Cycle de l’eau, séance'); seq('Lecture suivie', fr, 'Lecture', 150, 'Lecture, épisode');
   _c = null; const c = ctx(), first = db.sequences[db.sequences.length - 5].sessions.find(s => c.sess[s.id].o && c.sess[s.id].o.date >= TODAY());
-  if (first) Object.assign(first, { title: 'Poser une addition à retenue', obj: 'Poser et calculer une addition de deux nombres à deux chiffres avec retenue.', mat: 'Ardoises, matériel de numération (barres et cubes), fiche d’exercices.', steps: [{ dur: 10, phase: 'Calcul mental', ens: 'Dicte les calculs, valide sur l’ardoise.', cons: '« Écrivez le résultat sur l’ardoise, levez au signal. »', att: 'Compléments à 10 mémorisés.', elv: 'Individuel, ardoise.' }, { dur: 20, phase: 'Recherche', ens: 'Pose le problème, observe les procédures, fait verbaliser.', cons: '« Avec les barres et les cubes, trouvez 37 + 25. »', att: 'Échange de 10 cubes contre une barre.', elv: 'En binômes, manipulation.' }, { dur: 15, phase: 'Entraînement', ens: 'Accompagne le groupe en difficulté.', cons: '« Posez et calculez les quatre additions de la fiche. »', att: 'Retenue écrite et comptée.', elv: 'Individuel, cahier.' }], rem: [{ id: uid(), type: 'imp', text: 'Fiche d’exercices, 24 copies', days: 1 }, { id: uid(), type: 'mat', text: 'Sortir les barres et les cubes', days: 0 }] });
+  if (first) Object.assign(first, { title: 'Poser une addition à retenue', obj: 'Poser et calculer une addition de deux nombres à deux chiffres avec retenue.', mat: 'Ardoises, matériel de numération (barres et cubes), fiche d’exercices.', steps: [{ dur: 10, phase: 'Calcul mental', ens: 'Dicte les calculs, valide sur l’ardoise.', cons: '« Écrivez le résultat sur l’ardoise, levez au signal. »', att: 'Compléments à 10 mémorisés.', elv: 'Individuel, ardoise.' }, { dur: 20, phase: 'Recherche', ens: 'Pose le problème, observe les procédures, fait verbaliser.', cons: '« Avec les barres et les cubes, trouvez 37 + 25. »', att: 'Échange de 10 cubes contre une barre.', elv: 'En binômes, manipulation.' }, { dur: 15, phase: 'Entraînement', ens: 'Accompagne le groupe en difficulté.', cons: '« Posez et calculez les quatre additions de la fiche. »', att: 'Retenue écrite et comptée.', elv: 'Individuel, cahier.' }], rem: [{ id: uid(), type: 'imp', text: 'Fiche d’exercices, 24 copies', date: addD(c.sess[first.id].o.date, -1) }, { id: uid(), type: 'mat', text: 'Sortir les barres et les cubes', date: c.sess[first.id].o.date }] });
   db.lists.push({ id: uid(), title: 'Droit à l’image accordé', classId: '', important: true, note: '', checked: Object.fromEntries(db.students.slice(0, 7).map(s => [s.id, 1])) }, { id: uid(), title: 'Coopérative scolaire', classId: '', important: false, note: '', checked: {} });
   const T = TODAY(); db.events.push({ id: uid(), title: 'Conseil d’école', cat: 'conseil', date: addD(T, 5), start: '18:00', end: '20:00', hours: 2, classId: '', note: '' }, { id: uid(), title: 'APC lecture', cat: 'apc', date: addD(T, -6), start: '11:45', end: '12:30', hours: .75, classId: '', note: '' }, { id: uid(), title: 'Animation pédagogique', cat: 'formation', date: addD(T, -20), start: '09:00', end: '12:00', hours: 3, classId: '', note: '' }, { id: uid(), title: 'Conseil de cycle', cat: 'equipe', date: addD(T, 2), start: '16:45', end: '18:15', hours: 1.5, classId: '', note: '' });
   done(); toast('Classe d’exemple chargée. « Tout effacer » dans les réglages la supprime.');

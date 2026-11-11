@@ -6,7 +6,7 @@
      Le comportement est dans trois fichiers JavaScript chargés tout en bas :
        core.js     : données, calcul automatique de la programmation, outils communs
        vues-a.js   : aujourd'hui, cahier journal, séance, emploi du temps, programmation
-       vues-b.js   : agenda et 108 h, élèves, appel, administratif, réglages
+       vues-b.js   : agenda, hors classe et 108 h, élèves, évaluations, bilans, appel, administratif, réglages
      Toutes les données restent dans le navigateur de l'appareil (rien n'est envoyé sur GitHub).
      ================================================================================== -->
 <html lang="fr">
@@ -113,7 +113,7 @@ td.c,th.c{text-align:center}
 .grid .offl{text-align:center;color:var(--gris);font-size:.8rem;margin-top:30px}
 .blk{position:absolute;border:0;border-left:5px solid var(--c);background:color-mix(in srgb,var(--c) 17%,var(--papier));border-radius:5px;padding:2px 5px;text-align:left;overflow:hidden;cursor:pointer;font-size:.76rem;line-height:1.2}
 .blk b{display:block;font-family:var(--titre)}
-.blk.lost{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--marge) 22%,var(--papier)) 0 6px,var(--papier) 6px 12px);border-left-color:var(--marge);text-decoration:line-through}
+.blk.lost{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--marge) 22%,var(--papier)) 0 6px,var(--papier) 6px 12px);border-left-color:var(--marge)}
 .blk.past{opacity:.72}
 
 /* Programmation. */
