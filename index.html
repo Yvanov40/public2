@@ -273,7 +273,12 @@ input[type=color]{padding:2px;width:3.2em;height:2.2em}
 }
 
 /* Impression : on ne garde que le contenu. */
+/* Impressions en paysage : programmation annuelle et progression. */
+@page paysage{size:A4 landscape;margin:9mm}
 @media print{
+  #print .land{page:paysage}
+  #print .ptab{font-size:7.5pt;table-layout:fixed}#print .ptab th,#print .ptab td{padding:3px 4px;vertical-align:top}
+  #print .ptab tbody th{width:12%;text-align:left}#print .ptab .pc{margin:0 0 3px;break-inside:avoid}
   :root{--papier:#fff!important;--fond:#fff!important;--encre:#14204d!important;--champ:#fff!important;--marge:#b3122c!important;--taille:16px!important;color-scheme:light!important}
   body{display:block;background:#fff;font-size:11pt}
   #nav,#top,#modal,#voice,#pick,#toast,.np,.banner{display:none!important}

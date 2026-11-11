@@ -177,6 +177,8 @@ function cbadge(id, force) {
   const c = cls(id); if (!c || (db.classes.length < 2 && !force)) return '';
   return db.settings.mark === 'icon' ? `<span class="cb">${esc(c.icon || '🏫')} ${esc(c.name)}</span>` : `<span class="cb"><i style="background:${esc(c.color)}"></i>${esc(c.name)}</span>`;
 }
+// La matière d'une séance : la sienne si elle en a une (séquence transversale), sinon celle de sa séquence.
+const sq = (seq, s) => s && s.subjectId ? seq.classId + '|' + s.subjectId + '|' + (s.sub || '') : qk(seq);
 const qk = o => o.classId + '|' + o.subjectId + '|' + (o.sub || '');   // une « file » = une classe + une matière + une sous-matière
 function qname(q) { const [c, s, sub] = q.split('|'); return subj(s).name + (sub ? ' › ' + sub : '') + (db.classes.length > 1 && cls(c) ? ' (' + cls(c).name + ')' : ''); }
 const whatOpts = () => db.subjects.flatMap(s => [[s.id + '|', s.name], ...(s.subs || []).map(x => [s.id + '|' + x, s.name + ' › ' + x])]);
@@ -227,17 +229,20 @@ function ctx() {
     if (v) { o.ov = v; if (v.t === 'lost') continue; if (v.t === 'host') { o.hostQ = v.q; (act[v.q] ??= []).push(o); continue; } }
     (act[o.q] ??= []).push(o);
   }
-  const sess = {}, occSess = {}, queues = {}, groups = {}, t = TODAY();
-  for (const seq of db.sequences) (groups[qk(seq)] ??= []).push(seq);
-  for (const q in groups) {
-    let i = 0, j = 0, prev = null, nb = 0, na = 0, lost = 0, total = 0;
-    const Aq = act[q] || [], B = base[q] || [];
-    for (const seq of groups[q]) {
-      if (seq.start) { while (i < Aq.length && Aq[i].date < seq.start) i++; while (j < B.length && B[j].date < seq.start) j++; }
-      for (const s of seq.sessions) {
+  const t = TODAY();
+  // Placement des séances. Chaque matière (file) reçoit ses séances dans l'ordre, sur ses créneaux successifs.
+  // items : [{ seq, s, first (première séance de la séquence dans cette file), nb (pas avant cette date) }]
+  function place(groups) {
+    const sess = {}, occSess = {}, queues = {};
+    for (const q in groups) {
+      let i = 0, j = 0, prev = null, nb = 0, na = 0, lost = 0, total = 0;
+      const Aq = act[q] || [], B = base[q] || [];
+      for (const { seq, s, first, nb: after } of groups[q]) {
+        if (first && seq.start) { while (i < Aq.length && Aq[i].date < seq.start) i++; while (j < B.length && B[j].date < seq.start) j++; }
         if (s.skip) { sess[s.id] = { seq, q, skip: true }; continue; }
         total++;
-        if (s.pin && !(s.merge && prev)) { while (i < Aq.length && Aq[i].date < s.pin) i++; while (j < B.length && B[j].date < s.pin) j++; }   // date choisie à la main
+        const pin = [s.pin, after].filter(Boolean).sort().pop();       // date choisie à la main, ou « pas avant » d'une séance transversale
+        if (pin && !(s.merge && prev)) { while (i < Aq.length && Aq[i].date < pin) i++; while (j < B.length && B[j].date < pin) j++; }
         const bo = B[j++] || null;                                  // la date « idéale »
         let o;                                                      // la date réelle
         if (s.merge && prev) o = prev;
@@ -247,9 +252,30 @@ function ctx() {
         if (o) (occSess[o.key] ??= []).push(s); else lost++;
         if (bo && bo.date < t) nb++; if (o && o.date < t) na++;
       }
+      const items = groups[q];
+      queues[q] = { seqs: [...new Set(items.map(x => x.seq))], list: items.map(x => x.s), late: nb - na, lost, total, done: na, slots: B.length };
     }
-    queues[q] = { seqs: groups[q], late: nb - na, lost, total, done: na, slots: B.length };
+    return { sess, occSess, queues };
   }
+  // 1er passage : chaque séance dans la matière de sa séquence, les séances d'une autre matière mises de côté.
+  const groups = {}, foreign = [];
+  for (const seq of db.sequences) seq.sessions.forEach(s => { const q = sq(seq, s);
+    if (q !== qk(seq)) { foreign.push({ seq, s, q }); return; }
+    const g = (groups[q] ??= []); g.push({ seq, s, first: !g.some(x => x.seq === seq) }); });
+  let r = place(groups);
+  // 2e passage (séquences transversales) : une séance d'une autre matière se place juste après la séance qui la précède
+  // dans sa séquence, sur le prochain créneau de sa matière ; les séances de cette matière qui suivent se décalent d'un cran.
+  if (foreign.length) {
+    for (const f of foreign) {
+      const k = f.seq.sessions.indexOf(f.s), before = f.seq.sessions.slice(0, k).reverse().map(x => r.sess[x.id]).find(x => x && x.o);
+      f.nb = before ? before.o.date : f.seq.start || '';
+      const g = (groups[f.q] ??= []), at = g.findIndex(x => { const y = r.sess[x.s.id]; return y && y.o && y.o.date > f.nb; });
+      const item = { seq: f.seq, s: f.s, first: false, nb: f.nb };
+      if (at < 0) g.push(item); else g.splice(at, 0, item);
+    }
+    r = place(groups);
+  }
+  const { sess, occSess, queues } = r;
   return _c = { school, why, ttFor, occs, byDate, byKey, sess, occSess, queues };
 }
 // Tous les rappels (impression, matériel, mots, équipement), datés d'après la date réelle de chaque séance.
