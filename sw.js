@@ -1,5 +1,5 @@
 // =====================================================================================
-//  classe/sw.js — le service hors connexion de « Cahier de classe »
+//  sw.js — le service hors connexion de « Cahier de classe »
 //  Il garde une copie des fichiers de l'appli pour qu'elle s'ouvre sans wifi.
 //  Règle : on essaie d'abord le réseau (pour avoir la dernière version) ; s'il ne répond
 //  pas, on sert la copie gardée. Les données de la classe ne passent jamais par ici.
