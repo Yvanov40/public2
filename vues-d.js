@@ -213,18 +213,21 @@ V.devoirs = () => {
     return head + (Object.keys(by).length ? Object.entries(by).slice(0, 40).map(([d, l]) => `<div class="sheet"><div class="mg">${esc(fD(d, { day: 'numeric', month: 'short' }))}</div><h3>Donnés le ${esc(fD(d))}</h3><ul class="plain">${l.map(h => hwLi(h).replace('</li>', `<span class="small muted">pour le ${esc(fS(h.due))}</span></li>`)).join('')}</ul></div>`).join('') : '<div class="sheet"><p class="muted">Aucun devoir donné pour l’instant.</p></div>'); }
   const days = [0, 1, 2, 3, 4, 5, 6].map(i => addD(ui.week, i)).filter(d => ctx().school(d) || all.some(h => h.due === d));
   return head + weekNav() + `<div class="row np" style="margin-bottom:10px"><button class="btn" data-a="hwCopy">Copier la semaine pour l’ENT</button><button class="btn" data-a="printPage">Imprimer</button></div>`
-    + days.map(d => { const due = all.filter(h => h.due === d), giv = all.filter(h => h.given === d);
+    + days.map(d => { const due = all.filter(h => h.due === d);
       return `<div class="sheet" ${d === t ? 'style="border-color:var(--encre);border-width:2px"' : ''}><div class="mg">${esc(fD(d, { weekday: 'short' }))}<br>${esc(fD(d, { day: 'numeric', month: 'short' }))}</div>
         <h3>Pour le ${esc(fD(d))}</h3>${due.length ? `<ul class="plain">${due.map(hwLi).join('')}</ul>` : '<p class="small muted">Rien à faire pour ce jour.</p>'}
-        ${giv.length ? `<p class="small" style="margin-top:6px"><b>À noter dans les cahiers ce jour-là :</b> ${giv.map(h => esc((h.subj ? h.subj + ' : ' : '') + h.text) + ' (pour le ' + esc(fS(h.due)) + ')').join(' ; ')}</p>` : ''}</div>`; }).join('');
+        <p class="np" style="margin:6px 0 0"><button class="btn sm" data-a="hwNew" data-d="${d}">＋ Ajouter un devoir pour ce jour</button></p></div>`; }).join('');
 };
 A.htab = d => { ui.htab = d.t; render(); };
 A.hwCopy = async () => { const all = visHw(), txt = [0, 1, 2, 3, 4, 5, 6].map(i => addD(ui.week, i)).map(d => { const l = all.filter(h => h.due === d); return l.length ? 'Pour le ' + fD(d) + ' :\n' + l.map(h => '- ' + (h.subj ? h.subj + ' : ' : '') + h.text).join('\n') : ''; }).filter(Boolean).join('\n\n');
   try { await navigator.clipboard.writeText(txt || 'Pas de devoirs cette semaine.'); toast('Devoirs de la semaine copiés.'); } catch (e) { toast('Copie impossible sur cet appareil.'); } };
-function hwForm(h) { openForm({ title: h ? 'Modifier le devoir' : 'Nouveau devoir', values: h || { given: TODAY(), due: nextSchool(addD(TODAY(), 1)), classId: defCls() },
-  fields: [{ k: 'text', label: 'Devoir', type: 'textarea', req: 1 }, { k: 'subjectId', label: 'Matière', type: 'select', options: [['', 'Hors matière']].concat(db.subjects.map(s => [s.id, s.name])) }, { k: 'given', label: 'Donné le', type: 'date', req: 1 }, { k: 'due', label: 'Pour le', type: 'date', req: 1 }, ...(db.classes.length > 1 ? [{ k: 'classId', label: 'Classe', type: 'select', options: clsOpts() }] : [])],
+// Un devoir ajouté à la main, pour une date précise, avec ou sans matière (sortie, mot à signer, matériel à apporter…).
+function prevSchool(d) { const c = ctx(); let x = addD(d, -1); for (let i = 0; i < 30 && !c.school(x); i++) x = addD(x, -1); return x; }
+function hwForm(h, due) { due = due || nextSchool(addD(TODAY(), 1)); const given = prevSchool(due) < TODAY() ? TODAY() : prevSchool(due);
+  openForm({ title: h ? 'Modifier le devoir' : 'Devoir pour le ' + fD(due), values: h || { due, given, subjectId: '', classId: defCls() },
+  fields: [{ k: 'due', label: 'Pour le', type: 'date', req: 1 }, { k: 'text', label: 'Devoir', type: 'textarea', req: 1 }, { k: 'subjectId', label: 'Matière (facultatif)', type: 'select', options: [['', 'Hors matière']].concat(db.subjects.map(s => [s.id, s.name])) }, { k: 'given', label: 'Donné le', type: 'date', req: 1 }, ...(db.classes.length > 1 ? [{ k: 'classId', label: 'Classe', type: 'select', options: clsOpts() }] : [])],
   onSave: v => { if (!v.classId) v.classId = h ? h.classId : defCls(); upsert(db.hw, h && h.id, v); }, onDelete: h ? () => remove(db.hw, h.id) : null }); }
-A.hwNew = () => hwForm(null); A.hwEdit = d => hwForm(db.hw.find(h => h.id === d.id));
+A.hwNew = d => hwForm(null, d.d); A.hwEdit = d => hwForm(db.hw.find(h => h.id === d.id));
 function hwRecForm(r) { const dd = [...db.settings.days].sort().map(x => [x, DAYS[x]]); openForm({ title: r ? 'Devoir régulier' : 'Nouveau devoir régulier', values: r || { give: 5, due: 4, classId: defCls() },
   fields: [{ k: 'text', label: 'Devoir (ex. Apprendre les mots de la dictée)', req: 1 }, { k: 'subjectId', label: 'Matière', type: 'select', options: [['', 'Hors matière']].concat(db.subjects.map(s => [s.id, s.name])) }, { k: 'give', label: 'Donné chaque', type: 'select', options: dd }, { k: 'due', label: 'Pour le', type: 'select', options: dd }, { k: 'from', label: 'À partir du (facultatif)', type: 'date' }, ...(db.classes.length > 1 ? [{ k: 'classId', label: 'Classe', type: 'select', options: clsOpts() }] : [])],
   onSave: v => { v.give = +v.give; v.due = +v.due; if (!v.classId) v.classId = r ? r.classId : defCls(); upsert(db.hwRec, r && r.id, v); }, onDelete: r ? () => remove(db.hwRec, r.id) : null }); }
