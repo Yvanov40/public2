@@ -355,3 +355,5 @@ body.lecture .filtre-lumiere { display: block; }
 html, body { touch-action: pan-x pan-y; }
 .pdf-zone { touch-action: pan-x pan-y; }
 .feuille.petite { padding-bottom: calc(26px + env(safe-area-inset-bottom)); }
+.pdf-page img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#lecteur-pdf.nuit .pdf-page img { filter: invert(.9) hue-rotate(180deg); }

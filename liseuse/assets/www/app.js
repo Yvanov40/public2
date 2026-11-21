@@ -594,6 +594,11 @@ function choisirModePdf(e) {
       if (app.importEnCours) $('#import').classList.add('actif');
     }
     if (!A) return;
+    if (mode === 'convertir' && e.taille > 80 * 1024 * 1024) {
+      // trop gros pour être converti dans le téléphone (tout le fichier passerait en mémoire)
+      await dialogue('PDF très volumineux', `<p>« ${esc(e.nom)} » fait ${Math.round(e.taille / 1048576)} Mo : trop lourd pour être converti en livre sur le téléphone. Il est gardé tel quel (pages d'origine, zoom).</p>`);
+      mode = 'garder';
+    }
     if (mode === 'convertir') A.pdfConvertir(e.jeton);
     else if (mode === 'garder') {
       $('#import-texte').textContent = `Ajout de « ${e.nom} »…`;

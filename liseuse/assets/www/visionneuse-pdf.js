@@ -15,6 +15,7 @@ const visionneusePdf = window.visionneusePdf = (() => {
   let rendus = new Map();    // index -> { canvas, echelle }
   let observateur = null;
   let barre = false;
+  let natif = false;         // pages rendues par le moteur PDF d'Android (gros fichiers)
   const nuit = () => !!Store.get('pdfNuit', false);
 
   function largeurBase() { return zone.clientWidth - 2 * 8; }
@@ -41,20 +42,38 @@ const visionneusePdf = window.visionneusePdf = (() => {
       A.couleurs(nuit() ? '#111111' : '#3a3a3c', true);
     }
     lecteur.lumiere(true);
-    try {
-      await ConversionPdf.chargerPdfJs();
-      doc = await pdfjsLib.getDocument({ url: '/pdf/' + l.id, isEvalSupported: false }).promise;
-    } catch (e) {
-      $('#pdf-chargement').classList.remove('actif');
-      app.toast('Ce PDF ne peut pas être ouvert : ' + ((e && e.message) || 'erreur'), 4000);
-      app.fermerPdf();
-      return;
-    }
+    doc = null;
+    natif = false;
+    // 1. moteur PDF d'Android : lit les pages une à une dans le fichier, sans tout charger en mémoire
+    await new Promise(r => setTimeout(r, 40));
     if (mon !== jeton) return;
-    n = doc.numPages;
-    const p1 = await doc.getPage(1);
-    const v1 = p1.getViewport({ scale: 1 });
-    tailles = Array.from({ length: n }, () => [v1.width, v1.height]);
+    if (A && A.pdfInfos) {
+      try {
+        const infos = JSON.parse(A.pdfInfos(l.id));
+        if (infos && !infos.erreur && infos.pages > 0) {
+          natif = true;
+          n = infos.pages;
+          tailles = infos.tailles;
+        }
+      } catch (e) { /* on essaie pdf.js */ }
+    }
+    // 2. sinon pdf.js (PDF que le moteur d'Android ne sait pas ouvrir)
+    if (!natif) {
+      try {
+        await ConversionPdf.chargerPdfJs();
+        doc = await pdfjsLib.getDocument({ url: '/pdf/' + l.id, isEvalSupported: false }).promise;
+      } catch (e) {
+        $('#pdf-chargement').classList.remove('actif');
+        app.toast('Ce PDF ne peut pas être ouvert : ' + ((e && e.message) || 'erreur'), 4000);
+        app.fermerPdf();
+        return;
+      }
+      if (mon !== jeton) return;
+      n = doc.numPages;
+      const p1 = await doc.getPage(1);
+      const v1 = p1.getViewport({ scale: 1 });
+      tailles = Array.from({ length: n }, () => [v1.width, v1.height]);
+    }
     for (let i = 0; i < n; i++) {
       const d = document.createElement('div');
       d.className = 'pdf-page';
@@ -64,8 +83,8 @@ const visionneusePdf = window.visionneusePdf = (() => {
       elems.push(d);
     }
     dimensionner();
-    // tailles réelles des pages, en arrière-plan
-    (async () => {
+    // tailles réelles des pages, en arrière-plan (pdf.js seulement)
+    if (!natif) (async () => {
       for (let i = 1; i < n && mon === jeton; i++) {
         try {
           const pg = await doc.getPage(i + 1);
@@ -92,11 +111,14 @@ const visionneusePdf = window.visionneusePdf = (() => {
     jeton++;
     if (observateur) observateur.disconnect();
     observateur = null;
-    rendus.forEach(r => { r.canvas.width = 0; });
+    rendus.forEach(r => { if (r.canvas) r.canvas.width = 0; });
     rendus = new Map();
     interne.innerHTML = '';
+    elems = [];
     if (doc) { try { doc.destroy(); } catch (e) { /* rien */ } }
     doc = null;
+    if (natif && A && A.pdfFermer) A.pdfFermer();
+    natif = false;
     livre = null;
     lecteur.lumiere(false);
     if (A) { A.pleinEcran(false); A.ecranAllume(false); }
@@ -126,7 +148,29 @@ const visionneusePdf = window.visionneusePdf = (() => {
     elems.forEach(e => observateur.observe(e));
   }
 
+  /** Page rendue par Android, sous forme d'image (netteté adaptée au zoom). */
+  function rendreNatif(i) {
+    const el = elems[i];
+    if (!el || !livre) return;
+    const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    const w = Math.min(2000, Math.max(200, Math.ceil(el.clientWidth * dpr / 200) * 200));
+    if (+el.dataset.w === w) return;
+    el.dataset.w = w;
+    rendus.set(i, { natif: true });
+    const img = new Image();
+    img.alt = '';
+    img.decoding = 'async';
+    img.onload = () => {
+      if (+el.dataset.w !== w || !el.isConnected) return;
+      el.querySelectorAll('img').forEach(x => { if (x !== img) x.remove(); });
+      el.appendChild(img);
+    };
+    img.onerror = () => { if (+el.dataset.w === w) delete el.dataset.w; };
+    img.src = `/pdfpage/${livre.id}/${i}?w=${w}`;
+  }
+
   async function rendre(i) {
+    if (natif) { rendreNatif(i); return; }
     if (!doc) return;
     const el = elems[i];
     const cssL = el.clientWidth;
@@ -160,8 +204,13 @@ const visionneusePdf = window.visionneusePdf = (() => {
     const { i } = pageCourante();
     for (const [k, r] of rendus) {
       if (Math.abs(k - i) > 4 && !r.enCours) {
-        r.canvas.width = 0;
-        r.canvas.remove();
+        if (r.natif) {
+          const el = elems[k];
+          if (el) { el.querySelectorAll('img').forEach(x => x.remove()); delete el.dataset.w; }
+        } else {
+          r.canvas.width = 0;
+          r.canvas.remove();
+        }
         rendus.delete(k);
       }
     }
@@ -205,7 +254,7 @@ const visionneusePdf = window.visionneusePdf = (() => {
   }
 
   zone.addEventListener('scroll', () => {
-    if (!doc) return;
+    if (!livre || !elems.length) return;
     majNumero();
     montrerNumero();
     clearTimeout(minuteSauve);
@@ -299,6 +348,16 @@ const visionneusePdf = window.visionneusePdf = (() => {
   }
 
   async function sommaire() {
+    if (!doc) {
+      // le sommaire vient de pdf.js, qui doit lire tout le fichier : seulement pour les PDF raisonnables
+      const taille = A && A.pdfTailleFichier ? A.pdfTailleFichier(livre.id) : 0;
+      if (taille > 60 * 1024 * 1024) { app.toast('Sommaire indisponible pour un PDF aussi volumineux. Utilisez « Aller à… ».', 3500); return; }
+      try {
+        app.toast('Lecture du sommaire…', 1500);
+        await ConversionPdf.chargerPdfJs();
+        doc = await pdfjsLib.getDocument({ url: '/pdf/' + livre.id, isEvalSupported: false }).promise;
+      } catch (e) { app.toast('Ce PDF n\'a pas de sommaire lisible.'); return; }
+    }
     let plan = [];
     try { plan = (await doc.getOutline()) || []; } catch (e) { /* sans signets */ }
     if (!plan.length) { app.toast('Ce PDF n\'a pas de sommaire.'); return; }
@@ -337,7 +396,7 @@ const visionneusePdf = window.visionneusePdf = (() => {
   $('#pdf-ajuster').onclick = () => changerZoom(1);
   $('#pdf-lum').onclick = () => { basculerBarre(false); lecteur.panneauLumiere(); };
   window.addEventListener('resize', () => {
-    if (!doc) return;
+    if (!livre || !elems.length) return;
     const p = pageCourante();
     dimensionner();
     allerA(p.i, p.f);
