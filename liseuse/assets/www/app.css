@@ -216,7 +216,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px;
 .police small { display: block; font-family: var(--police); font-size: .66rem; color: var(--l-doux, var(--doux)); margin-top: 4px; }
 .police.actif { border-color: var(--accent); }
 .curseur-ligne { display: flex; align-items: center; gap: 12px; margin: 4px 0; }
-.curseur-ligne > span { width: 78px; font-size: .9rem; }
+.curseur-ligne > span { width: 96px; font-size: .9rem; }
 .curseur-ligne input { flex: 1; }
 .curseur-ligne output { width: 64px; text-align: right; font-size: .85rem; color: var(--l-doux, var(--doux)); font-variant-numeric: tabular-nums; }
 svg.mini { width: 20px; height: 20px; }
@@ -350,3 +350,8 @@ body.lecture .filtre-lumiere { display: block; }
 .choix-pdf small { color: var(--doux); line-height: 1.4; display: block; }
 .choix-pdf svg { color: var(--accent); margin-top: 2px; }
 .choix-pdf label { display: flex; gap: 10px; align-items: center; font-size: .88rem; color: var(--doux); margin-top: 4px; }
+
+/* le navigateur ne zoome jamais la page entière (le PDF et les images gèrent leur propre zoom) */
+html, body { touch-action: pan-x pan-y; }
+.pdf-zone { touch-action: pan-x pan-y; }
+.feuille.petite { padding-bottom: calc(26px + env(safe-area-inset-bottom)); }

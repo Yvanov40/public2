@@ -743,6 +743,14 @@ app.evenement = function (e) {
 
 app.pause = function () {
   if (app.ecran === 'lecteur' && window.lecteur) lecteur.sauver();
+  if (app.ecran === 'lecteur-pdf' && window.visionneusePdf) visionneusePdf.sauver();
+  app.enPauseDepuis = Date.now();
+};
+
+/** Retour dans l'application : après une vraie absence, la luminosité repart en automatique. */
+app.reprise = function () {
+  if (app.enPauseDepuis && Date.now() - app.enPauseDepuis > 3 * 60000) lecteur.lumiereAuto();
+  app.enPauseDepuis = 0;
 };
 
 app.retour = function () {
@@ -755,7 +763,6 @@ app.retour = function () {
   }
   if (app.ecran === 'parametres') { montrer('biblio'); return true; }
   if (app.ecran === 'lecteur-pdf') {
-    if (visionneusePdf.barreVisible()) { visionneusePdf.cacherBarre(); return true; }
     app.fermerPdf();
     return true;
   }

@@ -232,8 +232,14 @@ const visionneusePdf = window.visionneusePdf = (() => {
 
   let pince = null, dernierTap = 0, glisse = false;
   const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  let ignorer = false;
   zone.addEventListener('touchstart', e => {
     glisse = false;
+    ignorer = false;
+    if (document.querySelector('.feuille.ouvert, .tiroir.ouvert')) {
+      app.fermerFeuilles();
+      ignorer = true;
+    }
     if (e.touches.length === 2) {
       pince = { d: dist(e.touches), z: zoom, cx: (e.touches[0].clientX + e.touches[1].clientX) / 2, cy: (e.touches[0].clientY + e.touches[1].clientY) / 2, s: 1 };
       interne.style.transformOrigin = `${pince.cx - zone.getBoundingClientRect().left + zone.scrollLeft}px ${pince.cy - zone.getBoundingClientRect().top + zone.scrollTop}px`;
@@ -256,6 +262,7 @@ const visionneusePdf = window.visionneusePdf = (() => {
       glisse = true;
       return;
     }
+    if (ignorer) { if (!e.touches.length) ignorer = false; return; }
     if (e.touches.length || glisse || !e.changedTouches.length) return;
     const t = e.changedTouches[0];
     const maintenant = Date.now();
@@ -269,7 +276,11 @@ const visionneusePdf = window.visionneusePdf = (() => {
     minuteTap = setTimeout(() => basculerBarre(), 300);
   });
   let minuteTap;
-  zone.addEventListener('click', e => { if (!('ontouchstart' in window)) basculerBarre(); });
+  zone.addEventListener('click', e => {
+    if ('ontouchstart' in window) return;
+    if (document.querySelector('.feuille.ouvert')) { app.fermerFeuilles(); return; }
+    basculerBarre();
+  });
   zone.addEventListener('dblclick', e => { if (!('ontouchstart' in window)) changerZoom(zoom > 1.2 ? 1 : 2.5, e.clientX, e.clientY); });
 
   function basculerBarre(v) {

@@ -40,6 +40,8 @@ const lecteur = window.lecteur = (() => {
   document.head.appendChild(stylePolices);
 
   let R = Object.assign({}, DEFAUT, Store.get('reglages', {}));
+  // à chaque ouverture de l'application, la luminosité repart en automatique
+  if (R.luminosite !== -1) { R.luminosite = -1; Store.set('reglages', R); }
   let livre = null, info = null, spine = [], cumul = [], total = 1;
   let chap = 0, page = 0, pages = 1;
   let doc = null, win = null, W = 0, H = 0, mx = 0, my = 0;
@@ -1241,6 +1243,11 @@ const lecteur = window.lecteur = (() => {
   return {
     ouvrir, fermer, tourner, sauver, menus, heure, fermerImage, appliquerTheme,
     lumiere: appliquerLumiere,
+    lumiereAuto: () => {
+      R.luminosite = -1;
+      sauverReglages();
+      if (document.body.classList.contains('lecture')) appliquerLumiere(true);
+    },
     panneauLumiere: () => { majPanneau(); app.ouvrirFeuille($('#panneau-lum'), { sansVoile: true }); },
     menusVisibles: () => menusOn,
     reglages: () => R

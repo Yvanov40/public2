@@ -112,6 +112,12 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        if (web != null) js("window.app && app.reprise && app.reprise()");
+    }
+
+    @Override
     protected void onPause() {
         super.onPause();
         js("window.app && app.pause && app.pause()");
