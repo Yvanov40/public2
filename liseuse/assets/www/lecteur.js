@@ -86,9 +86,11 @@ const lecteur = window.lecteur = (() => {
     const voile = $('#voile-lumiere'), chaud = $('#filtre-chaud');
     document.body.classList.toggle('lecture', !!actif);
     if (!actif) {
-      if (A) A.luminosite(-1);
+      try { if (A) A.luminosite(-1); } catch (e) { /* rien */ }
       voile.style.opacity = 0;
       chaud.style.opacity = 0;
+      voile.style.display = 'none';
+      chaud.style.display = 'none';
       return;
     }
     let ecranLum = -1, opacite = 0;
@@ -99,7 +101,10 @@ const lecteur = window.lecteur = (() => {
     }
     if (A) A.luminosite(ecranLum);
     voile.style.opacity = opacite;
-    chaud.style.opacity = (R.chaud || 0) / 100 * 0.55;
+    voile.style.display = opacite > 0 ? 'block' : 'none';
+    const oc = (R.chaud || 0) / 100 * 0.55;
+    chaud.style.opacity = oc;
+    chaud.style.display = oc > 0 ? 'block' : 'none';
   }
 
   function texteLumiere() {

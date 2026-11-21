@@ -543,7 +543,7 @@ document.addEventListener('click', e => {
 });
 
 async function menuBiblio() {
-  const v = await dialogue('Bibliothèque', `<div class="liste-actions dans-menu">
+  const v = await dialogue('Bibliothèque · v' + ($('#version').textContent || '?'), `<div class="liste-actions dans-menu">
       <button data-m="dossier"><svg><use href="#i-dossier-plus"/></svg>Nouveau dossier${app.dossier ? ' ici' : ''}</button>
       <button data-m="selection"><svg><use href="#i-coche"/></svg>Sélectionner plusieurs livres</button>
       <button data-m="tri"><svg><use href="#i-tri"/></svg>Trier par… <small>${esc(NOMS_TRI[app.prefs.tri] || '')}</small></button>
@@ -611,6 +611,7 @@ function choisirModePdf(e) {
 }
 
 function ouvrirPdf(l) {
+  if (app.ecran === 'lecteur-pdf') return;
   montrer('lecteur-pdf');
   Store.set('ouvert', l.id);
   visionneusePdf.ouvrir(l);
@@ -618,6 +619,9 @@ function ouvrirPdf(l) {
 
 app.fermerPdf = function () {
   // l'écran d'accueil d'abord : même si la fermeture du lecteur échoue, on revient à la bibliothèque
+  $('#lecteur-pdf').classList.remove('actif');
+  $('#biblio').classList.add('actif');
+  app.ecran = 'biblio';
   Store.del('ouvert');
   montrer('biblio');
   try { visionneusePdf.fermer(); } catch (e) { console.error(e); }
@@ -791,6 +795,7 @@ function actionsLivre(id) {
   $('#a-auteur').textContent = l.auteur || '';
   $('[data-action=reconvertir]').hidden = !l.sourceExt;
   $('[data-action=vers-epub]').hidden = !l.original;
+  $('[data-action=autre-appli]').hidden = !(l.original || l.sourceExt === 'pdf');
   $('[data-action=pdf-origine]').hidden = !(l.sourceExt === 'pdf' && !l.original);
   ouvrirFeuille($('#actions-livre'));
 }
@@ -813,6 +818,7 @@ async function faireAction(action) {
   if (action === 'lire') ouvrirLivre(l.id);
   else if (action === 'deplacer') deplacerLivres([l.id], []);
   else if (action === 'pdf-origine') ouvrirPdf(l);
+  else if (action === 'autre-appli') { if (A) A.ouvrirAilleurs(l.id); }
   else if (action === 'vers-epub') {
     const ok = await dialogue('Convertir en livre ?', '<p>Le PDF est converti en livre au texte adaptable. Le PDF d\'origine est gardé : vous pourrez toujours le revoir tel quel depuis le menu du livre.</p>',
       [{ texte: 'Annuler', valeur: false }, { texte: 'Convertir', classe: 'plein', valeur: true }]);

@@ -1206,6 +1206,33 @@ public final class MainActivity extends Activity {
             });
         }
 
+        /** Ouvre le PDF (tel quel ou d'origine) dans une autre application de lecture. */
+        @JavascriptInterface
+        public void ouvrirAilleurs(final String id) {
+            final JSONObject meta = biblio.trouver(id);
+            if (meta == null) return;
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        File f = fichierPdf(id);
+                        if (!f.exists()) {
+                            toast("PDF introuvable.");
+                            return;
+                        }
+                        Uri u = Uri.parse("content://" + Fichiers.AUTORITE + "/" + id + "/"
+                                + Uri.encode(nomFichierSur(meta.optString("titre", "document"), ".pdf")));
+                        Intent i = new Intent(Intent.ACTION_VIEW);
+                        i.setDataAndType(u, "application/pdf");
+                        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(i, "Ouvrir le PDF avec"));
+                    } catch (Exception e) {
+                        toast("Aucune autre application ne peut ouvrir ce PDF.");
+                    }
+                }
+            });
+        }
+
         @JavascriptInterface
         public void partagerPlusieurs(final String idsJson) {
             ui.post(new Runnable() {

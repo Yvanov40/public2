@@ -120,8 +120,8 @@ const visionneusePdf = window.visionneusePdf = (() => {
   }
 
   function fermer() {
-    sauver();
     jeton++;
+    try { sauver(); } catch (e) { /* rien */ }
     if (observateur) observateur.disconnect();
     observateur = null;
     rendus.forEach(r => { if (r.canvas) r.canvas.width = 0; });
@@ -130,12 +130,12 @@ const visionneusePdf = window.visionneusePdf = (() => {
     elems = [];
     if (doc) { try { doc.destroy(); } catch (e) { /* rien */ } }
     doc = null;
-    if (A && A.pdfFermer) A.pdfFermer();
+    try { if (A && A.pdfFermer) A.pdfFermer(); } catch (e) { /* rien */ }
     attenteInfos = null;
     natif = false;
     livre = null;
-    lecteur.lumiere(false);
-    if (A) { A.pleinEcran(false); A.ecranAllume(false); }
+    try { lecteur.lumiere(false); } catch (e) { /* rien */ }
+    try { if (A) { A.pleinEcran(false); A.ecranAllume(false); } } catch (e) { /* rien */ }
   }
 
   // ---------------------------------------------------------------- mise en page
@@ -455,6 +455,7 @@ const visionneusePdf = window.visionneusePdf = (() => {
   $('#pdf-toc').onclick = sommaire;
   $('#pdf-nuit').onclick = basculerNuit;
   $('#pdf-ajuster').onclick = () => changerZoom(1);
+  $('#pdf-ailleurs').onclick = () => { if (A && livre) A.ouvrirAilleurs(livre.id); };
   $('#pdf-lum').onclick = () => { basculerBarre(false); lecteur.panneauLumiere(); };
   window.addEventListener('resize', () => {
     if (!livre || !elems.length) return;

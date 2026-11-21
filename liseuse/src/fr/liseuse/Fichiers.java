@@ -25,7 +25,10 @@ public final class Fichiers extends ContentProvider {
     private File fichier(Uri uri) throws FileNotFoundException {
         List<String> s = uri.getPathSegments();
         if (s.isEmpty() || !s.get(0).matches("[0-9a-f]{6,32}")) throw new FileNotFoundException();
-        File f = new File(getContext().getFilesDir(), "livres/" + s.get(0) + ".epub");
+        String nom = uri.getLastPathSegment();
+        boolean pdf = nom != null && nom.toLowerCase().endsWith(".pdf");
+        File f = new File(getContext().getFilesDir(), "livres/" + s.get(0) + (pdf ? ".pdf" : ".epub"));
+        if (!f.exists() && pdf) f = new File(getContext().getFilesDir(), "sources/" + s.get(0) + ".pdf");
         if (!f.exists()) f = new File(getContext().getFilesDir(), "livres/" + s.get(0) + ".pdf");
         if (!f.exists()) throw new FileNotFoundException();
         return f;
