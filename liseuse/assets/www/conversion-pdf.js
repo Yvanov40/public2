@@ -833,5 +833,5 @@ const ConversionPdf = (() => {
     A.pdfFinir(job.jeton);
   }
 
-  return { ajouter };
+  return { ajouter, chargerPdfJs };
 })();

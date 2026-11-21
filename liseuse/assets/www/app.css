@@ -327,3 +327,26 @@ body.lecture .filtre-lumiere { display: block; }
 .dialogue .liste-actions small { color: var(--doux); margin-left: auto; font-size: .8rem; }
 .danger-texte { color: #d0442f !important; }
 #d-corps .nuancier { margin-top: 4px; }
+
+/* ---------------------------------------------------------------- PDF tel quel */
+#lecteur-pdf { background: #3a3a3c; }
+#lecteur-pdf.nuit { background: #111; }
+.pdf-zone { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.pdf-interne { padding: 8px; transform-origin: 0 0; min-width: 100%; margin: 0 auto; }
+.pdf-page { position: relative; background: #fff; margin: 0 auto 10px; box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+.pdf-page canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.pdf-n { position: absolute; left: 50%; top: 40%; transform: translateX(-50%); color: #bbb; font-size: 1.4rem; font-weight: 700; }
+#lecteur-pdf.nuit .pdf-page { background: #222; }
+#lecteur-pdf.nuit .pdf-page canvas { filter: invert(.9) hue-rotate(180deg); }
+.pdf-pastille { position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: rgba(0,0,0,.65); color: #fff; padding: 5px 12px; border-radius: 16px; font-size: .8rem; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .25s; pointer-events: none; }
+.pdf-pastille.actif { opacity: 1; }
+#lecteur-pdf .menu-haut, #lecteur-pdf .menu-bas { --l-menu: #1f1f21; --l-texte: #eee; --l-doux: #aaa; --l-trait: rgba(255,255,255,.1); }
+#lecteur-pdf.barre .menu-haut, #lecteur-pdf.barre .menu-bas { transform: none; opacity: 1; }
+#lecteur-pdf .actions button { padding: 6px 8px; }
+.choix-pdf { display: flex; flex-direction: column; gap: 10px; }
+.choix-pdf button { text-align: left; padding: 14px; border-radius: 14px; border: 1.5px solid var(--trait); background: var(--fond); color: var(--texte); display: flex; gap: 12px; align-items: flex-start; }
+.choix-pdf button:active { border-color: var(--accent); }
+.choix-pdf strong { display: block; margin-bottom: 3px; }
+.choix-pdf small { color: var(--doux); line-height: 1.4; display: block; }
+.choix-pdf svg { color: var(--accent); margin-top: 2px; }
+.choix-pdf label { display: flex; gap: 10px; align-items: center; font-size: .88rem; color: var(--doux); margin-top: 4px; }

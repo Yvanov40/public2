@@ -16,6 +16,14 @@ enregistrez-le d'abord en `.docx`.
 
 ### Les PDF
 
+À l'ajout d'un PDF, la liseuse demande comment le lire (ce choix peut être mémorisé dans les réglages) :
+
+- **le garder tel quel** : pages identiques à l'original, défilement, zoom au pincement ou double toucher,
+  sommaire du PDF, « aller à la page », mode nuit (pages inversées), luminosité ; idéal pour magazines,
+  plans, partitions, documents scannés. Il peut être converti plus tard (« Convertir ce PDF en livre ») ;
+- **le convertir en livre** (EPUB), décrit ci-dessous. Le PDF d'origine reste consultable
+  (« Voir le PDF d'origine » dans le menu du livre).
+
 Un PDF est figé en pages ; la liseuse le **remet en texte fluide** pour qu'il s'adapte à l'écran :
 lignes recollées en paragraphes, mots coupés en fin de ligne réparés, titres repérés à la taille des
 caractères (chapitres et sommaire), en-têtes, pieds de page et numéros de page retirés, gras, italique
@@ -105,6 +113,7 @@ ne s'installe par-dessus l'ancienne version que si elle est signée avec la mêm
 - `src/fr/liseuse/MainActivity.java` : WebView, import / export / partage, pont JavaScript
 - `src/fr/liseuse/AndroidImages.java` : réduction des images, couverture générée
 - `assets/www/` : interface (bibliothèque, lecteur paginé, réglages) et polices
+- `assets/www/visionneuse-pdf.js` : lecture d'un PDF gardé tel quel (pages rendues par pdf.js)
 - `assets/www/conversion-pdf.js` : remise en page des PDF avec pdf.js (`assets/www/pdfjs/`, licence Apache 2.0)
 - `graphisme/icone.py` : génère les 8 icônes au choix
 

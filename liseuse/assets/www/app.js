@@ -18,7 +18,7 @@ function esc(s) {
 }
 
 const CONVERSION_DEFAUT = { niveauChapitre: 1, detecterChapitres: true, sautsDePage: true, compresserImages: true, couvertureImage: true };
-const APP_DEFAUT = { apparence: 'systeme', affichage: 'grille', reprendre: true, tri: 'recent', accent: '#b5543a' };
+const APP_DEFAUT = { apparence: 'systeme', affichage: 'grille', reprendre: true, tri: 'recent', accent: '#b5543a', pdf: 'demander' };
 
 const app = window.app = {
   livres: [],
@@ -355,7 +355,7 @@ function htmlLivre(l, avecChemin) {
   const prog = p && p.t ? (pc >= 100 ? '<div class="prog-carte">Terminé ✓</div>'
     : `<div class="prog-carte"><div class="barre-prog"><i style="width:${pc}%"></i></div>${pc} %</div>`) : '';
   const nouveau = !p && Date.now() - (l.ajoute || 0) < 3 * 86400000 ? '<span class="nouveau">Nouveau</span>' : '';
-  const formats = { docx: 'Word', pdf: 'PDF', epub: 'EPUB', txt: 'Texte' };
+  const formats = { docx: 'Word', pdf: l.original ? 'PDF tel quel' : 'PDF converti', epub: 'EPUB', txt: 'Texte' };
   const dos = avecChemin ? dossierDe(l.id) : null;
   const meta = [formats[l.format] || '', l.taille ? taille(l.taille) : '', dos ? '📁 ' + esc(cheminDossier(dos).map(d => d.nom).join(' › ')) : ''].filter(Boolean).join(' · ');
   const choisi = app.selection && app.selection.has(l.id) ? ' choisi' : '';
@@ -567,9 +567,59 @@ function montrer(ecran) {
   if (ecran !== 'lecteur') couleursBarres();
 }
 
+// ================================================================ PDF : convertir ou garder tel quel
+
+let fileChoixPdf = Promise.resolve();
+function choisirModePdf(e) {
+  fileChoixPdf = fileChoixPdf.then(async () => {
+    let mode = app.prefs.pdf;
+    if (mode !== 'convertir' && mode !== 'garder') {
+      $('#import').classList.remove('actif');
+      mode = await new Promise(resolve => {
+        let choisi = null;
+        dialogue(`« ${e.nom} »`, `<p style="margin:0 0 12px">Comment voulez-vous lire ce PDF ?</p>
+          <div class="choix-pdf">
+            <button data-mode="convertir"><svg><use href="#i-aa"/></svg><span><strong>Le convertir en livre</strong><small>Texte qui s'adapte à l'écran : taille, police et thème réglables. La mise en page d'origine est perdue.</small></span></button>
+            <button data-mode="garder"><svg><use href="#i-livre"/></svg><span><strong>Le garder tel quel</strong><small>Pages identiques à l'original, zoom pour lire. Idéal pour magazines, plans, partitions, documents scannés.</small></span></button>
+            <label><input type="checkbox" id="pdf-memo"> Toujours faire ce choix (modifiable dans les réglages)</label>
+          </div>`, [{ texte: 'Annuler l\'ajout', valeur: null }]).then(() => resolve(choisi));
+        $('.choix-pdf').onclick = ev => {
+          const b = ev.target.closest('[data-mode]');
+          if (!b) return;
+          choisi = b.dataset.mode;
+          if ($('#pdf-memo').checked) { app.prefs.pdf = choisi; Store.set('app', app.prefs); }
+          $('#d-boutons .bouton').click();
+        };
+      });
+      if (app.importEnCours) $('#import').classList.add('actif');
+    }
+    if (!A) return;
+    if (mode === 'convertir') A.pdfConvertir(e.jeton);
+    else if (mode === 'garder') {
+      $('#import-texte').textContent = `Ajout de « ${e.nom} »…`;
+      A.pdfGarder(e.jeton);
+    } else A.pdfEchec(e.jeton, 'Ajout annulé.');
+  });
+}
+
+function ouvrirPdf(l) {
+  montrer('lecteur-pdf');
+  Store.set('ouvert', l.id);
+  visionneusePdf.ouvrir(l);
+}
+
+app.fermerPdf = function () {
+  visionneusePdf.fermer();
+  Store.del('ouvert');
+  appliquerApparence();
+  montrer('biblio');
+  afficherBiblio();
+};
+
 function ouvrirLivre(id) {
   const l = app.livres.find(x => x.id === id);
   if (!l) return;
+  if (l.original) { ouvrirPdf(l); return; }
   montrer('lecteur');
   Store.set('ouvert', id);
   lecteur.ouvrir(l);
@@ -652,6 +702,10 @@ app.toast = toast;
 // ================================================================ évènements venant d'Android
 
 app.evenement = function (e) {
+  if (e.type === 'pdf-choix') {
+    choisirModePdf(e);
+    return;
+  }
   if (e.type === 'pdf') {
     ConversionPdf.ajouter(e);
     return;
@@ -664,7 +718,9 @@ app.evenement = function (e) {
     app.importEnCours = Math.max(0, app.importEnCours - 1);
     if (!app.importEnCours) { $('#import').classList.remove('actif'); setTimeout(() => { if (!app.importEnCours) app.importDossier = null; }, 0); }
     chargerLivres();
-    if (e.type === 'erreur') {
+    if (e.type === 'erreur' && e.message === 'Ajout annulé.') {
+      toast('Ajout annulé');
+    } else if (e.type === 'erreur') {
       dialogue('Impossible d\'ajouter ce fichier', `<p><strong>${esc(e.nom)}</strong></p><p>${esc(e.message)}</p>`);
     } else if (e.type === 'reconverti') {
       toast(`« ${e.titre} » a été reconverti`);
@@ -698,6 +754,11 @@ app.retour = function () {
     return true;
   }
   if (app.ecran === 'parametres') { montrer('biblio'); return true; }
+  if (app.ecran === 'lecteur-pdf') {
+    if (visionneusePdf.barreVisible()) { visionneusePdf.cacherBarre(); return true; }
+    app.fermerPdf();
+    return true;
+  }
   if (app.selection) { finirSelection(); return true; }
   if (!$('#zone-cherche').hidden) { $('#zone-cherche').hidden = true; $('#filtre').value = ''; afficherBiblio(); return true; }
   if (app.dossier) { ouvrirDossier((dossierParId(app.dossier) || {}).parent || null); return true; }
@@ -714,6 +775,8 @@ function actionsLivre(id) {
   $('#a-titre').textContent = l.titre;
   $('#a-auteur').textContent = l.auteur || '';
   $('[data-action=reconvertir]').hidden = !l.sourceExt;
+  $('[data-action=vers-epub]').hidden = !l.original;
+  $('[data-action=pdf-origine]').hidden = !(l.sourceExt === 'pdf' && !l.original);
   ouvrirFeuille($('#actions-livre'));
 }
 
@@ -734,6 +797,12 @@ async function faireAction(action) {
   fermerFeuilles();
   if (action === 'lire') ouvrirLivre(l.id);
   else if (action === 'deplacer') deplacerLivres([l.id], []);
+  else if (action === 'pdf-origine') ouvrirPdf(l);
+  else if (action === 'vers-epub') {
+    const ok = await dialogue('Convertir en livre ?', '<p>Le PDF est converti en livre au texte adaptable. Le PDF d\'origine est gardé : vous pourrez toujours le revoir tel quel depuis le menu du livre.</p>',
+      [{ texte: 'Annuler', valeur: false }, { texte: 'Convertir', classe: 'plein', valeur: true }]);
+    if (ok && A) A.pdfVersEpub(l.id);
+  }
   else if (action === 'selectionner') commencerSelection(l.id);
   else if (action === 'infos') {
     const p = position(l.id);
@@ -803,6 +872,7 @@ function afficherParametres() {
   $('#o-apparence').value = app.prefs.apparence;
   $('#o-affichage').value = app.prefs.affichage;
   $('#o-reprendre').checked = app.prefs.reprendre;
+  $('#o-pdf').value = app.prefs.pdf || 'demander';
   afficherPersonnalisation();
   montrer('parametres');
 }
@@ -820,6 +890,7 @@ function sauverParametres() {
   app.prefs.apparence = $('#o-apparence').value;
   app.prefs.affichage = $('#o-affichage').value;
   app.prefs.reprendre = $('#o-reprendre').checked;
+  app.prefs.pdf = $('#o-pdf').value;
   Store.set('app', app.prefs);
   appliquerApparence();
   afficherBiblio();

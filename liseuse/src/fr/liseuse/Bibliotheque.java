@@ -37,6 +37,10 @@ public final class Bibliotheque {
         return new File(racine, "livres/" + id + ".epub");
     }
 
+    public File pdf(String id) {
+        return new File(racine, "livres/" + id + ".pdf");
+    }
+
     public File couverture(String id) {
         return new File(racine, "couv/" + id);
     }
@@ -136,6 +140,7 @@ public final class Bibliotheque {
         livres = n;
         sauver();
         epub(id).delete();
+        pdf(id).delete();
         couverture(id).delete();
         if (parti != null) {
             String ext = parti.optString("sourceExt", "");

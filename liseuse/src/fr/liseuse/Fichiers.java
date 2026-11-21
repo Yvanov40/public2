@@ -26,6 +26,7 @@ public final class Fichiers extends ContentProvider {
         List<String> s = uri.getPathSegments();
         if (s.isEmpty() || !s.get(0).matches("[0-9a-f]{6,32}")) throw new FileNotFoundException();
         File f = new File(getContext().getFilesDir(), "livres/" + s.get(0) + ".epub");
+        if (!f.exists()) f = new File(getContext().getFilesDir(), "livres/" + s.get(0) + ".pdf");
         if (!f.exists()) throw new FileNotFoundException();
         return f;
     }
@@ -56,6 +57,8 @@ public final class Fichiers extends ContentProvider {
 
     @Override
     public String getType(Uri uri) {
+        String n = uri.getLastPathSegment();
+        if (n != null && n.toLowerCase().endsWith(".pdf")) return "application/pdf";
         return "application/epub+zip";
     }
 

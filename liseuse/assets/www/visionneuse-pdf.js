@@ -1,0 +1,337 @@
+'use strict';
+/* Liseuse — lecture d'un PDF gardé tel quel : pages d'origine, défilement, zoom au pincement. */
+
+const visionneusePdf = window.visionneusePdf = (() => {
+
+  const ecran = $('#lecteur-pdf');
+  const zone = $('#pdf-zone');
+  const interne = $('#pdf-interne');
+  const ESPACE = 10;
+
+  let doc = null, livre = null, n = 0, jeton = 0;
+  let tailles = [];          // [largeur, hauteur] de chaque page en points
+  let zoom = 1;              // 1 = largeur de l'écran
+  let elems = [];
+  let rendus = new Map();    // index -> { canvas, echelle }
+  let observateur = null;
+  let barre = false;
+  const nuit = () => !!Store.get('pdfNuit', false);
+
+  function largeurBase() { return zone.clientWidth - 2 * 8; }
+
+  // ---------------------------------------------------------------- ouverture
+
+  async function ouvrir(l) {
+    const mon = ++jeton;
+    livre = l;
+    $('#pdf-titre').textContent = l.titre || 'PDF';
+    $('#pdf-num').textContent = '';
+    interne.innerHTML = '';
+    elems = [];
+    rendus = new Map();
+    zoom = 1;
+    barre = false;
+    ecran.classList.remove('barre');
+    ecran.classList.toggle('nuit', nuit());
+    $('#pdf-chargement').classList.add('actif');
+    const R = lecteur.reglages();
+    if (A) {
+      A.pleinEcran(!!R.pleinEcran);
+      A.ecranAllume(!!R.ecranAllume);
+      A.couleurs(nuit() ? '#111111' : '#3a3a3c', true);
+    }
+    lecteur.lumiere(true);
+    try {
+      await ConversionPdf.chargerPdfJs();
+      doc = await pdfjsLib.getDocument({ url: '/pdf/' + l.id, isEvalSupported: false }).promise;
+    } catch (e) {
+      $('#pdf-chargement').classList.remove('actif');
+      app.toast('Ce PDF ne peut pas être ouvert : ' + ((e && e.message) || 'erreur'), 4000);
+      app.fermerPdf();
+      return;
+    }
+    if (mon !== jeton) return;
+    n = doc.numPages;
+    const p1 = await doc.getPage(1);
+    const v1 = p1.getViewport({ scale: 1 });
+    tailles = Array.from({ length: n }, () => [v1.width, v1.height]);
+    for (let i = 0; i < n; i++) {
+      const d = document.createElement('div');
+      d.className = 'pdf-page';
+      d.dataset.i = i;
+      d.innerHTML = `<span class="pdf-n">${i + 1}</span>`;
+      interne.appendChild(d);
+      elems.push(d);
+    }
+    dimensionner();
+    // tailles réelles des pages, en arrière-plan
+    (async () => {
+      for (let i = 1; i < n && mon === jeton; i++) {
+        try {
+          const pg = await doc.getPage(i + 1);
+          const v = pg.getViewport({ scale: 1 });
+          if (Math.abs(v.width / v.height - tailles[i][0] / tailles[i][1]) > 0.01) {
+            const ancre = pageCourante();
+            tailles[i] = [v.width, v.height];
+            dimensionner();
+            if (i <= ancre.i) allerA(ancre.i, ancre.f);
+          }
+        } catch (e) { /* page illisible */ }
+      }
+    })();
+    observer();
+    const pos = Store.get('pos:' + l.id, null);
+    allerA(pos ? Math.min(n - 1, pos.c | 0) : 0, pos ? pos.f || 0 : 0);
+    $('#pdf-chargement').classList.remove('actif');
+    majNumero();
+    montrerNumero();
+  }
+
+  function fermer() {
+    sauver();
+    jeton++;
+    if (observateur) observateur.disconnect();
+    observateur = null;
+    rendus.forEach(r => { r.canvas.width = 0; });
+    rendus = new Map();
+    interne.innerHTML = '';
+    if (doc) { try { doc.destroy(); } catch (e) { /* rien */ } }
+    doc = null;
+    livre = null;
+    lecteur.lumiere(false);
+    if (A) { A.pleinEcran(false); A.ecranAllume(false); }
+  }
+
+  // ---------------------------------------------------------------- mise en page
+
+  function dimensionner() {
+    const base = largeurBase() * zoom;
+    for (let i = 0; i < elems.length; i++) {
+      const [w, h] = tailles[i];
+      elems[i].style.width = base + 'px';
+      elems[i].style.height = Math.round(base * h / w) + 'px';
+    }
+    interne.style.width = (base + 16) + 'px';
+  }
+
+  function observer() {
+    if (observateur) observateur.disconnect();
+    observateur = new IntersectionObserver(entrees => {
+      for (const e of entrees) {
+        const i = +e.target.dataset.i;
+        if (e.isIntersecting) rendre(i);
+      }
+      liberer();
+    }, { root: zone, rootMargin: '150% 0px' });
+    elems.forEach(e => observateur.observe(e));
+  }
+
+  async function rendre(i) {
+    if (!doc) return;
+    const el = elems[i];
+    const cssL = el.clientWidth;
+    const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    const echelle = cssL / tailles[i][0] * dpr;
+    const deja = rendus.get(i);
+    if (deja && Math.abs(deja.echelle - echelle) < 0.01) return;
+    const mon = jeton;
+    const page = await doc.getPage(i + 1);
+    if (mon !== jeton) return;
+    const vp = page.getViewport({ scale: Math.min(echelle, 6) });
+    const c = document.createElement('canvas');
+    c.width = Math.round(vp.width);
+    c.height = Math.round(vp.height);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    rendus.set(i, { canvas: c, echelle, enCours: true });
+    try {
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    } catch (e) { return; }
+    if (mon !== jeton || rendus.get(i) === undefined || rendus.get(i).canvas !== c) return;
+    const ancien = el.querySelector('canvas');
+    if (ancien) { ancien.width = 0; ancien.remove(); }
+    el.appendChild(c);
+    rendus.get(i).enCours = false;
+  }
+
+  /** Libère la mémoire des pages éloignées. */
+  function liberer() {
+    const { i } = pageCourante();
+    for (const [k, r] of rendus) {
+      if (Math.abs(k - i) > 4 && !r.enCours) {
+        r.canvas.width = 0;
+        r.canvas.remove();
+        rendus.delete(k);
+      }
+    }
+  }
+
+  function pageCourante() {
+    const y = zone.scrollTop + zone.clientHeight * 0.3;
+    let i = 0;
+    for (let k = 0; k < elems.length; k++) {
+      if (elems[k].offsetTop <= y) i = k; else break;
+    }
+    const el = elems[i];
+    const f = el ? Math.max(0, Math.min(1, (zone.scrollTop - el.offsetTop) / Math.max(1, el.offsetHeight))) : 0;
+    return { i, f };
+  }
+
+  function allerA(i, f) {
+    const el = elems[i];
+    if (!el) return;
+    zone.scrollTop = el.offsetTop + (f || 0) * el.offsetHeight - (f ? 0 : 4);
+  }
+
+  // ---------------------------------------------------------------- numéro, sauvegarde
+
+  let minuteNum, minuteSauve;
+  function majNumero() {
+    const { i } = pageCourante();
+    $('#pdf-num').textContent = `${i + 1} / ${n}`;
+    $('#pdf-pastille').textContent = `${i + 1} / ${n}`;
+  }
+  function montrerNumero() {
+    const p = $('#pdf-pastille');
+    p.classList.add('actif');
+    clearTimeout(minuteNum);
+    minuteNum = setTimeout(() => p.classList.remove('actif'), 1400);
+  }
+  function sauver() {
+    if (!livre || !n) return;
+    const { i, f } = pageCourante();
+    Store.set('pos:' + livre.id, { c: i, f, p: (i + 1) / n, t: Date.now(), chap: `Page ${i + 1} sur ${n}` });
+  }
+
+  zone.addEventListener('scroll', () => {
+    if (!doc) return;
+    majNumero();
+    montrerNumero();
+    clearTimeout(minuteSauve);
+    minuteSauve = setTimeout(sauver, 400);
+  }, { passive: true });
+
+  // ---------------------------------------------------------------- zoom au pincement, double toucher
+
+  function changerZoom(z, cx, cy) {
+    z = Math.max(1, Math.min(5, z));
+    const r = zone.getBoundingClientRect();
+    cx = cx == null ? r.width / 2 : cx - r.left;
+    cy = cy == null ? r.height / 2 : cy - r.top;
+    const fx = (zone.scrollLeft + cx) / zoom, fy = (zone.scrollTop + cy) / zoom;
+    zoom = z;
+    dimensionner();
+    zone.scrollLeft = fx * zoom - cx;
+    zone.scrollTop = fy * zoom - cy;
+    elems.forEach((e, k) => {
+      const b = e.getBoundingClientRect();
+      if (b.bottom > -r.height && b.top < r.height * 2) rendre(k);
+    });
+  }
+
+  let pince = null, dernierTap = 0, glisse = false;
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  zone.addEventListener('touchstart', e => {
+    glisse = false;
+    if (e.touches.length === 2) {
+      pince = { d: dist(e.touches), z: zoom, cx: (e.touches[0].clientX + e.touches[1].clientX) / 2, cy: (e.touches[0].clientY + e.touches[1].clientY) / 2, s: 1 };
+      interne.style.transformOrigin = `${pince.cx - zone.getBoundingClientRect().left + zone.scrollLeft}px ${pince.cy - zone.getBoundingClientRect().top + zone.scrollTop}px`;
+    }
+  }, { passive: true });
+  zone.addEventListener('touchmove', e => {
+    glisse = true;
+    if (pince && e.touches.length === 2) {
+      e.preventDefault();
+      pince.s = Math.max(1 / pince.z, Math.min(5 / pince.z, dist(e.touches) / pince.d));
+      interne.style.transform = `scale(${pince.s})`;
+    }
+  }, { passive: false });
+  zone.addEventListener('touchend', e => {
+    if (pince && e.touches.length < 2) {
+      const p = pince;
+      pince = null;
+      interne.style.transform = '';
+      changerZoom(p.z * p.s, p.cx, p.cy);
+      glisse = true;
+      return;
+    }
+    if (e.touches.length || glisse || !e.changedTouches.length) return;
+    const t = e.changedTouches[0];
+    const maintenant = Date.now();
+    if (maintenant - dernierTap < 300) {
+      dernierTap = 0;
+      clearTimeout(minuteTap);
+      changerZoom(zoom > 1.2 ? 1 : 2.5, t.clientX, t.clientY);
+      return;
+    }
+    dernierTap = maintenant;
+    minuteTap = setTimeout(() => basculerBarre(), 300);
+  });
+  let minuteTap;
+  zone.addEventListener('click', e => { if (!('ontouchstart' in window)) basculerBarre(); });
+  zone.addEventListener('dblclick', e => { if (!('ontouchstart' in window)) changerZoom(zoom > 1.2 ? 1 : 2.5, e.clientX, e.clientY); });
+
+  function basculerBarre(v) {
+    barre = v === undefined ? !barre : v;
+    ecran.classList.toggle('barre', barre);
+    majNumero();
+  }
+
+  // ---------------------------------------------------------------- outils
+
+  async function allerPage() {
+    const { i } = pageCourante();
+    const v = await app.dialogue('Aller à la page', `<label for="n-page">Page (1 à ${n})</label><input type="text" inputmode="numeric" id="n-page" value="${i + 1}">`,
+      [{ texte: 'Annuler', valeur: null }, { texte: 'Aller', classe: 'plein', valeur: () => parseInt($('#n-page').value, 10) }]);
+    if (v && v >= 1 && v <= n) { allerA(v - 1, 0); sauver(); }
+  }
+
+  async function sommaire() {
+    let plan = [];
+    try { plan = (await doc.getOutline()) || []; } catch (e) { /* sans signets */ }
+    if (!plan.length) { app.toast('Ce PDF n\'a pas de sommaire.'); return; }
+    const lignes = [];
+    const parcourir = (l, niv) => { for (const e of l) { lignes.push({ e, niv }); if (e.items && e.items.length && niv < 3) parcourir(e.items, niv + 1); } };
+    parcourir(plan, 0);
+    const html = `<div class="liste-dossiers">${lignes.map((x, k) => `<button class="choix-dossier" data-k="${k}" style="padding-left:${14 + x.niv * 20}px">${esc(x.e.title || '…')}</button>`).join('')}</div>`;
+    let fait = false;
+    app.dialogue('Sommaire', html, [{ texte: 'Fermer', valeur: null }]).then(() => { fait = true; });
+    $('#d-corps .liste-dossiers').onclick = async e => {
+      const b = e.target.closest('[data-k]');
+      if (!b || fait) return;
+      const it = lignes[+b.dataset.k].e;
+      $('#d-boutons .bouton').click();
+      try {
+        let dest = it.dest;
+        if (typeof dest === 'string') dest = await doc.getDestination(dest);
+        if (!dest) return;
+        const idx = typeof dest[0] === 'object' ? await doc.getPageIndex(dest[0]) : dest[0];
+        allerA(idx, 0);
+        sauver();
+      } catch (er) { /* destination introuvable */ }
+    };
+  }
+
+  function basculerNuit() {
+    Store.set('pdfNuit', !nuit());
+    ecran.classList.toggle('nuit', nuit());
+    if (A) A.couleurs(nuit() ? '#111111' : '#3a3a3c', true);
+  }
+
+  $('#pdf-retour').onclick = () => app.fermerPdf();
+  $('#pdf-page').onclick = allerPage;
+  $('#pdf-toc').onclick = sommaire;
+  $('#pdf-nuit').onclick = basculerNuit;
+  $('#pdf-ajuster').onclick = () => changerZoom(1);
+  $('#pdf-lum').onclick = () => { basculerBarre(false); lecteur.panneauLumiere(); };
+  window.addEventListener('resize', () => {
+    if (!doc) return;
+    const p = pageCourante();
+    dimensionner();
+    allerA(p.i, p.f);
+    elems.forEach((e, k) => { const b = e.getBoundingClientRect(); if (b.bottom > 0 && b.top < innerHeight) rendre(k); });
+  });
+
+  return { ouvrir, fermer, sauver, barreVisible: () => barre, cacherBarre: () => basculerBarre(false) };
+})();

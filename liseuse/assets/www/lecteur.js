@@ -730,7 +730,7 @@ const lecteur = window.lecteur = (() => {
       appliquerZoom();
     });
     vis.addEventListener('wheel', e => { e.preventDefault(); zoomer(vz.s * (e.deltaY < 0 ? 1.15 : 0.87), e.clientX, e.clientY); }, { passive: false });
-    vis.addEventListener('dblclick', e => zoomer(vz.s > vz.s0 * 1.2 ? vz.s0 : vz.s0 * 2.5, e.clientX, e.clientY));
+    vis.addEventListener('dblclick', e => ('ontouchstart' in window) || zoomer(vz.s > vz.s0 * 1.2 ? vz.s0 : vz.s0 * 2.5, e.clientX, e.clientY));
     $('[data-fermer]', vis).onclick = fermerImage;
   })();
 
@@ -1240,6 +1240,8 @@ const lecteur = window.lecteur = (() => {
 
   return {
     ouvrir, fermer, tourner, sauver, menus, heure, fermerImage, appliquerTheme,
+    lumiere: appliquerLumiere,
+    panneauLumiere: () => { majPanneau(); app.ouvrirFeuille($('#panneau-lum'), { sansVoile: true }); },
     menusVisibles: () => menusOn,
     reglages: () => R
   };

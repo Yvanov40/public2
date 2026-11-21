@@ -276,7 +276,7 @@ public final class MainActivity extends Activity {
                     if (type(tmp, nom).equals("pdf")) {
                         File pdf = new File(getCacheDir(), "pdf-" + id);
                         if (!tmp.renameTo(pdf)) throw new IOException("Copie du PDF impossible.");
-                        demarrerPdf(pdf, nom, id, null, ouvrir, true);
+                        demarrerPdf(pdf, nom, id, null, ouvrir, true, "pdf-choix");
                         return;
                     }
                     JSONObject livre = convertir(tmp, nom, id, null);
@@ -439,6 +439,10 @@ public final class MainActivity extends Activity {
     private final Map<String, TravailPdf> pdfs = new HashMap<String, TravailPdf>();
 
     private void demarrerPdf(File src, String nom, String id, JSONObject ancien, boolean ouvrir, boolean temporaire) {
+        demarrerPdf(src, nom, id, ancien, ouvrir, temporaire, "pdf");
+    }
+
+    private void demarrerPdf(File src, String nom, String id, JSONObject ancien, boolean ouvrir, boolean temporaire, String type) {
         TravailPdf t = new TravailPdf();
         t.src = src;
         t.nom = nom;
@@ -449,7 +453,7 @@ public final class MainActivity extends Activity {
         synchronized (pdfs) {
             pdfs.put(id, t);
         }
-        JSONObject o = obj("type", "pdf", "jeton", id, "nom", nom);
+        JSONObject o = obj("type", type, "jeton", id, "nom", nom, "ouvrir", ouvrir);
         try {
             JSONObject op = new JSONObject(prefs.getString("conversion", "{}"));
             o.put("options", op);
@@ -516,10 +520,11 @@ public final class MainActivity extends Activity {
                         for (int i = 0; i < ids.length(); i++) {
                             String id = ids.optString(i);
                             JSONObject meta = biblio.trouver(id);
-                            File f = biblio.epub(id);
+                            File f = fichierLivre(id);
                             if (meta == null || !f.exists()) continue;
-                            String nom = nomFichierSur(meta.optString("titre", "livre"));
-                            Uri doc = android.provider.DocumentsContract.createDocument(getContentResolver(), parent, "application/epub+zip", nom);
+                            String nom = nomPartage(id, meta);
+                            Uri doc = android.provider.DocumentsContract.createDocument(getContentResolver(), parent,
+                                    original(id) ? "application/pdf" : "application/epub+zip", nom);
                             if (doc == null) continue;
                             OutputStream o = getContentResolver().openOutputStream(doc);
                             InputStream in = new FileInputStream(f);
@@ -546,7 +551,7 @@ public final class MainActivity extends Activity {
                 public void run() {
                     try {
                         OutputStream o = getContentResolver().openOutputStream(u);
-                        InputStream in = new FileInputStream(biblio.epub(id));
+                        InputStream in = new FileInputStream(fichierLivre(id));
                         byte[] b = new byte[65536];
                         int n;
                         while ((n = in.read(b)) > 0) o.write(b, 0, n);
@@ -616,6 +621,82 @@ public final class MainActivity extends Activity {
         return s + ".epub";
     }
 
+    private static String nomFichierSur(String titre, String ext) {
+        String n = nomFichierSur(titre);
+        return n.substring(0, n.length() - 5) + ext;
+    }
+
+    /** Fichier à partager / enregistrer : l'EPUB, ou le PDF gardé tel quel. */
+    private File fichierLivre(String id) {
+        File e = biblio.epub(id);
+        if (e.exists()) return e;
+        return biblio.pdf(id);
+    }
+
+    private boolean original(String id) {
+        return !biblio.epub(id).exists() && biblio.pdf(id).exists();
+    }
+
+    private String nomPartage(String id, JSONObject meta) {
+        return nomFichierSur(meta.optString("titre", "livre"), original(id) ? ".pdf" : ".epub");
+    }
+
+    /** Range un PDF tel quel dans la bibliothèque (sans conversion). */
+    private JSONObject garderPdf(File src, boolean deplacer, String nom, String id) throws Exception {
+        File dest = biblio.pdf(id);
+        if (!(deplacer && src.renameTo(dest))) copier(new FileInputStream(src), dest);
+        int pages = 0;
+        File couv = biblio.couverture(id);
+        couv.delete();
+        android.os.ParcelFileDescriptor fd = null;
+        android.graphics.pdf.PdfRenderer r = null;
+        try {
+            fd = android.os.ParcelFileDescriptor.open(dest, android.os.ParcelFileDescriptor.MODE_READ_ONLY);
+            r = new android.graphics.pdf.PdfRenderer(fd);
+            pages = r.getPageCount();
+            if (pages > 0) {
+                android.graphics.pdf.PdfRenderer.Page pg = r.openPage(0);
+                int w = 600, h = Math.max(1, Math.round(600f * pg.getHeight() / Math.max(1, pg.getWidth())));
+                android.graphics.Bitmap b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888);
+                b.eraseColor(0xFFFFFFFF);
+                pg.render(b, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                pg.close();
+                OutputStream o = new FileOutputStream(couv);
+                try {
+                    b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, o);
+                } finally {
+                    o.close();
+                }
+                b.recycle();
+            }
+        } catch (Throwable e) {
+            // PDF protégé ou illisible par Android : il sera tout de même lu par pdf.js
+        } finally {
+            if (r != null) r.close();
+            if (fd != null) {
+                try {
+                    fd.close();
+                } catch (IOException ignore) {
+                }
+            }
+        }
+        JSONObject livre = new JSONObject();
+        livre.put("id", id);
+        livre.put("titre", DocxConverter.sansExtension(nom));
+        livre.put("auteur", "");
+        livre.put("format", "pdf");
+        livre.put("original", true);
+        livre.put("nomFichier", nom);
+        livre.put("taille", dest.length());
+        livre.put("pages", pages);
+        livre.put("couverture", couv.exists());
+        livre.put("sourceExt", "");
+        livre.put("convertiLe", System.currentTimeMillis());
+        livre.put("ajoute", System.currentTimeMillis());
+        biblio.ajouter(livre);
+        return livre;
+    }
+
     // ================================================================ service des fichiers à la WebView
 
     private final class Client extends WebViewClient {
@@ -643,6 +724,13 @@ public final class MainActivity extends Activity {
                     if (e == null) return introuvable();
                     boolean html = u.getQueryParameter("html") != null;
                     return reponse(mime(chemin, html), z.getInputStream(e));
+                }
+                if (p.startsWith("/pdf/")) {
+                    String id = p.substring(5).replaceAll("[^0-9a-f]", "");
+                    File f = biblio.pdf(id);
+                    if (!f.exists()) f = biblio.source(id, "pdf");
+                    if (!f.exists()) return introuvable();
+                    return reponse("application/pdf", new FileInputStream(f));
                 }
                 if (p.startsWith("/import/")) {
                     TravailPdf t = pdf(p.substring(8));
@@ -869,8 +957,8 @@ public final class MainActivity extends Activity {
                     exportId = id;
                     Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                     i.addCategory(Intent.CATEGORY_OPENABLE);
-                    i.setType("application/epub+zip");
-                    i.putExtra(Intent.EXTRA_TITLE, nomFichierSur(meta.optString("titre", "livre")));
+                    i.setType(original(id) ? "application/pdf" : "application/epub+zip");
+                    i.putExtra(Intent.EXTRA_TITLE, nomPartage(id, meta));
                     try {
                         startActivityForResult(i, REQ_EXPORT);
                     } catch (Exception e) {
@@ -887,9 +975,9 @@ public final class MainActivity extends Activity {
             ui.post(new Runnable() {
                 @Override
                 public void run() {
-                    Uri u = Uri.parse("content://" + Fichiers.AUTORITE + "/" + id + "/" + Uri.encode(nomFichierSur(meta.optString("titre", "livre"))));
+                    Uri u = Uri.parse("content://" + Fichiers.AUTORITE + "/" + id + "/" + Uri.encode(nomPartage(id, meta)));
                     Intent i = new Intent(Intent.ACTION_SEND);
-                    i.setType("application/epub+zip");
+                    i.setType(original(id) ? "application/pdf" : "application/epub+zip");
                     i.putExtra(Intent.EXTRA_STREAM, u);
                     i.putExtra(Intent.EXTRA_SUBJECT, meta.optString("titre"));
                     i.setClipData(ClipData.newRawUri("", u));
@@ -916,14 +1004,14 @@ public final class MainActivity extends Activity {
                             String id = ids.optString(i);
                             JSONObject meta = biblio.trouver(id);
                             if (meta == null) continue;
-                            Uri u = Uri.parse("content://" + Fichiers.AUTORITE + "/" + id + "/" + Uri.encode(nomFichierSur(meta.optString("titre", "livre"))));
+                            Uri u = Uri.parse("content://" + Fichiers.AUTORITE + "/" + id + "/" + Uri.encode(nomPartage(id, meta)));
                             uris.add(u);
                             if (clip == null) clip = ClipData.newRawUri("", u);
                             else clip.addItem(new ClipData.Item(u));
                         }
                         if (uris.isEmpty()) return;
                         Intent i = new Intent(uris.size() == 1 ? Intent.ACTION_SEND : Intent.ACTION_SEND_MULTIPLE);
-                        i.setType("application/epub+zip");
+                        i.setType("*/*");
                         if (uris.size() == 1) i.putExtra(Intent.EXTRA_STREAM, uris.get(0));
                         else i.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
                         i.setClipData(clip);
@@ -1095,6 +1183,62 @@ public final class MainActivity extends Activity {
             if (t != null && t.ep != null && href != null && !href.isEmpty()) t.ep.couverture = href;
         }
 
+        /** L'utilisateur a choisi de convertir le PDF : on lance la conversion. */
+        @JavascriptInterface
+        public void pdfConvertir(String jeton) {
+            TravailPdf t = pdf(jeton);
+            if (t == null) return;
+            JSONObject o = obj("type", "pdf", "jeton", t.id, "nom", t.nom);
+            try {
+                o.put("options", new JSONObject(prefs.getString("conversion", "{}")));
+            } catch (Exception ignore) {
+            }
+            evenement(o);
+        }
+
+        /** L'utilisateur a choisi de garder le PDF tel quel. */
+        @JavascriptInterface
+        public void pdfGarder(final String jeton) {
+            final TravailPdf t = pdf(jeton);
+            if (t == null) return;
+            travail.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        JSONObject l = garderPdf(t.src, t.temporaire, t.nom, t.id);
+                        evenement(obj("type", "fini", "id", t.id, "titre", l.optString("titre"), "ouvrir", t.ouvrir));
+                    } catch (Throwable e) {
+                        evenement(obj("type", "erreur", "nom", t.nom, "message", message(e)));
+                    } finally {
+                        synchronized (pdfs) {
+                            pdfs.remove(t.id);
+                        }
+                        if (t.temporaire) t.src.delete();
+                    }
+                }
+            });
+        }
+
+        /** Convertit en EPUB un PDF qui avait été gardé tel quel. */
+        @JavascriptInterface
+        public void pdfVersEpub(final String id) {
+            final JSONObject meta = biblio.trouver(id);
+            if (meta == null || !biblio.pdf(id).exists()) return;
+            evenement(obj("type", "debut", "nom", meta.optString("nomFichier", meta.optString("titre"))));
+            travail.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        File copie = new File(getCacheDir(), "pdf-" + id);
+                        copier(new FileInputStream(biblio.pdf(id)), copie);
+                        demarrerPdf(copie, meta.optString("nomFichier", "document.pdf"), id, meta, false, true);
+                    } catch (Throwable e) {
+                        evenement(obj("type", "erreur", "nom", meta.optString("titre"), "message", message(e)));
+                    }
+                }
+            });
+        }
+
         @JavascriptInterface
         public void pdfFinir(final String jeton) {
             final TravailPdf t = pdf(jeton);
@@ -1107,7 +1251,16 @@ public final class MainActivity extends Activity {
                         t.ep.finir(couv);
                         t.os.close();
                         t.os = null;
+                        boolean etaitOriginal = t.ancien != null && t.ancien.optBoolean("original");
                         JSONObject l = enregistrer(t.sortie, t.src, "pdf", t.nom, t.id, t.ancien);
+                        if (etaitOriginal) {
+                            File orig = biblio.pdf(t.id), src = biblio.source(t.id, "pdf");
+                            src.delete();
+                            if (!orig.renameTo(src)) copier(new FileInputStream(orig), src);
+                            orig.delete();
+                            l.put("original", false);
+                            biblio.ajouter(l);
+                        }
                         if (t.ancien != null) evenement(obj("type", "reconverti", "id", t.id, "titre", l.optString("titre")));
                         else evenement(obj("type", "fini", "id", t.id, "titre", l.optString("titre"), "ouvrir", t.ouvrir));
                     } catch (Throwable e) {
