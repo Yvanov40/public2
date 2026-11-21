@@ -11,8 +11,16 @@ l'installation depuis cette source si Android le demande. Android 7.0 ou plus r�
 - bouton **Ajouter** dans la bibliothèque (plusieurs fichiers à la fois possibles) ;
 - ou, depuis Word, Drive, Gmail, Fichiers… : **Partager** ou **Ouvrir avec → Liseuse**.
 
-Formats acceptés : `.docx`, `.epub` (lu tel quel), `.txt`. Pour un ancien `.doc`, un `.odt` ou un `.rtf`,
+Formats acceptés : `.docx`, `.pdf`, `.epub` (lu tel quel), `.txt`. Pour un ancien `.doc`, un `.odt` ou un `.rtf`,
 enregistrez-le d'abord en `.docx`.
+
+### Les PDF
+
+Un PDF est figé en pages ; la liseuse le **remet en texte fluide** pour qu'il s'adapte à l'écran :
+lignes recollées en paragraphes, mots coupés en fin de ligne réparés, titres repérés à la taille des
+caractères (chapitres et sommaire), en-têtes, pieds de page et numéros de page retirés, gras, italique
+et appels de notes gardés, images découpées dans la page. La première page sert de couverture.
+Un PDF scanné (sans texte) est gardé en images de pages. Les tableaux complexes deviennent du texte simple.
 
 ## Ce que la conversion conserve
 
@@ -47,6 +55,14 @@ La table des matières de Word, les en-têtes, pieds de page et numéros de page
   **plein écran**, **écran toujours allumé**, **luminosité** propre à la lecture ;
 - texte « plus appuyé », couleurs du document, titre / page / heure en haut et en bas.
 
+**Luminosité** : en dessous du minimum du téléphone grâce au mode nuit (tout à gauche du curseur),
+et **filtre chaud** contre la lumière bleue pour lire le soir.
+
+**Personnalisation** (roue dentée de la bibliothèque) : **couleur de l'application** (8 teintes ou
+couleur libre), **icône** sur l'écran d'accueil (8 modèles), **raccourci avec votre propre image** et
+le nom de votre choix (Android 8 et plus), et un **thème de lecture personnalisé** (couleur du fond et
+du texte au choix) dans le panneau Affichage.
+
 Et aussi : **sommaire**, **marque-pages**, **recherche** dans tout le livre, position de lecture mémorisée,
 « Continuer la lecture », tri et recherche dans la bibliothèque, **export EPUB** (pour l'utiliser dans
 une autre liseuse, une Kobo…), **partage**, **reconversion** d'un livre avec de nouveaux réglages.
@@ -76,6 +92,7 @@ ne s'installe par-dessus l'ancienne version que si elle est signée avec la mêm
 - `src/fr/liseuse/MainActivity.java` : WebView, import / export / partage, pont JavaScript
 - `src/fr/liseuse/AndroidImages.java` : réduction des images, couverture générée
 - `assets/www/` : interface (bibliothèque, lecteur paginé, réglages) et polices
-- `graphisme/icone.py` : génère les icônes
+- `assets/www/conversion-pdf.js` : remise en page des PDF avec pdf.js (`assets/www/pdfjs/`, licence Apache 2.0)
+- `graphisme/icone.py` : génère les 8 icônes au choix
 
 Polices sous licence SIL Open Font License : Literata, Merriweather, Atkinson Hyperlegible, OpenDyslexic.

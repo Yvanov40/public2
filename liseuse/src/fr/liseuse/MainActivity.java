@@ -54,7 +54,9 @@ public final class MainActivity extends Activity {
 
     static final String HOTE = "appassets.androidplatform.net";
     static final String BASE = "https://" + HOTE + "/";
-    private static final int REQ_IMPORT = 1, REQ_EXPORT = 2;
+    private static final int REQ_IMPORT = 1, REQ_EXPORT = 2, REQ_IMAGE = 3;
+    static final int NB_ICONES = 8;
+    private String nomRaccourci = "Liseuse";
 
     private WebView web;
     private Bibliotheque biblio;
@@ -270,6 +272,12 @@ public final class MainActivity extends Activity {
                     if (in == null) throw new IOException("Impossible de lire ce fichier.");
                     copier(in, tmp);
                     String id = Bibliotheque.nouvelId();
+                    if (type(tmp, nom).equals("pdf")) {
+                        File pdf = new File(getCacheDir(), "pdf-" + id);
+                        if (!tmp.renameTo(pdf)) throw new IOException("Copie du PDF impossible.");
+                        demarrerPdf(pdf, nom, id, null, ouvrir, true);
+                        return;
+                    }
                     JSONObject livre = convertir(tmp, nom, id, null);
                     evenement(obj("type", "fini", "id", id, "titre", livre.optString("titre"), "ouvrir", ouvrir));
                 } catch (Throwable t) {
@@ -336,7 +344,7 @@ public final class MainActivity extends Activity {
         if (n >= 5 && h[0] == '{' && h[1] == '\\' && h[2] == 'r' && h[3] == 't' && h[4] == 'f')
             throw new IOException("Format RTF : enregistrez-le en .docx depuis Word.");
         if (n >= 4 && h[0] == '%' && h[1] == 'P' && h[2] == 'D' && h[3] == 'F')
-            throw new IOException("Les PDF ne sont pas pris en charge : partez du document Word d'origine.");
+            return "pdf";
         String l = nom.toLowerCase(Locale.ROOT);
         if (l.endsWith(".txt") || l.endsWith(".text") || l.endsWith(".md")) return "txt";
         if (f.length() < 20 * 1024 * 1024) {
@@ -345,14 +353,13 @@ public final class MainActivity extends Activity {
             for (int i = 0; i < n; i++) if (h[i] == 0) binaire = true;
             if (!binaire) return "txt";
         }
-        throw new IOException("Format non reconnu. Choisissez un fichier .docx (Word), .epub ou .txt.");
+        throw new IOException("Format non reconnu. Choisissez un fichier .docx (Word), .pdf, .epub ou .txt.");
     }
 
     /** Convertit (ou copie) le fichier et l'ajoute à la bibliothèque. */
     private JSONObject convertir(File src, String nom, String id, JSONObject ancien) throws Exception {
         String t = type(src, nom);
-        File dest = biblio.epub(id);
-        File tmp = new File(dest.getPath() + ".tmp");
+        File tmp = new File(biblio.epub(id).getPath() + ".tmp");
         AndroidImages images = new AndroidImages();
         if (t.equals("epub")) {
             copier(new FileInputStream(src), tmp);
@@ -365,6 +372,12 @@ public final class MainActivity extends Activity {
                 o.close();
             }
         }
+        return enregistrer(tmp, src, t, nom, id, ancien);
+    }
+
+    /** Valide l'EPUB produit, le range dans la bibliothèque, garde la source et la couverture. */
+    private JSONObject enregistrer(File tmp, File src, String t, String nom, String id, JSONObject ancien) throws Exception {
+        File dest = biblio.epub(id);
         EpubLivre l;
         try {
             l = EpubLivre.lire(tmp);
@@ -411,6 +424,58 @@ public final class MainActivity extends Activity {
         return livre;
     }
 
+    // ================================================================ PDF (converti par pdf.js dans la WebView)
+
+    private static final class TravailPdf {
+        File src, sortie;
+        String nom, id;
+        JSONObject ancien;
+        boolean ouvrir, temporaire;
+        OutputStream os;
+        EpubBuilder ep;
+    }
+
+    private final Map<String, TravailPdf> pdfs = new HashMap<String, TravailPdf>();
+
+    private void demarrerPdf(File src, String nom, String id, JSONObject ancien, boolean ouvrir, boolean temporaire) {
+        TravailPdf t = new TravailPdf();
+        t.src = src;
+        t.nom = nom;
+        t.id = id;
+        t.ancien = ancien;
+        t.ouvrir = ouvrir;
+        t.temporaire = temporaire;
+        synchronized (pdfs) {
+            pdfs.put(id, t);
+        }
+        JSONObject o = obj("type", "pdf", "jeton", id, "nom", nom);
+        try {
+            JSONObject op = new JSONObject(prefs.getString("conversion", "{}"));
+            o.put("options", op);
+        } catch (Exception ignore) {
+        }
+        evenement(o);
+    }
+
+    private TravailPdf pdf(String jeton) {
+        synchronized (pdfs) {
+            return pdfs.get(jeton);
+        }
+    }
+
+    private void finPdf(TravailPdf t) {
+        synchronized (pdfs) {
+            pdfs.remove(t.id);
+        }
+        if (t.os != null) {
+            try {
+                t.os.close();
+            } catch (IOException ignore) {
+            }
+        }
+        if (t.temporaire) t.src.delete();
+    }
+
     private void fermerZip(String id) {
         synchronized (zips) {
             ZipFile z = zips.remove(id);
@@ -437,6 +502,8 @@ public final class MainActivity extends Activity {
             if (cd != null) for (int i = 0; i < cd.getItemCount(); i++) l.add(cd.getItemAt(i).getUri());
             else if (data.getData() != null) l.add(data.getData());
             for (Uri u : l) importer(u, l.size() == 1);
+        } else if (req == REQ_IMAGE && data.getData() != null) {
+            creerRaccourci(data.getData());
         } else if (req == REQ_EXPORT && exportId != null) {
             final Uri u = data.getData();
             final String id = exportId;
@@ -457,6 +524,45 @@ public final class MainActivity extends Activity {
                     }
                 }
             });
+        }
+    }
+
+    /** Raccourci sur l'écran d'accueil avec l'image et le nom choisis (Android 8 et plus). */
+    private void creerRaccourci(Uri u) {
+        try {
+            InputStream in = getContentResolver().openInputStream(u);
+            android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            byte[] data = EpubBuilder.lireTout(in);
+            in.close();
+            android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length, o);
+            int ech = 1;
+            while (Math.min(o.outWidth, o.outHeight) / (ech * 2) >= 256) ech *= 2;
+            o = new android.graphics.BitmapFactory.Options();
+            o.inSampleSize = ech;
+            android.graphics.Bitmap b = android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length, o);
+            if (b == null) throw new IOException("Image illisible.");
+            int c = Math.min(b.getWidth(), b.getHeight());
+            android.graphics.Bitmap carre = android.graphics.Bitmap.createBitmap(b, (b.getWidth() - c) / 2, (b.getHeight() - c) / 2, c, c);
+            android.graphics.Bitmap icone = android.graphics.Bitmap.createScaledBitmap(carre, 192, 192, true);
+            Class<?> smc = Class.forName("android.content.pm.ShortcutManager");
+            Object sm = getSystemService(smc);
+            boolean ok = (Boolean) smc.getMethod("isRequestPinShortcutSupported").invoke(sm);
+            if (!ok) {
+                toast("Votre écran d'accueil n'accepte pas les raccourcis personnalisés.");
+                return;
+            }
+            Class<?> bc = Class.forName("android.content.pm.ShortcutInfo$Builder");
+            Object bu = bc.getConstructor(Context.class, String.class).newInstance(this, "perso-" + System.currentTimeMillis());
+            bc.getMethod("setShortLabel", CharSequence.class).invoke(bu, nomRaccourci);
+            bc.getMethod("setIcon", android.graphics.drawable.Icon.class).invoke(bu, android.graphics.drawable.Icon.createWithBitmap(icone));
+            Intent lance = new Intent(Intent.ACTION_MAIN);
+            lance.setClass(this, MainActivity.class);
+            bc.getMethod("setIntent", Intent.class).invoke(bu, lance);
+            Object info = bc.getMethod("build").invoke(bu);
+            smc.getMethod("requestPinShortcut", Class.forName("android.content.pm.ShortcutInfo"), android.content.IntentSender.class).invoke(sm, info, null);
+        } catch (Throwable e) {
+            toast("Raccourci impossible : " + message(e));
         }
     }
 
@@ -503,6 +609,17 @@ public final class MainActivity extends Activity {
                     if (e == null) return introuvable();
                     boolean html = u.getQueryParameter("html") != null;
                     return reponse(mime(chemin, html), z.getInputStream(e));
+                }
+                if (p.startsWith("/import/")) {
+                    TravailPdf t = pdf(p.substring(8));
+                    if (t == null || !t.src.exists()) return introuvable();
+                    return reponse("application/pdf", new FileInputStream(t.src));
+                }
+                if (p.startsWith("/icone/")) {
+                    String n = p.substring(7).replaceAll("[^0-9]", "");
+                    int res = getResources().getIdentifier("ic_icone" + n, "mipmap", getPackageName());
+                    if (res == 0) return introuvable();
+                    return reponse("image/png", getResources().openRawResource(res));
                 }
                 if (p.startsWith("/couv/")) {
                     String id = p.substring(6).replaceAll("[^0-9a-f]", "");
@@ -649,7 +766,7 @@ public final class MainActivity extends Activity {
                     i.setType("*/*");
                     i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
                             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            "application/msword", "application/epub+zip", "text/plain",
+                            "application/msword", "application/epub+zip", "text/plain", "application/pdf",
                             "application/octet-stream", "application/zip", "application/x-zip-compressed"});
                     i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
                     try {
@@ -672,6 +789,10 @@ public final class MainActivity extends Activity {
                 return;
             }
             evenement(obj("type", "debut", "nom", meta.optString("nomFichier", meta.optString("titre"))));
+            if (ext.equals("pdf")) {
+                demarrerPdf(src, meta.optString("nomFichier", "document.pdf"), id, meta, false, false);
+                return;
+            }
             travail.execute(new Runnable() {
                 @Override
                 public void run() {
@@ -826,6 +947,170 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public void volume(boolean oui) {
             volumeActif = oui;
+        }
+
+        // ---------------------------------------------------------------- construction d'un EPUB depuis un PDF
+
+        @JavascriptInterface
+        public boolean pdfCommencer(String jeton, String titre, String auteur, String langue) {
+            TravailPdf t = pdf(jeton);
+            if (t == null) return false;
+            try {
+                t.sortie = new File(biblio.epub(t.id).getPath() + ".tmp");
+                t.os = new FileOutputStream(t.sortie);
+                t.ep = new EpubBuilder(t.os);
+                if (titre != null && !titre.trim().isEmpty()) t.ep.titre = titre.trim();
+                else t.ep.titre = DocxConverter.sansExtension(t.nom);
+                t.ep.auteur = auteur == null ? "" : auteur.trim();
+                if (langue != null && !langue.isEmpty()) t.ep.langue = langue;
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public void pdfChapitre(String jeton, String titre) {
+            TravailPdf t = pdf(jeton);
+            if (t != null && t.ep != null && !t.ep.chapitreVide()) t.ep.nouveauChapitre(titre == null || titre.isEmpty() ? null : titre);
+        }
+
+        @JavascriptInterface
+        public void pdfHtml(String jeton, String html) {
+            TravailPdf t = pdf(jeton);
+            if (t == null || t.ep == null || html == null || html.isEmpty()) return;
+            t.ep.html().append(html);
+            t.ep.marquerContenu();
+        }
+
+        @JavascriptInterface
+        public int pdfTaille(String jeton) {
+            TravailPdf t = pdf(jeton);
+            return t == null || t.ep == null ? 0 : t.ep.tailleChapitre();
+        }
+
+        @JavascriptInterface
+        public void pdfToc(String jeton, int niveau, String titre, String id) {
+            TravailPdf t = pdf(jeton);
+            if (t != null && t.ep != null) t.ep.entreeToc(niveau, titre, id);
+        }
+
+        @JavascriptInterface
+        public String pdfImage(String jeton, String base64, String ext) {
+            TravailPdf t = pdf(jeton);
+            if (t == null || t.ep == null) return "";
+            try {
+                byte[] d = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+                return t.ep.ajouterImage(d, ext);
+            } catch (Throwable e) {
+                return "";
+            }
+        }
+
+        @JavascriptInterface
+        public void pdfCouverture(String jeton, String href) {
+            TravailPdf t = pdf(jeton);
+            if (t != null && t.ep != null && href != null && !href.isEmpty()) t.ep.couverture = href;
+        }
+
+        @JavascriptInterface
+        public void pdfFinir(final String jeton) {
+            final TravailPdf t = pdf(jeton);
+            if (t == null || t.ep == null) return;
+            travail.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        byte[] couv = t.ep.couverture == null ? new AndroidImages().couverture(t.ep.titre, t.ep.auteur) : null;
+                        t.ep.finir(couv);
+                        t.os.close();
+                        t.os = null;
+                        JSONObject l = enregistrer(t.sortie, t.src, "pdf", t.nom, t.id, t.ancien);
+                        if (t.ancien != null) evenement(obj("type", "reconverti", "id", t.id, "titre", l.optString("titre")));
+                        else evenement(obj("type", "fini", "id", t.id, "titre", l.optString("titre"), "ouvrir", t.ouvrir));
+                    } catch (Throwable e) {
+                        if (t.sortie != null) t.sortie.delete();
+                        evenement(obj("type", "erreur", "nom", t.nom, "message", message(e)));
+                    } finally {
+                        finPdf(t);
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void pdfEchec(String jeton, String message) {
+            TravailPdf t = pdf(jeton);
+            if (t == null) return;
+            if (t.sortie != null) {
+                if (t.os != null) {
+                    try {
+                        t.os.close();
+                    } catch (IOException ignore) {
+                    }
+                    t.os = null;
+                }
+                t.sortie.delete();
+            }
+            finPdf(t);
+            evenement(obj("type", "erreur", "nom", t.nom, "message", message == null ? "PDF illisible." : message));
+        }
+
+        // ---------------------------------------------------------------- icône de l'application
+
+        @JavascriptInterface
+        public int icone() {
+            android.content.pm.PackageManager pm = getPackageManager();
+            for (int i = 1; i <= NB_ICONES; i++) {
+                int e = pm.getComponentEnabledSetting(new android.content.ComponentName(MainActivity.this, getPackageName() + ".Icone" + i));
+                if (e == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED) return i;
+                if (i == 1 && e == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT) {
+                    boolean autre = false;
+                    for (int k = 2; k <= NB_ICONES; k++) {
+                        if (pm.getComponentEnabledSetting(new android.content.ComponentName(MainActivity.this, getPackageName() + ".Icone" + k))
+                                == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED) autre = true;
+                    }
+                    if (!autre) return 1;
+                }
+            }
+            return 1;
+        }
+
+        @JavascriptInterface
+        public void changerIcone(int n) {
+            if (n < 1 || n > NB_ICONES) return;
+            android.content.pm.PackageManager pm = getPackageManager();
+            // on active d'abord la nouvelle, puis on désactive les autres
+            pm.setComponentEnabledSetting(new android.content.ComponentName(MainActivity.this, getPackageName() + ".Icone" + n),
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP);
+            for (int i = 1; i <= NB_ICONES; i++) {
+                if (i == n) continue;
+                pm.setComponentEnabledSetting(new android.content.ComponentName(MainActivity.this, getPackageName() + ".Icone" + i),
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, android.content.pm.PackageManager.DONT_KILL_APP);
+            }
+        }
+
+        @JavascriptInterface
+        public boolean raccourciPossible() {
+            return Build.VERSION.SDK_INT >= 26;
+        }
+
+        @JavascriptInterface
+        public void raccourciPerso(final String nom) {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    nomRaccourci = nom == null || nom.trim().isEmpty() ? "Liseuse" : nom.trim();
+                    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType("image/*");
+                    try {
+                        startActivityForResult(i, REQ_IMAGE);
+                    } catch (Exception e) {
+                        toast("Aucune application pour choisir une image.");
+                    }
+                }
+            });
         }
 
         @JavascriptInterface

@@ -18,7 +18,7 @@ function esc(s) {
 }
 
 const CONVERSION_DEFAUT = { niveauChapitre: 1, detecterChapitres: true, sautsDePage: true, compresserImages: true, couvertureImage: true };
-const APP_DEFAUT = { apparence: 'systeme', affichage: 'grille', reprendre: true, tri: 'recent' };
+const APP_DEFAUT = { apparence: 'systeme', affichage: 'grille', reprendre: true, tri: 'recent', accent: '#b5543a' };
 
 const app = window.app = {
   livres: [],
@@ -62,9 +62,70 @@ function interfaceSombre() {
   return app.prefs.apparence === 'sombre' || (app.prefs.apparence === 'systeme' && app.systemeSombre);
 }
 
+// ================================================================ couleur de l'application
+
+const ACCENTS = [['#b5543a', 'Terre cuite'], ['#c2457a', 'Framboise'], ['#c27a12', 'Ambre'], ['#2e7d4f', 'Sapin'],
+  ['#128a8a', 'Lagon'], ['#2f6db5', 'Océan'], ['#7b5bb5', 'Lavande'], ['#4a5a6a', 'Ardoise']];
+
+function rgbHex(h) {
+  h = String(h || '').replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const n = parseInt(h, 16);
+  return isNaN(n) ? [181, 84, 58] : [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function appliquerAccent(sombre) {
+  let [r, g, b] = rgbHex(app.prefs.accent);
+  if (sombre) { r += (255 - r) * 0.28; g += (255 - g) * 0.28; b += (255 - b) * 0.28; }
+  const c = `rgb(${r | 0}, ${g | 0}, ${b | 0})`;
+  const st = document.documentElement.style;
+  st.setProperty('--accent', c);
+  st.setProperty('--accent-doux', `rgba(${r | 0}, ${g | 0}, ${b | 0}, ${sombre ? .18 : .13})`);
+  st.setProperty('--accent-ombre', `rgba(${r | 0}, ${g | 0}, ${b | 0}, .4)`);
+  const clair = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62;
+  st.setProperty('--sur-accent', clair ? '#1b1210' : '#ffffff');
+}
+
+function afficherPersonnalisation() {
+  const z = $('#couleurs-app');
+  z.innerHTML = ACCENTS.map(([c, n]) => `<button class="pastille${c === app.prefs.accent ? ' actif' : ''}" data-c="${c}" style="background:${c}" aria-label="${n}"></button>`).join('')
+    + `<label class="pastille autre${ACCENTS.some(a => a[0] === app.prefs.accent) ? '' : ' actif'}" aria-label="Autre couleur"><input type="color" value="${esc(app.prefs.accent)}">+</label>`;
+  z.onclick = e => { const b = e.target.closest('[data-c]'); if (b) choisirAccent(b.dataset.c); };
+  $('input', z).onchange = e => choisirAccent(e.target.value);
+  const actuelle = A && A.icone ? A.icone() : 1;
+  const noms = ['Classique', 'Océan', 'Forêt', 'Lavande', 'Nuit', 'Papier', 'Lettre', 'Rose'];
+  $('#icones').innerHTML = noms.map((n, i) => `<button data-icone="${i + 1}" class="${i + 1 === actuelle ? 'actif' : ''}"><img src="/icone/${i + 1}" alt="">${n}</button>`).join('');
+  $('#icones').onclick = async e => {
+    const b = e.target.closest('[data-icone]');
+    if (!b || b.classList.contains('actif')) return;
+    const ok = await dialogue('Changer l\'icône ?', '<p>La nouvelle icône apparaît sur l\'écran d\'accueil après quelques secondes. Si l\'ancienne y était épinglée, il faudra peut-être la remettre depuis la liste des applications.</p>',
+      [{ texte: 'Annuler', valeur: false }, { texte: 'Changer', classe: 'plein', valeur: true }]);
+    if (!ok) return;
+    if (A) A.changerIcone(+b.dataset.icone);
+    $$('#icones button').forEach(x => x.classList.toggle('actif', x === b));
+    toast('Icône changée');
+  };
+  $('#ligne-raccourci').hidden = !(A && A.raccourciPossible && A.raccourciPossible());
+}
+
+function choisirAccent(c) {
+  app.prefs.accent = c;
+  Store.set('app', app.prefs);
+  appliquerApparence();
+  afficherPersonnalisation();
+}
+
+async function raccourciPerso() {
+  const nom = await dialogue('Raccourci personnalisé', `<label for="r-nom">Nom sous l'icône</label><input type="text" id="r-nom" value="Mes livres" maxlength="24">
+    <p>Choisissez ensuite une image (photo, dessin…) : elle sera recadrée en carré.</p>`,
+    [{ texte: 'Annuler', valeur: null }, { texte: 'Choisir l\'image', classe: 'plein', valeur: () => $('#r-nom').value.trim() || 'Liseuse' }]);
+  if (nom && A) A.raccourciPerso(nom);
+}
+
 function appliquerApparence() {
   const sombre = interfaceSombre();
   document.documentElement.classList.toggle('sombre', sombre);
+  appliquerAccent(sombre);
   if (app.ecran !== 'lecteur') couleursBarres();
 }
 
@@ -244,6 +305,10 @@ app.toast = toast;
 // ================================================================ évènements venant d'Android
 
 app.evenement = function (e) {
+  if (e.type === 'pdf') {
+    ConversionPdf.ajouter(e);
+    return;
+  }
   if (e.type === 'debut') {
     app.importEnCours++;
     $('#import-texte').textContent = `Conversion de « ${e.nom} »…`;
@@ -381,6 +446,7 @@ function afficherParametres() {
   $('#o-apparence').value = app.prefs.apparence;
   $('#o-affichage').value = app.prefs.affichage;
   $('#o-reprendre').checked = app.prefs.reprendre;
+  afficherPersonnalisation();
   montrer('parametres');
 }
 
@@ -414,6 +480,7 @@ function brancher() {
   $('#b-importer-vide').onclick = importer;
   $('#b-reglages').onclick = afficherParametres;
   $('#b-tri').onclick = choisirTri;
+  $('#b-raccourci').onclick = raccourciPerso;
   $('#b-cherche').onclick = () => {
     const z = $('#zone-cherche');
     z.hidden = !z.hidden;

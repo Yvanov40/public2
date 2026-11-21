@@ -7,7 +7,8 @@ const lecteur = window.lecteur = (() => {
     taille: 19, theme: 'creme', police: 'literata', interligne: 1.55, marges: 22,
     alignement: 'justifie', paragraphes: 'retrait', mode: 'pages', images: 'document', imagesSombre: 'attenuer',
     cesure: true, gras: false, couleursDoc: true, deuxPages: true, animation: true, uneMain: false,
-    volume: true, pleinEcran: true, ecranAllume: false, infos: true, luminosite: -1
+    volume: true, pleinEcran: true, ecranAllume: false, infos: true, luminosite: -1,
+    chaud: 0, persoFond: '#f3ece0', persoTexte: '#2b2b2b'
   };
 
   const THEMES = {
@@ -51,7 +52,59 @@ const lecteur = window.lecteur = (() => {
   const cadre = $('#cadre');
   const ecran = $('#lecteur');
 
-  function theme() { return THEMES[R.theme] || THEMES.creme; }
+  function theme() {
+    if (R.theme === 'perso') return themePerso();
+    return THEMES[R.theme] || THEMES.creme;
+  }
+
+  // ---------------------------------------------------------------- couleurs utilitaires
+  function rgb(h) {
+    h = String(h || '').replace('#', '');
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const n = parseInt(h, 16);
+    return isNaN(n) ? [0, 0, 0] : [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function hex(c) { return '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join(''); }
+  function melange(a, b, t) { const x = rgb(a), y = rgb(b); return hex(x.map((v, i) => v + (y[i] - v) * t)); }
+  function clarte(h) { const [r, g, b] = rgb(h); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; }
+
+  function themePerso() {
+    const fond = R.persoFond, texte = R.persoTexte;
+    const sombre = clarte(fond) < 0.45;
+    return {
+      nom: 'Perso', fond, texte, sombre,
+      doux: melange(texte, fond, 0.45),
+      lien: melange(texte, sombre ? '#e2a585' : '#9c4a2f', 0.6),
+      menu: melange(fond, sombre ? '#ffffff' : '#000000', 0.06)
+    };
+  }
+
+  // ---------------------------------------------------------------- luminosité (écran + voile extra-sombre + filtre chaud)
+  function appliquerLumiere(actif) {
+    const voile = $('#voile-lumiere'), chaud = $('#filtre-chaud');
+    document.body.classList.toggle('lecture', !!actif);
+    if (!actif) {
+      if (A) A.luminosite(-1);
+      voile.style.opacity = 0;
+      chaud.style.opacity = 0;
+      return;
+    }
+    let ecranLum = -1, opacite = 0;
+    if (R.luminosite >= 0) {
+      const v = R.luminosite * 100;
+      if (v >= 20) ecranLum = 0.01 + (v - 20) / 80 * 0.99;
+      else { ecranLum = 0.01; opacite = (20 - v) / 20 * 0.85; }
+    }
+    if (A) A.luminosite(ecranLum);
+    voile.style.opacity = opacite;
+    chaud.style.opacity = (R.chaud || 0) / 100 * 0.55;
+  }
+
+  function texteLumiere() {
+    if (R.luminosite < 0) return 'auto';
+    const v = Math.round(R.luminosite * 100);
+    return v < 20 ? 'nuit ' + Math.round((20 - v) * 5) + ' %' : Math.round((v - 20) * 100 / 80) + ' %';
+  }
 
   function sauverReglages() { Store.set('reglages', R); }
 
@@ -98,11 +151,11 @@ const lecteur = window.lecteur = (() => {
   }
 
   function systeme(actif) {
-    if (!A) return;
+    if (!A) { appliquerLumiere(actif); return; }
     A.pleinEcran(actif && R.pleinEcran);
     A.ecranAllume(actif && R.ecranAllume);
     A.volume(actif && R.volume);
-    A.luminosite(actif ? R.luminosite : -1);
+    appliquerLumiere(actif);
   }
 
   // ================================================================ chargement d'un chapitre
@@ -1028,7 +1081,7 @@ const lecteur = window.lecteur = (() => {
     R[cle] = valeur;
     sauverReglages();
     const miseEnPage = ['taille', 'police', 'interligne', 'marges', 'alignement', 'paragraphes', 'mode', 'images', 'cesure', 'gras', 'deuxPages', 'infos', 'couleursDoc'];
-    if (cle === 'theme' || cle === 'imagesSombre' || cle === 'couleursDoc') appliquerTheme();
+    if (cle === 'theme' || cle === 'imagesSombre' || cle === 'couleursDoc' || cle === 'persoFond' || cle === 'persoTexte') appliquerTheme();
     if (cle === 'infos') appliquerTheme();
     if (['pleinEcran', 'ecranAllume', 'volume'].includes(cle)) systeme(true);
     if (cle === 'mode') {
@@ -1049,7 +1102,8 @@ const lecteur = window.lecteur = (() => {
 
   function construirePanneau() {
     $('#themes').innerHTML = Object.entries(THEMES).map(([k, t]) =>
-      `<div><button class="theme" data-theme="${k}" style="background:${t.fond};color:${t.texte}">Aa</button><span class="theme-nom">${t.nom}</span></div>`).join('');
+      `<div><button class="theme" data-theme="${k}" style="background:${t.fond};color:${t.texte}">Aa</button><span class="theme-nom">${t.nom}</span></div>`).join('')
+      + `<div><button class="theme" data-theme="perso">Aa</button><span class="theme-nom">Perso</span></div>`;
     $('#polices').innerHTML = Object.entries(POLICES).filter(([k]) => k !== 'document' || true).map(([k, p]) =>
       `<button class="police" data-police="${k}" style="font-family:${p.css ? p.css.replace(/"/g, '&quot;') : 'inherit'}">${p.nom}<small>${p.desc}</small></button>`).join('');
     $('#themes').onclick = e => { const b = e.target.closest('[data-theme]'); if (b) changer('theme', b.dataset.theme); };
@@ -1081,15 +1135,34 @@ const lecteur = window.lecteur = (() => {
     $('#r-lum').oninput = e => {
       R.luminosite = e.target.value / 100;
       $('#c-lum-auto').checked = false;
-      $('#v-lum').textContent = e.target.value + ' %';
-      if (A) A.luminosite(R.luminosite);
+      $('#v-lum').textContent = texteLumiere();
+      appliquerLumiere(true);
     };
     $('#r-lum').onchange = sauverReglages;
     $('#c-lum-auto').onchange = e => {
       R.luminosite = e.target.checked ? -1 : $('#r-lum').value / 100;
-      if (A) A.luminosite(R.luminosite);
+      $('#v-lum').textContent = texteLumiere();
+      appliquerLumiere(true);
       sauverReglages();
     };
+    $('#r-chaud').oninput = e => {
+      R.chaud = +e.target.value;
+      $('#v-chaud').textContent = R.chaud ? R.chaud + ' %' : 'non';
+      appliquerLumiere(true);
+    };
+    $('#r-chaud').onchange = sauverReglages;
+    // thème personnalisé
+    const PALETTE_FOND = ['#ffffff', '#f3ece0', '#efe3c8', '#e6efe0', '#dfe8f1', '#f3e1e6', '#e8e4f2', '#2a2622', '#1d2433', '#1f2a22', '#111111', '#000000'];
+    const PALETTE_TEXTE = ['#111111', '#2b2b2b', '#3b2f22', '#1f3a2a', '#1c2e4a', '#4a2030', '#ece7df', '#d8d2c6', '#c9d6e6', '#d4e3c9', '#f2d9a0', '#b8b4ac'];
+    const nuancier = (id, palette, cle) => {
+      const z = $(id);
+      z.innerHTML = palette.map(c => `<button class="pastille" data-c="${c}" style="background:${c}" aria-label="${c}"></button>`).join('')
+        + `<label class="pastille autre" aria-label="Autre couleur"><input type="color" data-cle="${cle}">+</label>`;
+      z.onclick = e => { const b = e.target.closest('[data-c]'); if (b) changer(cle, b.dataset.c); };
+      $('input', z).onchange = e => changer(cle, e.target.value);
+    };
+    nuancier('#perso-fond', PALETTE_FOND, 'persoFond');
+    nuancier('#perso-texte', PALETTE_TEXTE, 'persoTexte');
   }
 
   function majPanneau() {
@@ -1104,8 +1177,17 @@ const lecteur = window.lecteur = (() => {
     $$('#panneau-aa [data-bool]').forEach(i => { i.checked = !!R[i.dataset.bool]; });
     const lum = R.luminosite < 0 ? 60 : Math.round(R.luminosite * 100);
     $('#r-lum').value = lum;
-    $('#v-lum').textContent = R.luminosite < 0 ? 'auto' : lum + ' %';
+    $('#v-lum').textContent = texteLumiere();
     $('#c-lum-auto').checked = R.luminosite < 0;
+    $('#r-chaud').value = R.chaud || 0;
+    $('#v-chaud').textContent = R.chaud ? R.chaud + ' %' : 'non';
+    $('#bloc-perso').hidden = R.theme !== 'perso';
+    $$('#perso-fond [data-c]').forEach(b => b.classList.toggle('actif', b.dataset.c.toLowerCase() === String(R.persoFond).toLowerCase()));
+    $$('#perso-texte [data-c]').forEach(b => b.classList.toggle('actif', b.dataset.c.toLowerCase() === String(R.persoTexte).toLowerCase()));
+    $$('#bloc-perso input[type=color]').forEach(i => { i.value = R[i.dataset.cle]; });
+    const tp = themePerso();
+    const bp = $('[data-theme=perso]');
+    if (bp) { bp.style.background = tp.fond; bp.style.color = tp.texte; }
   }
 
   // ================================================================ boutons de l'interface

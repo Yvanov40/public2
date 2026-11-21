@@ -51,7 +51,7 @@
       <div class="vide-illu"><svg><use href="#i-livre"/></svg></div>
       <h2>Votre bibliothèque est vide</h2>
       <p>Ajoutez un document Word (.docx) : il est converti en livre numérique, avec ses images, ses titres et ses notes, pour une lecture confortable.</p>
-      <p class="petit">Formats acceptés : .docx, .epub, .txt. Vous pouvez aussi utiliser « Partager » ou « Ouvrir avec » depuis une autre application.</p>
+      <p class="petit">Formats acceptés : .docx, .pdf, .epub, .txt. Vous pouvez aussi utiliser « Partager » ou « Ouvrir avec » depuis une autre application.</p>
       <button class="bouton plein" id="b-importer-vide"><svg><use href="#i-plus"/></svg> Ajouter un document</button>
     </div>
   </div>
@@ -80,6 +80,18 @@
       <label class="ligne"><span>Alléger les grandes images<small>Plus rapide et plus léger, qualité préservée à l'écran</small></span><input type="checkbox" id="o-compresser" class="interrupteur"></label>
       <label class="ligne"><span>Première image en couverture<small>Si le document commence par une image</small></span><input type="checkbox" id="o-couv" class="interrupteur"></label>
       <p class="note-reglage">Ces choix s'appliquent aux prochains documents. Pour un livre déjà ajouté, utilisez « Reconvertir » dans son menu.</p>
+    </div>
+    <div class="groupe">
+      <h3>Personnalisation</h3>
+      <div class="ligne colonne"><span>Couleur de l'application</span>
+        <div class="nuancier grand" id="couleurs-app"></div>
+      </div>
+      <div class="ligne colonne"><span>Icône de l'application<small>Elle change sur l'écran d'accueil après quelques secondes.</small></span>
+        <div class="icones" id="icones"></div>
+      </div>
+      <div class="ligne colonne" id="ligne-raccourci"><span>Raccourci avec votre image<small>Ajoute sur l'écran d'accueil un raccourci avec la photo et le nom de votre choix.</small></span>
+        <button class="bouton" id="b-raccourci">Choisir une image…</button>
+      </div>
     </div>
     <div class="groupe">
       <h3>Apparence de la bibliothèque</h3>
@@ -167,6 +179,10 @@
     </div>
     <h4>Thème</h4>
     <div class="themes" id="themes"></div>
+    <div id="bloc-perso" class="bloc-perso" hidden>
+      <span>Fond</span><div class="nuancier" id="perso-fond"></div>
+      <span>Texte</span><div class="nuancier" id="perso-texte"></div>
+    </div>
     <h4>Police</h4>
     <div class="polices" id="polices"></div>
     <h4>Mise en page</h4>
@@ -207,8 +223,11 @@
 <!-- luminosité -->
 <div id="panneau-lum" class="feuille petite">
   <div class="poignee"></div>
-  <div class="curseur-ligne"><svg class="mini"><use href="#i-soleil"/></svg><input type="range" id="r-lum" min="2" max="100"><output id="v-lum"></output></div>
-  <label class="ligne"><span>Luminosité du téléphone</span><input type="checkbox" class="interrupteur" id="c-lum-auto"></label>
+  <div class="curseur-ligne"><svg class="mini"><use href="#i-soleil"/></svg><input type="range" id="r-lum" min="0" max="100"><output id="v-lum"></output></div>
+  <p class="aide">Tout à gauche : mode nuit, plus sombre que le minimum du téléphone.</p>
+  <div class="curseur-ligne"><span>Filtre chaud</span><input type="range" id="r-chaud" min="0" max="100" step="5"><output id="v-chaud"></output></div>
+  <p class="aide">Réduit la lumière bleue pour lire le soir.</p>
+  <label class="ligne"><span>Luminosité automatique du téléphone</span><input type="checkbox" class="interrupteur" id="c-lum-auto"></label>
 </div>
 
 <!-- note de bas de page -->
@@ -227,6 +246,8 @@
 
 <!-- ============================================================ FEUILLES ET DIALOGUES -->
 <div id="voile" class="voile"></div>
+<div id="filtre-chaud" class="filtre-lumiere"></div>
+<div id="voile-lumiere" class="filtre-lumiere"></div>
 
 <div id="actions-livre" class="feuille">
   <div class="poignee"></div>
@@ -257,5 +278,6 @@
 
 <script src="app.js"></script>
 <script src="lecteur.js"></script>
+<script src="conversion-pdf.js"></script>
 </body>
 </html>
