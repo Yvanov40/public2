@@ -65,7 +65,8 @@ La table des matières de Word, les en-têtes, pieds de page et numéros de page
 - **images** à leur taille ou en pleine largeur ; atténuées ou inversées en thème sombre ;
 - **deux pages** côte à côte en paysage, **lecture à une main**, **touches de volume**,
   **plein écran**, **écran toujours allumé**, **luminosité** propre à la lecture ;
-- texte « plus appuyé », couleurs du document, titre / page / heure en haut et en bas.
+- texte « plus appuyé », couleurs du document, titre / page / heure en haut et en bas ;
+- **liens vers Internet** activables ou non (désactivés, ils s'affichent comme du texte normal ; les renvois internes et les notes restent actifs).
 
 **Luminosité** : en dessous du minimum du téléphone grâce au mode nuit (tout à gauche du curseur),
 et **filtre chaud** contre la lumière bleue pour lire le soir.

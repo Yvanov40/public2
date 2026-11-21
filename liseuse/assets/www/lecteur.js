@@ -7,7 +7,7 @@ const lecteur = window.lecteur = (() => {
     taille: 19, theme: 'creme', police: 'literata', interligne: 1.55, marges: 22,
     alignement: 'justifie', paragraphes: 'retrait', mode: 'pages', images: 'document', imagesSombre: 'attenuer',
     cesure: true, gras: false, couleursDoc: true, deuxPages: true, animation: true, uneMain: false,
-    volume: true, pleinEcran: true, ecranAllume: false, infos: true, luminosite: -1,
+    volume: true, pleinEcran: true, ecranAllume: false, infos: true, luminosite: -1, liensExternes: true,
     chaud: 0, persoFond: '#f3ece0', persoTexte: '#2b2b2b'
   };
 
@@ -275,7 +275,12 @@ const lecteur = window.lecteur = (() => {
     r.push(`body *:not(.coul):not(td):not(th):not(tr):not(table):not(mark) { background-color: transparent !important; }`);
     if (!R.couleursDoc) r.push(`body .coul { color: inherit !important; background-color: transparent !important; }`);
     else if (t.sombre) r.push(`body .coul[style*="background"] { color: #161616 !important; }`);
-    r.push(`body a, body a * { color: ${t.lien} !important; }`);
+    r.push(`body a[href]:not(.coul):not(mark), body a[href] *:not(.coul):not(mark) { color: ${t.lien} !important; }`);
+    if (!R.liensExternes) {
+      // liens vers Internet désactivés : affichés comme du texte normal
+      const ext = ['http:', 'https:', 'mailto:', 'tel:', 'www.'].map(x => `body a[href^="${x}"]:not(.coul):not(mark)`);
+      r.push(`${ext.join(', ')}, ${ext.map(x => x + ' *').join(', ')} { color: inherit !important; text-decoration: none !important; cursor: default; }`);
+    }
     r.push(`body a.noteref, body a[href*="#n"] sup, body sup a { text-decoration: none !important; }`);
     if (R.alignement === 'justifie') r.push(`body p, body li, body blockquote, body dd { text-align: justify; }`);
     else if (R.alignement === 'gauche') r.push(`body p, body li, body blockquote, body dd { text-align: left; } body { text-align: left !important; }`);
@@ -517,7 +522,7 @@ const lecteur = window.lecteur = (() => {
     if (sel && !sel.isCollapsed && sel.toString().trim()) { sel.removeAllRanges(); return true; }
     if (cible && cible.nodeType !== 1) cible = cible.parentElement;
     const a = cible && cible.closest && cible.closest('a[href]');
-    if (a) { lien(a); return true; }
+    if (a && !(lienExterne(a) && !R.liensExternes)) { lien(a); return true; }
     if (menusOn) { menus(false); return true; }
     const img = cible && cible.closest && cible.closest('img, image');
     if (img) { ouvrirImage(img); return true; }
@@ -563,6 +568,12 @@ const lecteur = window.lecteur = (() => {
     };
   }
 
+  /** Le lien sort-il du livre (Internet, courriel, téléphone) ? */
+  function lienExterne(a) {
+    const href = a.href && a.href.baseVal !== undefined ? a.href.baseVal : a.href;
+    return !!href && !cheminDepuisUrl(String(href));
+  }
+
   function lien(a) {
     const href = a.href && a.href.baseVal !== undefined ? a.href.baseVal : a.href;
     if (!href) return;
@@ -571,7 +582,7 @@ const lecteur = window.lecteur = (() => {
       if (/^(https?|mailto|tel):/i.test(href)) {
         app.dialogue('Ouvrir le lien ?', `<p style="word-break:break-all">${esc(href)}</p>`,
           [{ texte: 'Annuler', valeur: false }, { texte: 'Ouvrir', classe: 'plein', valeur: true }])
-          .then(ok => { if (ok && A) A.lien(href); });
+          .then(ok => { if (ok && A && R.liensExternes) A.lien(href); });
       }
       return;
     }
@@ -1080,7 +1091,7 @@ const lecteur = window.lecteur = (() => {
   function changer(cle, valeur) {
     R[cle] = valeur;
     sauverReglages();
-    const miseEnPage = ['taille', 'police', 'interligne', 'marges', 'alignement', 'paragraphes', 'mode', 'images', 'cesure', 'gras', 'deuxPages', 'infos', 'couleursDoc'];
+    const miseEnPage = ['liensExternes', 'taille', 'police', 'interligne', 'marges', 'alignement', 'paragraphes', 'mode', 'images', 'cesure', 'gras', 'deuxPages', 'infos', 'couleursDoc'];
     if (cle === 'theme' || cle === 'imagesSombre' || cle === 'couleursDoc' || cle === 'persoFond' || cle === 'persoTexte') appliquerTheme();
     if (cle === 'infos') appliquerTheme();
     if (['pleinEcran', 'ecranAllume', 'volume'].includes(cle)) systeme(true);
