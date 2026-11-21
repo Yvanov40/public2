@@ -675,7 +675,9 @@ public final class MainActivity extends Activity {
                     "c", data.getIntExtra(PdfActivity.EXTRA_PAGE, 0),
                     "f", (double) data.getFloatExtra(PdfActivity.EXTRA_FRACTION, 0f),
                     "n", data.getIntExtra("total", 0),
-                    "nuit", data.getBooleanExtra(PdfActivity.EXTRA_NUIT, false));
+                    "nuit", data.getBooleanExtra(PdfActivity.EXTRA_NUIT, false),
+                    "lum", (double) data.getFloatExtra(PdfActivity.EXTRA_LUM, -1f),
+                    "chaud", data.getIntExtra(PdfActivity.EXTRA_CHAUD, 0));
             js("window.app && app.pdfFerme && app.pdfFerme(" + o + ")");
         } else if (req == REQ_DOSSIER && data.getData() != null && exportIds != null) {
             final Uri arbre = data.getData();

@@ -57,7 +57,10 @@ public final class PdfActivity extends Activity {
     private PdfView vue;
     private LinearLayout haut, bas;
     private TextView titre, numero, pastille;
-    private View voile;
+    private View voile, filtreChaud;
+    private LinearLayout panneauLum;
+    private float lum;   // -1 = automatique, sinon 0..1 (sous 0,2 : mode nuit extra-sombre)
+    private int chaud;   // 0..100
     private boolean nuit;
     private boolean barres;
     private float densite;
@@ -84,18 +87,8 @@ public final class PdfActivity extends Activity {
         w.setStatusBarColor(0xFF1F1F21);
         w.setNavigationBarColor(0xFF1F1F21);
         if (in.getBooleanExtra(EXTRA_ALLUME, false)) w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        float lum = in.getFloatExtra(EXTRA_LUM, -1f);
-        float voileAlpha = 0f;
-        WindowManager.LayoutParams lp = w.getAttributes();
-        if (lum >= 0) {
-            float v = lum * 100f;
-            if (v >= 20) lp.screenBrightness = 0.01f + (v - 20) / 80f * 0.99f;
-            else {
-                lp.screenBrightness = 0.01f;
-                voileAlpha = (20 - v) / 20f * 0.85f;
-            }
-        }
-        w.setAttributes(lp);
+        lum = in.getFloatExtra(EXTRA_LUM, -1f);
+        chaud = in.getIntExtra(EXTRA_CHAUD, 0);
         if (in.getBooleanExtra(EXTRA_PLEIN, true)) pleinEcran(true);
 
         FrameLayout racine = new FrameLayout(this);
@@ -104,17 +97,11 @@ public final class PdfActivity extends Activity {
         racine.addView(vue, new FrameLayout.LayoutParams(-1, -1));
 
         // voile de nuit et filtre chaud (simples calques semi-transparents)
-        int chaud = in.getIntExtra(EXTRA_CHAUD, 0);
-        if (chaud > 0) {
-            View c = new View(this);
-            c.setBackgroundColor(0xFFFF8A1E);
-            c.setAlpha(chaud / 100f * 0.3f);
-            c.setClickable(false);
-            racine.addView(c, new FrameLayout.LayoutParams(-1, -1));
-        }
+        filtreChaud = new View(this);
+        filtreChaud.setBackgroundColor(0xFFFF8A1E);
+        racine.addView(filtreChaud, new FrameLayout.LayoutParams(-1, -1));
         voile = new View(this);
         voile.setBackgroundColor(0xFF000000);
-        voile.setAlpha(voileAlpha);
         racine.addView(voile, new FrameLayout.LayoutParams(-1, -1));
 
         // barre du haut
@@ -173,6 +160,12 @@ public final class PdfActivity extends Activity {
                 vue.setNuit(nuit);
             }
         });
+        ajouterAction("Luminosité", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                panneauLum.setVisibility(panneauLum.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+            }
+        });
         ajouterAction("Autre appli", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -180,6 +173,7 @@ public final class PdfActivity extends Activity {
             }
         });
         racine.addView(bas, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+        construirePanneauLumiere(racine);
 
         // pastille du numéro de page
         pastille = new TextView(this);
@@ -196,6 +190,7 @@ public final class PdfActivity extends Activity {
         pastille.setAlpha(0f);
 
         setContentView(racine);
+        appliquerLumiere();
         montrerBarres(false);
         vue.setNuit(nuit);
 
@@ -211,6 +206,140 @@ public final class PdfActivity extends Activity {
                 ouvrirMoteur(page, fraction);
             }
         });
+    }
+
+    /** Applique la luminosité : écran du téléphone, voile extra-sombre, filtre chaud. */
+    private void appliquerLumiere() {
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+        float voileAlpha = 0f;
+        if (lum < 0) {
+            lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+        } else {
+            float v = lum * 100f;
+            if (v >= 20) lp.screenBrightness = 0.01f + (v - 20) / 80f * 0.99f;
+            else {
+                lp.screenBrightness = 0.01f;
+                voileAlpha = (20 - v) / 20f * 0.85f;
+            }
+        }
+        getWindow().setAttributes(lp);
+        voile.setAlpha(voileAlpha);
+        voile.setVisibility(voileAlpha > 0 ? View.VISIBLE : View.GONE);
+        float ac = chaud / 100f * 0.3f;
+        filtreChaud.setAlpha(ac);
+        filtreChaud.setVisibility(ac > 0 ? View.VISIBLE : View.GONE);
+    }
+
+    private void construirePanneauLumiere(FrameLayout racine) {
+        panneauLum = new LinearLayout(this);
+        panneauLum.setOrientation(LinearLayout.VERTICAL);
+        panneauLum.setPadding(dp(18), dp(14), dp(18), dp(14));
+        GradientDrawable fond = new GradientDrawable();
+        fond.setColor(0xF2262628);
+        fond.setCornerRadius(dp(18));
+        panneauLum.setBackground(fond);
+        panneauLum.setClickable(true); // les touchers sur le panneau ne traversent pas
+
+        final TextView valLum = new TextView(this);
+        final TextView valChaud = new TextView(this);
+        final android.widget.SeekBar curseur = new android.widget.SeekBar(this);
+        final android.widget.SeekBar curseurChaud = new android.widget.SeekBar(this);
+        final android.widget.CheckBox auto = new android.widget.CheckBox(this);
+
+        panneauLum.addView(ligne("Luminosité", curseur, valLum));
+        TextView aide = new TextView(this);
+        aide.setText("Tout à gauche : mode nuit, plus sombre que le minimum du téléphone.");
+        aide.setTextColor(0xFF999999);
+        aide.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        aide.setPadding(0, 0, 0, dp(10));
+        panneauLum.addView(aide);
+        panneauLum.addView(ligne("Filtre chaud", curseurChaud, valChaud));
+        auto.setText("Luminosité automatique du téléphone");
+        auto.setTextColor(0xFFDDDDDD);
+        auto.setPadding(dp(4), dp(8), 0, dp(4));
+        panneauLum.addView(auto);
+
+        curseur.setMax(100);
+        curseur.setProgress(lum < 0 ? 60 : Math.round(lum * 100));
+        curseurChaud.setMax(100);
+        curseurChaud.setProgress(chaud);
+        auto.setChecked(lum < 0);
+        valLum.setText(texteLum());
+        valChaud.setText(chaud > 0 ? chaud + " %" : "non");
+
+        curseur.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(android.widget.SeekBar b, int v, boolean user) {
+                if (!user) return;
+                lum = v / 100f;
+                auto.setChecked(false);
+                valLum.setText(texteLum());
+                appliquerLumiere();
+            }
+
+            @Override
+            public void onStartTrackingTouch(android.widget.SeekBar b) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(android.widget.SeekBar b) {
+            }
+        });
+        curseurChaud.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(android.widget.SeekBar b, int v, boolean user) {
+                if (!user) return;
+                chaud = v;
+                valChaud.setText(chaud > 0 ? chaud + " %" : "non");
+                appliquerLumiere();
+            }
+
+            @Override
+            public void onStartTrackingTouch(android.widget.SeekBar b) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(android.widget.SeekBar b) {
+            }
+        });
+        auto.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(android.widget.CompoundButton b, boolean oui) {
+                lum = oui ? -1f : curseur.getProgress() / 100f;
+                valLum.setText(texteLum());
+                appliquerLumiere();
+            }
+        });
+
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        lp.leftMargin = dp(10);
+        lp.rightMargin = dp(10);
+        lp.bottomMargin = dp(96);
+        panneauLum.setVisibility(View.GONE);
+        racine.addView(panneauLum, lp);
+    }
+
+    private LinearLayout ligne(String nom, android.widget.SeekBar curseur, TextView valeur) {
+        LinearLayout l = new LinearLayout(this);
+        l.setOrientation(LinearLayout.HORIZONTAL);
+        l.setGravity(Gravity.CENTER_VERTICAL);
+        TextView t = new TextView(this);
+        t.setText(nom);
+        t.setTextColor(0xFFDDDDDD);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        l.addView(t, new LinearLayout.LayoutParams(dp(96), -2));
+        l.addView(curseur, new LinearLayout.LayoutParams(0, dp(44), 1f));
+        valeur.setTextColor(0xFFAAAAAA);
+        valeur.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        valeur.setGravity(Gravity.END);
+        l.addView(valeur, new LinearLayout.LayoutParams(dp(70), -2));
+        return l;
+    }
+
+    private String texteLum() {
+        if (lum < 0) return "auto";
+        int v = Math.round(lum * 100);
+        return v < 20 ? "nuit " + Math.round((20 - v) * 5) + " %" : Math.round((v - 20) * 100 / 80f) + " %";
     }
 
     private int dp(float v) {
@@ -240,6 +369,10 @@ public final class PdfActivity extends Activity {
     }
 
     void basculerBarres() {
+        if (panneauLum != null && panneauLum.getVisibility() == View.VISIBLE) {
+            panneauLum.setVisibility(View.GONE);
+            return;
+        }
         montrerBarres(!barres);
     }
 
@@ -247,6 +380,7 @@ public final class PdfActivity extends Activity {
         barres = v;
         haut.setVisibility(v ? View.VISIBLE : View.GONE);
         bas.setVisibility(v ? View.VISIBLE : View.GONE);
+        if (!v && panneauLum != null) panneauLum.setVisibility(View.GONE);
     }
 
     void majNumero(int page, int total) {
@@ -301,6 +435,8 @@ public final class PdfActivity extends Activity {
         r.putExtra(EXTRA_FRACTION, vue.fractionCourante());
         r.putExtra("total", vue.total());
         r.putExtra(EXTRA_NUIT, nuit);
+        r.putExtra(EXTRA_LUM, lum);
+        r.putExtra(EXTRA_CHAUD, chaud);
         setResult(RESULT_OK, r);
         super.finish();
     }
@@ -308,7 +444,8 @@ public final class PdfActivity extends Activity {
     @Override
     public boolean onKeyDown(int k, KeyEvent e) {
         if (k == KeyEvent.KEYCODE_BACK) {
-            finish();
+            if (panneauLum != null && panneauLum.getVisibility() == View.VISIBLE) panneauLum.setVisibility(View.GONE);
+            else finish();
             return true;
         }
         return super.onKeyDown(k, e);

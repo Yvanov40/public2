@@ -1248,6 +1248,7 @@ const lecteur = window.lecteur = (() => {
   return {
     ouvrir, fermer, tourner, sauver, menus, heure, fermerImage, appliquerTheme,
     lumiere: appliquerLumiere,
+    definirLumiere: (lum, chaud) => { R.luminosite = lum < 0 ? -1 : lum; R.chaud = chaud; sauverReglages(); },
     lumiereAuto: () => {
       R.luminosite = -1;
       sauverReglages();

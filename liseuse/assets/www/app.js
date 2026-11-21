@@ -632,6 +632,7 @@ app.pdfFerme = function (r) {
   if (!r || !r.id) return;
   if (r.n > 0) Store.set('pos:' + r.id, { c: r.c, f: r.f, p: (r.c + 1) / r.n, t: Date.now(), chap: `Page ${r.c + 1} sur ${r.n}` });
   Store.set('pdfNuit', !!r.nuit);
+  if (r.lum !== undefined) lecteur.definirLumiere(r.lum, r.chaud || 0);
   couleursBarres();
   afficherBiblio();
 };
