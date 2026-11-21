@@ -612,10 +612,29 @@ function choisirModePdf(e) {
 
 function ouvrirPdf(l) {
   if (app.ecran === 'lecteur-pdf') return;
+  // lecteur natif Android : écran séparé, qui ne peut pas figer la bibliothèque
+  if (A && A.ouvrirPdfNatif) {
+    const pos = position(l.id) || {};
+    const R = lecteur.reglages();
+    A.ouvrirPdfNatif(l.id, l.titre || 'PDF', JSON.stringify({
+      c: pos.c || 0, f: pos.f || 0, nuit: !!Store.get('pdfNuit', false),
+      lum: R.luminosite, chaud: R.chaud || 0, plein: !!R.pleinEcran, allume: !!R.ecranAllume
+    }));
+    return;
+  }
   montrer('lecteur-pdf');
   Store.set('ouvert', l.id);
   visionneusePdf.ouvrir(l);
 }
+
+/** Retour du lecteur PDF natif : position et mode nuit. */
+app.pdfFerme = function (r) {
+  if (!r || !r.id) return;
+  if (r.n > 0) Store.set('pos:' + r.id, { c: r.c, f: r.f, p: (r.c + 1) / r.n, t: Date.now(), chap: `Page ${r.c + 1} sur ${r.n}` });
+  Store.set('pdfNuit', !!r.nuit);
+  couleursBarres();
+  afficherBiblio();
+};
 
 app.fermerPdf = function () {
   // l'écran d'accueil d'abord : même si la fermeture du lecteur échoue, on revient à la bibliothèque

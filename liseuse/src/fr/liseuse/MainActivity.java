@@ -54,7 +54,7 @@ public final class MainActivity extends Activity {
 
     static final String HOTE = "appassets.androidplatform.net";
     static final String BASE = "https://" + HOTE + "/";
-    private static final int REQ_IMPORT = 1, REQ_EXPORT = 2, REQ_IMAGE = 3, REQ_DOSSIER = 4;
+    private static final int REQ_IMPORT = 1, REQ_EXPORT = 2, REQ_IMAGE = 3, REQ_DOSSIER = 4, REQ_PDF = 5;
     private org.json.JSONArray exportIds;
     static final int NB_ICONES = 8;
     private String nomRaccourci = "Liseuse";
@@ -670,6 +670,13 @@ public final class MainActivity extends Activity {
             if (cd != null) for (int i = 0; i < cd.getItemCount(); i++) l.add(cd.getItemAt(i).getUri());
             else if (data.getData() != null) l.add(data.getData());
             for (Uri u : l) importer(u, l.size() == 1);
+        } else if (req == REQ_PDF) {
+            JSONObject o = obj("id", data.getStringExtra(PdfActivity.EXTRA_ID),
+                    "c", data.getIntExtra(PdfActivity.EXTRA_PAGE, 0),
+                    "f", (double) data.getFloatExtra(PdfActivity.EXTRA_FRACTION, 0f),
+                    "n", data.getIntExtra("total", 0),
+                    "nuit", data.getBooleanExtra(PdfActivity.EXTRA_NUIT, false));
+            js("window.app && app.pdfFerme && app.pdfFerme(" + o + ")");
         } else if (req == REQ_DOSSIER && data.getData() != null && exportIds != null) {
             final Uri arbre = data.getData();
             final org.json.JSONArray ids = exportIds;
@@ -1201,6 +1208,32 @@ public final class MainActivity extends Activity {
                         startActivity(Intent.createChooser(i, "Partager le livre"));
                     } catch (Exception e) {
                         toast("Aucune application pour partager.");
+                    }
+                }
+            });
+        }
+
+        /** Ouvre le lecteur PDF natif (écran séparé de la WebView). */
+        @JavascriptInterface
+        public void ouvrirPdfNatif(final String id, final String titre, final String reglages) {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        JSONObject r = new JSONObject(reglages == null ? "{}" : reglages);
+                        Intent i = new Intent(MainActivity.this, PdfActivity.class);
+                        i.putExtra(PdfActivity.EXTRA_ID, id);
+                        i.putExtra(PdfActivity.EXTRA_TITRE, titre);
+                        i.putExtra(PdfActivity.EXTRA_PAGE, r.optInt("c", 0));
+                        i.putExtra(PdfActivity.EXTRA_FRACTION, (float) r.optDouble("f", 0));
+                        i.putExtra(PdfActivity.EXTRA_NUIT, r.optBoolean("nuit", false));
+                        i.putExtra(PdfActivity.EXTRA_LUM, (float) r.optDouble("lum", -1));
+                        i.putExtra(PdfActivity.EXTRA_CHAUD, r.optInt("chaud", 0));
+                        i.putExtra(PdfActivity.EXTRA_PLEIN, r.optBoolean("plein", true));
+                        i.putExtra(PdfActivity.EXTRA_ALLUME, r.optBoolean("allume", false));
+                        startActivityForResult(i, REQ_PDF);
+                    } catch (Exception e) {
+                        toast("Ouverture du PDF impossible : " + message(e));
                     }
                 }
             });
