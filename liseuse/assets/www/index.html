@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Liseuse</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-retour" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></symbol>
+    <symbol id="i-plus-v" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="18.5" r="1.4"/></symbol>
+    <symbol id="i-aa" viewBox="0 0 24 24"><path d="M3 19l5-13 5 13M4.8 14.5h6.4M14 19l3.5-9 3.5 9M15.2 16h4.6"/></symbol>
+    <symbol id="i-signet" viewBox="0 0 24 24"><path d="M7 4h10v16l-5-4-5 4z"/></symbol>
+    <symbol id="i-cherche" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></symbol>
+    <symbol id="i-reglages" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></symbol>
+    <symbol id="i-fermer" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-tri" viewBox="0 0 24 24"><path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"/></symbol>
+    <symbol id="i-livre" viewBox="0 0 24 24"><path d="M4 5.5C6.5 4.5 9.5 4.5 12 6c2.5-1.5 5.5-1.5 8-.5v13c-2.5-1-5.5-1-8 .5-2.5-1.5-5.5-1.5-8-.5z"/><path d="M12 6v13"/></symbol>
+    <symbol id="i-avant" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+    <symbol id="i-soleil" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-poubelle" viewBox="0 0 24 24"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"/></symbol>
+    <symbol id="i-partage" viewBox="0 0 24 24"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="M8.2 10.8l7.6-4M8.2 13.2l7.6 4"/></symbol>
+    <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></symbol>
+    <symbol id="i-crayon" viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/></symbol>
+    <symbol id="i-refaire" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.1-5M19 4v4h-4"/></symbol>
+  </defs>
+</svg>
+
+<!-- ============================================================ BIBLIOTHÈQUE -->
+<section id="biblio" class="ecran actif">
+  <header class="barre">
+    <h1>Bibliothèque</h1>
+    <button class="ico" id="b-cherche" aria-label="Rechercher"><svg><use href="#i-cherche"/></svg></button>
+    <button class="ico" id="b-tri" aria-label="Trier"><svg><use href="#i-tri"/></svg></button>
+    <button class="ico" id="b-reglages" aria-label="Réglages"><svg><use href="#i-reglages"/></svg></button>
+  </header>
+  <div class="recherche-biblio" id="zone-cherche" hidden>
+    <input type="search" id="filtre" placeholder="Titre ou auteur…" autocomplete="off">
+  </div>
+  <div class="defile" id="biblio-defile">
+    <div id="continuer"></div>
+    <div id="tri-info" class="tri-info"></div>
+    <div id="grille" class="grille"></div>
+    <div id="vide" class="vide" hidden>
+      <div class="vide-illu"><svg><use href="#i-livre"/></svg></div>
+      <h2>Votre bibliothèque est vide</h2>
+      <p>Ajoutez un document Word (.docx) : il est converti en livre numérique, avec ses images, ses titres et ses notes, pour une lecture confortable.</p>
+      <p class="petit">Formats acceptés : .docx, .epub, .txt. Vous pouvez aussi utiliser « Partager » ou « Ouvrir avec » depuis une autre application.</p>
+      <button class="bouton plein" id="b-importer-vide"><svg><use href="#i-plus"/></svg> Ajouter un document</button>
+    </div>
+  </div>
+  <button class="fab" id="b-importer" aria-label="Ajouter un document"><svg><use href="#i-plus"/></svg><span>Ajouter</span></button>
+</section>
+
+<!-- ============================================================ RÉGLAGES GÉNÉRAUX -->
+<section id="parametres" class="ecran">
+  <header class="barre">
+    <button class="ico" data-retour aria-label="Retour"><svg><use href="#i-retour"/></svg></button>
+    <h1>Réglages</h1>
+  </header>
+  <div class="defile">
+    <div class="groupe">
+      <h3>Conversion des documents Word</h3>
+      <label class="ligne"><span>Nouveau chapitre à chaque<small>Découpe le livre selon les titres du document</small></span>
+        <select id="o-niveau">
+          <option value="1">Titre 1</option>
+          <option value="2">Titre 1 et 2</option>
+          <option value="3">Titre 1, 2 et 3</option>
+          <option value="0">Jamais (un seul bloc)</option>
+        </select>
+      </label>
+      <label class="ligne"><span>Repérer les chapitres sans style<small>« Chapitre 1 », « Prologue »… même tapés à la main</small></span><input type="checkbox" id="o-detecter" class="interrupteur"></label>
+      <label class="ligne"><span>Respecter les sauts de page<small>Un saut de page Word commence une nouvelle page</small></span><input type="checkbox" id="o-sauts" class="interrupteur"></label>
+      <label class="ligne"><span>Alléger les grandes images<small>Plus rapide et plus léger, qualité préservée à l'écran</small></span><input type="checkbox" id="o-compresser" class="interrupteur"></label>
+      <label class="ligne"><span>Première image en couverture<small>Si le document commence par une image</small></span><input type="checkbox" id="o-couv" class="interrupteur"></label>
+      <p class="note-reglage">Ces choix s'appliquent aux prochains documents. Pour un livre déjà ajouté, utilisez « Reconvertir » dans son menu.</p>
+    </div>
+    <div class="groupe">
+      <h3>Apparence de la bibliothèque</h3>
+      <label class="ligne"><span>Thème</span>
+        <select id="o-apparence">
+          <option value="systeme">Comme le téléphone</option>
+          <option value="clair">Clair</option>
+          <option value="sombre">Sombre</option>
+        </select>
+      </label>
+      <label class="ligne"><span>Affichage</span>
+        <select id="o-affichage">
+          <option value="grille">Couvertures</option>
+          <option value="liste">Liste</option>
+        </select>
+      </label>
+      <label class="ligne"><span>Reprendre le dernier livre au démarrage</span><input type="checkbox" id="o-reprendre" class="interrupteur"></label>
+    </div>
+    <div class="groupe">
+      <h3>À propos</h3>
+      <p class="texte-reglage">Liseuse <span id="version"></span> — convertit vos documents Word en livres EPUB et les affiche page par page. Tout reste sur le téléphone : aucun fichier n'est envoyé sur Internet.</p>
+      <p class="texte-reglage petit">Polices : Literata, Merriweather, Atkinson Hyperlegible, OpenDyslexic (licence SIL Open Font).</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ LECTEUR -->
+<section id="lecteur" class="ecran">
+  <div id="entete" class="entete"><span id="e-chap"></span><span id="e-heure"></span></div>
+  <div id="cadre"><iframe id="page" title="Page du livre"></iframe></div>
+  <div id="pied" class="pied"><span id="p-gauche"></span><span id="p-droite"></span></div>
+  <div id="chargement" class="chargement"><div class="rond"></div></div>
+
+  <div id="menu-haut" class="menu-haut">
+    <button class="ico" id="l-retour" aria-label="Bibliothèque"><svg><use href="#i-retour"/></svg></button>
+    <div class="menu-titre"><strong id="l-titre"></strong><small id="l-auteur"></small></div>
+    <button class="ico" id="l-cherche" aria-label="Rechercher"><svg><use href="#i-cherche"/></svg></button>
+    <button class="ico" id="l-signet" aria-label="Marque-page"><svg><use href="#i-signet"/></svg></button>
+  </div>
+  <div id="menu-bas" class="menu-bas">
+    <div class="progression">
+      <button class="ico petit" id="l-chap-prec" aria-label="Chapitre précédent"><svg><use href="#i-retour"/></svg></button>
+      <input type="range" id="l-curseur" min="0" max="1000" value="0" aria-label="Position dans le livre">
+      <button class="ico petit" id="l-chap-suiv" aria-label="Chapitre suivant"><svg><use href="#i-avant"/></svg></button>
+    </div>
+    <div class="prog-texte" id="l-prog"></div>
+    <div class="actions">
+      <button id="l-toc"><svg><use href="#i-menu"/></svg><span>Sommaire</span></button>
+      <button id="l-lum"><svg><use href="#i-soleil"/></svg><span>Luminosité</span></button>
+      <button id="l-aa"><svg><use href="#i-aa"/></svg><span>Affichage</span></button>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============================================================ PANNEAUX DU LECTEUR -->
+  <!-- tiroir sommaire / signets / recherche -->
+<div id="tiroir" class="tiroir">
+  <div class="tiroir-tete">
+    <div class="onglets">
+      <button data-onglet="toc" class="actif">Sommaire</button>
+      <button data-onglet="signets">Marque-pages</button>
+      <button data-onglet="cherche">Recherche</button>
+    </div>
+    <button class="ico" data-fermer aria-label="Fermer"><svg><use href="#i-fermer"/></svg></button>
+  </div>
+  <div class="tiroir-corps">
+    <div data-panneau="toc"><ol id="liste-toc" class="liste-toc"></ol></div>
+    <div data-panneau="signets" hidden><div id="liste-signets"></div></div>
+    <div data-panneau="cherche" hidden>
+      <form id="f-cherche" class="champ-cherche"><input type="search" id="q-cherche" placeholder="Mot ou expression…" autocomplete="off"><button class="bouton plein">OK</button></form>
+      <div id="resultats"></div>
+    </div>
+  </div>
+</div>
+
+<!-- panneau d'affichage -->
+<div id="panneau-aa" class="feuille">
+  <div class="poignee"></div>
+  <div class="feuille-defile">
+    <div class="rang">
+      <button class="pas" data-pas="taille:-1" aria-label="Plus petit">A<sup>−</sup></button>
+      <div class="valeur"><span id="v-taille"></span><small>taille</small></div>
+      <button class="pas grand" data-pas="taille:1" aria-label="Plus grand">A<sup>+</sup></button>
+    </div>
+    <h4>Thème</h4>
+    <div class="themes" id="themes"></div>
+    <h4>Police</h4>
+    <div class="polices" id="polices"></div>
+    <h4>Mise en page</h4>
+    <div class="curseur-ligne"><span>Interligne</span><input type="range" id="r-interligne" min="110" max="240" step="5"><output id="v-interligne"></output></div>
+    <div class="curseur-ligne"><span>Marges</span><input type="range" id="r-marges" min="0" max="60" step="2"><output id="v-marges"></output></div>
+    <div class="choix" data-reglage="alignement">
+      <button data-v="justifie">Justifié</button><button data-v="gauche">À gauche</button><button data-v="document">Document</button>
+    </div>
+    <div class="choix" data-reglage="paragraphes">
+      <button data-v="retrait">Retrait</button><button data-v="espace">Espacés</button><button data-v="document">Document</button>
+    </div>
+    <div class="choix" data-reglage="mode">
+      <button data-v="pages">Pages</button><button data-v="defilement">Défilement</button>
+    </div>
+    <h4>Images</h4>
+    <div class="choix" data-reglage="images">
+      <button data-v="document">Taille d'origine</button><button data-v="large">Pleine largeur</button>
+    </div>
+    <div class="choix" data-reglage="imagesSombre">
+      <button data-v="normal">Normales</button><button data-v="attenuer">Atténuées</button><button data-v="inverser">Inversées</button>
+    </div>
+    <p class="aide">Atténuées / inversées : seulement avec un thème sombre.</p>
+    <h4>Confort</h4>
+    <label class="ligne"><span>Césure (coupure des mots)</span><input type="checkbox" class="interrupteur" data-bool="cesure"></label>
+    <label class="ligne"><span>Texte plus appuyé</span><input type="checkbox" class="interrupteur" data-bool="gras"></label>
+    <label class="ligne"><span>Couleurs du document</span><input type="checkbox" class="interrupteur" data-bool="couleursDoc"></label>
+    <label class="ligne"><span>Deux pages en paysage</span><input type="checkbox" class="interrupteur" data-bool="deuxPages"></label>
+    <label class="ligne"><span>Animation des pages</span><input type="checkbox" class="interrupteur" data-bool="animation"></label>
+    <label class="ligne"><span>Toucher à gauche = page suivante<small>Lecture à une main</small></span><input type="checkbox" class="interrupteur" data-bool="uneMain"></label>
+    <label class="ligne"><span>Touches de volume pour tourner</span><input type="checkbox" class="interrupteur" data-bool="volume"></label>
+    <label class="ligne"><span>Plein écran</span><input type="checkbox" class="interrupteur" data-bool="pleinEcran"></label>
+    <label class="ligne"><span>Garder l'écran allumé</span><input type="checkbox" class="interrupteur" data-bool="ecranAllume"></label>
+    <label class="ligne"><span>Afficher titre, page et heure</span><input type="checkbox" class="interrupteur" data-bool="infos"></label>
+    <button class="bouton lien" id="b-defaut">Rétablir les réglages par défaut</button>
+  </div>
+</div>
+
+<!-- luminosité -->
+<div id="panneau-lum" class="feuille petite">
+  <div class="poignee"></div>
+  <div class="curseur-ligne"><svg class="mini"><use href="#i-soleil"/></svg><input type="range" id="r-lum" min="2" max="100"><output id="v-lum"></output></div>
+  <label class="ligne"><span>Luminosité du téléphone</span><input type="checkbox" class="interrupteur" id="c-lum-auto"></label>
+</div>
+
+<!-- note de bas de page -->
+<div id="note" class="feuille note">
+  <div class="poignee"></div>
+  <div id="note-corps" class="note-corps"></div>
+  <div class="note-actions"><button class="bouton lien" id="note-aller">Aller à la note</button><button class="bouton" data-fermer>Fermer</button></div>
+</div>
+
+<!-- visionneuse d'image -->
+<div id="visionneuse" class="visionneuse">
+  <img id="v-img" alt="">
+  <button class="ico" data-fermer aria-label="Fermer"><svg><use href="#i-fermer"/></svg></button>
+  <div class="v-aide">Pincez pour zoomer · double toucher</div>
+</div>
+
+<!-- ============================================================ FEUILLES ET DIALOGUES -->
+<div id="voile" class="voile"></div>
+
+<div id="actions-livre" class="feuille">
+  <div class="poignee"></div>
+  <div class="actions-tete">
+    <div class="mini-couv" id="a-couv"></div>
+    <div><strong id="a-titre"></strong><small id="a-auteur"></small></div>
+  </div>
+  <div class="liste-actions">
+    <button data-action="lire"><svg><use href="#i-livre"/></svg>Lire</button>
+    <button data-action="infos"><svg><use href="#i-info"/></svg>Informations</button>
+    <button data-action="renommer"><svg><use href="#i-crayon"/></svg>Modifier le titre et l'auteur</button>
+    <button data-action="exporter"><svg><use href="#i-dl"/></svg>Enregistrer le fichier EPUB</button>
+    <button data-action="partager"><svg><use href="#i-partage"/></svg>Partager / ouvrir dans une autre appli</button>
+    <button data-action="reconvertir"><svg><use href="#i-refaire"/></svg>Reconvertir avec les réglages actuels</button>
+    <button data-action="debut"><svg><use href="#i-retour"/></svg>Revenir au début du livre</button>
+    <button data-action="supprimer" class="danger"><svg><use href="#i-poubelle"/></svg>Supprimer</button>
+  </div>
+</div>
+
+<div id="dialogue" class="dialogue" role="dialog">
+  <h2 id="d-titre"></h2>
+  <div id="d-corps"></div>
+  <div class="d-boutons" id="d-boutons"></div>
+</div>
+
+<div id="import" class="import"><div class="rond"></div><span id="import-texte"></span></div>
+<div id="toast" class="toast"></div>
+
+<script src="app.js"></script>
+<script src="lecteur.js"></script>
+</body>
+</html>

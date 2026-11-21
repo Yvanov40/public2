@@ -1,0 +1,81 @@
+# Liseuse — Word → EPUB sur Android
+
+Application Android qui transforme vos documents **Word (.docx)** en livres **EPUB** et les affiche
+page par page, comme une liseuse. Tout se passe sur le téléphone : aucun fichier n'est envoyé sur Internet.
+
+**Installer :** téléchargez [`Liseuse.apk`](Liseuse.apk) sur le téléphone, ouvrez-le et autorisez
+l'installation depuis cette source si Android le demande. Android 7.0 ou plus récent.
+
+## Ajouter un document
+
+- bouton **Ajouter** dans la bibliothèque (plusieurs fichiers à la fois possibles) ;
+- ou, depuis Word, Drive, Gmail, Fichiers… : **Partager** ou **Ouvrir avec → Liseuse**.
+
+Formats acceptés : `.docx`, `.epub` (lu tel quel), `.txt`. Pour un ancien `.doc`, un `.odt` ou un `.rtf`,
+enregistrez-le d'abord en `.docx`.
+
+## Ce que la conversion conserve
+
+| Dans Word | Dans le livre |
+|---|---|
+| Titre 1, 2, 3… (styles de titre) | Chapitres et sommaire cliquable |
+| « Chapitre 1 », « Prologue »… tapés sans style | Repérés automatiquement comme chapitres |
+| Images (y compris dans les zones de texte) | Gardées à leur taille relative, touchez-les pour zoomer |
+| Notes de bas de page et de fin | Fenêtre de note au toucher de l'appel |
+| Gras, italique, souligné, barré, exposant, petites capitales | Identiques |
+| Couleurs et surlignage | Gardés (option « Couleurs du document ») |
+| Listes à puces / numérotées, imbriquées | Gardées, numérotation continue |
+| Tableaux (cellules fusionnées) | Gardés |
+| Liens Internet et renvois internes | Cliquables |
+| Citations, légendes, centré / à droite | Gardés |
+| Sauts de page, `* * *` | Nouvelle page, séparateur de scène |
+| Titre et auteur (propriétés du fichier) | Métadonnées du livre |
+| Première image du document | Couverture (sinon une couverture est générée) |
+
+La table des matières de Word, les en-têtes, pieds de page et numéros de page sont ignorés : la liseuse a les siens.
+
+## Personnalisation de la lecture (bouton « Affichage »)
+
+- **Taille du texte**, **interligne**, **marges** ;
+- **6 thèmes** : Clair, Crème, Sépia, Tilleul, Nuit, Noir (écran OLED) ;
+- **Polices** : Literata, Merriweather, Atkinson Hyperlegible (très lisible), OpenDyslexic (dyslexie),
+  serif et sans-serif du système, ou police d'origine ;
+- texte **justifié** ou **à gauche**, paragraphes **en retrait** ou **espacés**, **césure** ;
+- mode **pages** (glisser ou toucher les bords) ou **défilement** continu ;
+- **images** à leur taille ou en pleine largeur ; atténuées ou inversées en thème sombre ;
+- **deux pages** côte à côte en paysage, **lecture à une main**, **touches de volume**,
+  **plein écran**, **écran toujours allumé**, **luminosité** propre à la lecture ;
+- texte « plus appuyé », couleurs du document, titre / page / heure en haut et en bas.
+
+Et aussi : **sommaire**, **marque-pages**, **recherche** dans tout le livre, position de lecture mémorisée,
+« Continuer la lecture », tri et recherche dans la bibliothèque, **export EPUB** (pour l'utiliser dans
+une autre liseuse, une Kobo…), **partage**, **reconversion** d'un livre avec de nouveaux réglages.
+
+Réglages de conversion (roue dentée de la bibliothèque) : chapitre à chaque Titre 1 / 1 et 2 / 1 à 3,
+repérage des chapitres sans style, sauts de page, allègement des grandes images, image de couverture.
+
+## Construire l'APK
+
+Sans Android Studio ni Gradle, sur Debian / Ubuntu :
+
+```sh
+sudo apt-get install android-sdk-platform-23 aapt dalvik-exchange zipalign apksigner openjdk-17-jdk zip
+./construire.sh
+```
+
+Le script compile les ressources (`aapt`), le Java (`javac`), produit le `classes.dex` (`dx`), aligne et
+signe l'APK avec `liseuse.keystore` (créée au premier lancement si elle n'existe pas).
+Cette clé n'est **pas** dans le dépôt, qui est public : gardez-en une copie à part. Une mise à jour
+ne s'installe par-dessus l'ancienne version que si elle est signée avec la même clé.
+
+## Organisation
+
+- `src/fr/liseuse/DocxConverter.java` : lecture du .docx (styles, numérotation, notes, images, tableaux, champs)
+- `src/fr/liseuse/EpubBuilder.java` : écriture de l'EPUB 3 (chapitres, sommaire nav + NCX, notes, couverture)
+- `src/fr/liseuse/EpubLivre.java` : lecture d'un EPUB (métadonnées, ordre de lecture, sommaire)
+- `src/fr/liseuse/MainActivity.java` : WebView, import / export / partage, pont JavaScript
+- `src/fr/liseuse/AndroidImages.java` : réduction des images, couverture générée
+- `assets/www/` : interface (bibliothèque, lecteur paginé, réglages) et polices
+- `graphisme/icone.py` : génère les icônes
+
+Polices sous licence SIL Open Font License : Literata, Merriweather, Atkinson Hyperlegible, OpenDyslexic.

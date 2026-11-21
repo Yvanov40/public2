@@ -12,3 +12,7 @@ Appli web pour la classe : cahier journal, emploi du temps, programmation annuel
 - `sw.js`, `manifest.webmanifest`, `icone*.png` : installation et mode hors connexion
 
 Les données de la classe restent dans le navigateur de l'appareil. Rien n'est envoyé dans ce dépôt.
+
+## Liseuse Android
+
+Le dossier [`liseuse/`](liseuse/) contient une application Android indépendante qui convertit les documents Word en livres EPUB et les affiche comme une liseuse. APK prêt à installer : [`liseuse/Liseuse.apk`](liseuse/Liseuse.apk).
