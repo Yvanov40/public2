@@ -28,7 +28,10 @@ const app = window.app = {
   conversion: Object.assign({}, CONVERSION_DEFAUT, Store.get('conversion', {})),
   prefs: Object.assign({}, APP_DEFAUT, Store.get('app', {})),
   livreActions: null,
-  importEnCours: 0
+  importEnCours: 0,
+  dossier: null,
+  selection: null,
+  importDossier: null
 };
 
 // ================================================================ démarrage
@@ -173,22 +176,238 @@ function trier(liste) {
 
 const NOMS_TRI = { recent: 'Lus récemment', ajout: 'Ajoutés récemment', titre: 'Titre (A → Z)', auteur: 'Auteur', progression: 'Progression' };
 
+// ================================================================ dossiers
+
+function dossiers() { return Store.get('dossiers', []); }
+function sauverDossiers(l) { Store.set('dossiers', l); }
+function rangement() { return Store.get('rangement', {}); }
+function sauverRangement(r) { Store.set('rangement', r); }
+function dossierDe(idLivre) {
+  const r = rangement()[idLivre];
+  return r && dossiers().some(d => d.id === r) ? r : null;
+}
+function dossierParId(id) { return dossiers().find(d => d.id === id) || null; }
+function sousDossiers(parent) { return dossiers().filter(d => (d.parent || null) === (parent || null)); }
+function descendants(id) {
+  const r = [id];
+  for (let i = 0; i < r.length; i++) for (const d of dossiers()) if (d.parent === r[i]) r.push(d.id);
+  return r;
+}
+function nbLivresDans(id) {
+  const ids = new Set(descendants(id));
+  const ran = rangement();
+  return app.livres.filter(l => ids.has(ran[l.id])).length;
+}
+function cheminDossier(id) {
+  const r = [];
+  let d = dossierParId(id);
+  while (d) { r.unshift(d); d = d.parent ? dossierParId(d.parent) : null; }
+  return r;
+}
+function nouvelIdDossier() { return 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+const COULEURS_DOSSIER = ['#c9893a', '#b5543a', '#c2457a', '#7b5bb5', '#2f6db5', '#128a8a', '#2e7d4f', '#5f6b78'];
+
+async function creerDossier(parent) {
+  const nom = await dialogue('Nouveau dossier', `<label for="n-dossier">Nom du dossier</label><input type="text" id="n-dossier" maxlength="60" placeholder="Romans, Cours, Travail…">`,
+    [{ texte: 'Annuler', valeur: null }, { texte: 'Créer', classe: 'plein', valeur: () => $('#n-dossier').value.trim() }]);
+  if (!nom) return null;
+  const l = dossiers();
+  const d = { id: nouvelIdDossier(), nom, parent: parent || null, couleur: COULEURS_DOSSIER[l.length % COULEURS_DOSSIER.length] };
+  l.push(d);
+  sauverDossiers(l);
+  afficherBiblio();
+  return d.id;
+}
+
+function ouvrirDossier(id) {
+  app.dossier = id || null;
+  $('#filtre').value = '';
+  $('#zone-cherche').hidden = true;
+  afficherBiblio();
+  $('#biblio-defile').scrollTop = 0;
+}
+
+/** Choix d'un dossier de destination (renvoie un id, '' pour la racine, ou null si annulé). */
+async function choisirDossier(titre, exclus) {
+  const interdits = new Set();
+  for (const id of exclus || []) for (const x of descendants(id)) interdits.add(x);
+  const lignes = [];
+  const parcourir = (parent, niveau) => {
+    for (const d of sousDossiers(parent).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))) {
+      if (interdits.has(d.id)) continue;
+      lignes.push(`<button class="choix-dossier" data-d="${esc(d.id)}" style="padding-left:${14 + niveau * 22}px"><svg style="color:${esc(d.couleur)}"><use href="#i-dossier"/></svg>${esc(d.nom)}</button>`);
+      parcourir(d.id, niveau + 1);
+    }
+  };
+  parcourir(null, 1);
+  return new Promise(resolve => {
+    let fait = false;
+    dialogue(titre, `<div class="liste-dossiers">
+        <button class="choix-dossier" data-d=""><svg><use href="#i-livre"/></svg>Bibliothèque (aucun dossier)</button>
+        ${lignes.join('')}
+        <button class="choix-dossier nouveau" data-d="+"><svg><use href="#i-dossier-plus"/></svg>Nouveau dossier…</button>
+      </div>`, [{ texte: 'Annuler', valeur: null }]).then(() => { if (!fait) resolve(null); });
+    $('.liste-dossiers').onclick = async e => {
+      const b = e.target.closest('[data-d]');
+      if (!b) return;
+      const id = b.dataset.d;
+      // ferme le dialogue, puis renvoie le choix
+      fait = true;
+      $('#d-boutons .bouton').click();
+      if (id === '+') resolve(await creerDossier(app.dossier));
+      else resolve(id);
+    };
+  });
+}
+
+async function deplacerLivres(ids, idsDossiers) {
+  const cible = await choisirDossier('Déplacer vers…', idsDossiers);
+  if (cible === null) return false;
+  const r = rangement();
+  for (const id of ids) {
+    if (cible) r[id] = cible;
+    else delete r[id];
+  }
+  sauverRangement(r);
+  if (idsDossiers && idsDossiers.length) {
+    const l = dossiers();
+    for (const d of l) if (idsDossiers.includes(d.id)) d.parent = cible || null;
+    sauverDossiers(l);
+  }
+  const nom = cible ? (dossierParId(cible) || {}).nom : 'la bibliothèque';
+  toast(`Déplacé dans « ${nom} »`);
+  afficherBiblio();
+  return true;
+}
+
+async function actionsDossier(id) {
+  const d = dossierParId(id);
+  if (!d) return;
+  app.dossierEdite = id;
+  const n = nbLivresDans(id);
+  const v = await dialogue(d.nom, `<p>${n} livre${n > 1 ? 's' : ''} dans ce dossier.</p>
+    <label>Couleur</label><div class="nuancier" id="couleurs-dossier">${COULEURS_DOSSIER.map(c => `<button class="pastille${c === d.couleur ? ' actif' : ''}" data-c="${c}" style="background:${c}"></button>`).join('')}</div>`,
+    [{ texte: 'Supprimer', classe: 'lien danger-texte', valeur: 'suppr' }, { texte: 'Déplacer', valeur: 'depl' }, { texte: 'Renommer', valeur: 'renom' }, { texte: 'Fermer', classe: 'plein', valeur: null }]);
+  if (v === 'renom') {
+    const nom = await dialogue('Renommer le dossier', `<label for="n-dossier">Nom</label><input type="text" id="n-dossier" maxlength="60" value="${esc(d.nom)}">`,
+      [{ texte: 'Annuler', valeur: null }, { texte: 'Enregistrer', classe: 'plein', valeur: () => $('#n-dossier').value.trim() }]);
+    if (nom) { const l = dossiers(); l.find(x => x.id === id).nom = nom; sauverDossiers(l); }
+  } else if (v === 'depl') {
+    await deplacerLivres([], [id]);
+  } else if (v === 'suppr') {
+    const ok = await dialogue('Supprimer le dossier ?', `<p>Le dossier « ${esc(d.nom)} » est supprimé. <strong>Les livres ne sont pas effacés</strong> : ils remontent dans le dossier parent.</p>`,
+      [{ texte: 'Annuler', valeur: false }, { texte: 'Supprimer le dossier', classe: 'danger', valeur: true }]);
+    if (ok) supprimerDossiers([id]);
+  }
+  afficherBiblio();
+}
+
+function supprimerDossiers(ids) {
+  let l = dossiers();
+  const r = rangement();
+  for (const id of ids) {
+    const d = l.find(x => x.id === id);
+    if (!d) continue;
+    const parent = d.parent || null;
+    for (const x of l) if (x.parent === id) x.parent = parent;
+    for (const k in r) if (r[k] === id) { if (parent) r[k] = parent; else delete r[k]; }
+    l = l.filter(x => x.id !== id);
+  }
+  sauverDossiers(l);
+  sauverRangement(r);
+  if (app.dossier && !l.some(x => x.id === app.dossier)) app.dossier = null;
+}
+
+// mise en couleur au toucher d'une pastille dans le dialogue d'un dossier
+document.addEventListener('click', e => {
+  const b = e.target.closest('#couleurs-dossier [data-c]');
+  if (!b) return;
+  const l = dossiers();
+  const d = l.find(x => x.id === app.dossierEdite);
+  if (d) { d.couleur = b.dataset.c; sauverDossiers(l); }
+  $$('#couleurs-dossier .pastille').forEach(x => x.classList.toggle('actif', x === b));
+});
+
+// ================================================================ affichage de la bibliothèque
+
+function htmlDossier(d) {
+  const n = nbLivresDans(d.id);
+  const sd = sousDossiers(d.id).length;
+  const ran = rangement();
+  const couvs = app.livres.filter(l => ran[l.id] === d.id && l.couverture).slice(0, 3);
+  const minis = couvs.map(l => `<img src="/couv/${esc(l.id)}?v=${l.convertiLe || 0}" alt="" onerror="this.remove()">`).join('');
+  const detail = (n ? `${n} livre${n > 1 ? 's' : ''}` : 'Vide') + (sd ? ` · ${sd} dossier${sd > 1 ? 's' : ''}` : '');
+  const choisi = app.selection && app.selection.has('d:' + d.id) ? ' choisi' : '';
+  return `<div class="carte dossier${choisi}" data-dossier="${esc(d.id)}" role="button" tabindex="0">
+    <div class="couv dossier-couv" style="--dc:${esc(d.couleur || COULEURS_DOSSIER[0])}">
+      <svg class="dossier-ico"><use href="#i-dossier"/></svg><div class="minis">${minis}</div><span class="nb">${n}</span>
+    </div>
+    <div class="txt"><div class="t">${esc(d.nom)}</div><div class="a">${detail}</div></div>
+    <span class="coche"><svg><use href="#i-coche"/></svg></span>
+    <button class="plus" data-plus-dossier="${esc(d.id)}" aria-label="Options du dossier"><svg><use href="#i-plus-v"/></svg></button>
+  </div>`;
+}
+
+function htmlLivre(l, avecChemin) {
+  const p = position(l.id);
+  const pc = p ? Math.round(p.p * 100) : 0;
+  const prog = p && p.t ? (pc >= 100 ? '<div class="prog-carte">Terminé ✓</div>'
+    : `<div class="prog-carte"><div class="barre-prog"><i style="width:${pc}%"></i></div>${pc} %</div>`) : '';
+  const nouveau = !p && Date.now() - (l.ajoute || 0) < 3 * 86400000 ? '<span class="nouveau">Nouveau</span>' : '';
+  const formats = { docx: 'Word', pdf: 'PDF', epub: 'EPUB', txt: 'Texte' };
+  const dos = avecChemin ? dossierDe(l.id) : null;
+  const meta = [formats[l.format] || '', l.taille ? taille(l.taille) : '', dos ? '📁 ' + esc(cheminDossier(dos).map(d => d.nom).join(' › ')) : ''].filter(Boolean).join(' · ');
+  const choisi = app.selection && app.selection.has(l.id) ? ' choisi' : '';
+  return `<div class="carte${choisi}" data-id="${esc(l.id)}" role="button" tabindex="0">
+    ${htmlCouverture(l)}
+    <div class="txt"><div class="t">${esc(l.titre)}</div>${l.auteur ? `<div class="a">${esc(l.auteur)}</div>` : ''}<div class="m">${meta}</div>${prog}</div>
+    ${nouveau}
+    <span class="coche"><svg><use href="#i-coche"/></svg></span>
+    <button class="plus" data-plus="${esc(l.id)}" aria-label="Options"><svg><use href="#i-plus-v"/></svg></button>
+  </div>`;
+}
+
 function afficherBiblio() {
   const filtre = ($('#filtre').value || '').trim().toLowerCase();
-  let liste = trier(app.livres);
-  if (filtre) liste = liste.filter(l => (l.titre + ' ' + (l.auteur || '')).toLowerCase().includes(filtre));
+  if (app.dossier && !dossierParId(app.dossier)) app.dossier = null;
+  const ran = rangement();
+  const valides = new Set(dossiers().map(d => d.id));
+  let liste, dossiersVus;
+  if (filtre) {
+    liste = trier(app.livres).filter(l => (l.titre + ' ' + (l.auteur || '') + ' ' + (l.nomFichier || '')).toLowerCase().includes(filtre));
+    dossiersVus = dossiers().filter(d => d.nom.toLowerCase().includes(filtre));
+  } else {
+    liste = trier(app.livres).filter(l => (valides.has(ran[l.id]) ? ran[l.id] : null) === app.dossier);
+    dossiersVus = sousDossiers(app.dossier);
+  }
+  dossiersVus.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { numeric: true }));
   const grille = $('#grille');
   grille.classList.toggle('liste', app.prefs.affichage === 'liste');
-  $('#vide').hidden = app.livres.length > 0;
-  $('#tri-info').textContent = app.livres.length > 1 ? `${app.livres.length} livres · ${NOMS_TRI[app.prefs.tri] || ''}` : '';
+  grille.classList.toggle('en-selection', !!app.selection);
+  $('#vide').hidden = app.livres.length > 0 || dossiers().length > 0;
+  $('#b-vue use').setAttribute('href', app.prefs.affichage === 'liste' ? '#i-grille' : '#i-liste');
 
-  // continuer la lecture
-  const enCours = app.livres
+  // titre et fil d'Ariane
+  const chemin = app.dossier ? cheminDossier(app.dossier) : [];
+  $('#titre-biblio').textContent = chemin.length ? chemin[chemin.length - 1].nom : 'Bibliothèque';
+  $('#b-dossier-retour').hidden = !app.dossier;
+  const nbIci = liste.length, nbD = dossiersVus.length;
+  let info = '';
+  if (filtre) info = `${nbIci} résultat${nbIci > 1 ? 's' : ''}`;
+  else if (app.livres.length) {
+    info = (chemin.length > 1 ? chemin.slice(0, -1).map(d => d.nom).join(' › ') + ' › ' : '')
+      + (nbD ? `${nbD} dossier${nbD > 1 ? 's' : ''} · ` : '') + `${nbIci} livre${nbIci > 1 ? 's' : ''} · ${NOMS_TRI[app.prefs.tri] || ''}`;
+  }
+  $('#tri-info').textContent = info;
+
+  // continuer la lecture (à la racine seulement)
+  const cont = $('#continuer');
+  const enCours = !filtre && !app.dossier && !app.selection ? app.livres
     .map(l => ({ l, p: position(l.id) }))
     .filter(x => x.p && x.p.t && x.p.p < 0.995)
-    .sort((a, b) => b.p.t - a.p.t)[0];
-  const cont = $('#continuer');
-  if (enCours && !filtre) {
+    .sort((a, b) => b.p.t - a.p.t)[0] : null;
+  if (enCours) {
     const pc = Math.round(enCours.p.p * 100);
     cont.innerHTML = `<button class="continuer" data-id="${esc(enCours.l.id)}">
         ${htmlCouverture(enCours.l)}
@@ -197,20 +416,148 @@ function afficherBiblio() {
         <div class="barre-prog"><i style="width:${pc}%"></i></div></div></button>`;
   } else cont.innerHTML = '';
 
-  grille.innerHTML = liste.map(l => {
-    const p = position(l.id);
-    const pc = p ? Math.round(p.p * 100) : 0;
-    const prog = p && p.t ? (pc >= 100 ? '<div class="prog-carte">Terminé ✓</div>'
-      : `<div class="prog-carte"><div class="barre-prog"><i style="width:${pc}%"></i></div>${pc} %</div>`) : '';
-    const nouveau = !p && Date.now() - (l.ajoute || 0) < 3 * 86400000 ? '<span class="nouveau">Nouveau</span>' : '';
-    return `<div class="carte" data-id="${esc(l.id)}" role="button" tabindex="0">
-      ${htmlCouverture(l)}
-      <div class="txt"><div class="t">${esc(l.titre)}</div>${l.auteur ? `<div class="a">${esc(l.auteur)}</div>` : ''}${prog}</div>
-      ${nouveau}
-      <button class="plus" data-plus="${esc(l.id)}" aria-label="Options"><svg><use href="#i-plus-v"/></svg></button>
-    </div>`;
-  }).join('');
+  let h = dossiersVus.map(htmlDossier).join('') + liste.map(l => htmlLivre(l, !!filtre)).join('');
+  if (!h && !filtre && app.dossier) h = '<div class="vide-dossier">Ce dossier est vide.<br>Ajoutez un document ici, ou utilisez « Déplacer » sur des livres.</div>';
+  if (!h && filtre) h = '<div class="vide-dossier">Aucun livre ne correspond.</div>';
+  grille.innerHTML = h;
+  majSelection();
 }
+
+// ================================================================ sélection multiple
+
+function commencerSelection(cle) {
+  app.selection = new Set(cle ? [cle] : []);
+  fermerFeuilles();
+  afficherBiblio();
+}
+
+function finirSelection() {
+  app.selection = null;
+  afficherBiblio();
+}
+
+function basculerChoix(cle) {
+  if (!app.selection) return;
+  if (app.selection.has(cle)) app.selection.delete(cle);
+  else app.selection.add(cle);
+  const el = cle.startsWith('d:') ? $(`[data-dossier="${CSS.escape(cle.slice(2))}"]`) : $(`.carte[data-id="${CSS.escape(cle)}"]`);
+  if (el) el.classList.toggle('choisi', app.selection.has(cle));
+  majSelection();
+}
+
+function majSelection() {
+  const actif = !!app.selection;
+  $('#barre-biblio').hidden = actif;
+  $('#barre-selection').hidden = !actif;
+  $('#b-importer').hidden = actif;
+  if (!actif) return;
+  const n = app.selection.size;
+  $('#nb-sel').textContent = n ? `${n} sélectionné${n > 1 ? 's' : ''}` : 'Touchez pour choisir';
+  $$('#barre-selection [data-sel]').forEach(b => { b.disabled = !n; });
+}
+
+function selectionLivres() {
+  if (!app.selection) return [];
+  const ids = new Set();
+  for (const k of app.selection) {
+    if (k.startsWith('d:')) {
+      const ds = new Set(descendants(k.slice(2)));
+      const ran = rangement();
+      for (const l of app.livres) if (ds.has(ran[l.id])) ids.add(l.id);
+    } else ids.add(k);
+  }
+  return [...ids];
+}
+
+function toutSelectionner() {
+  if (!app.selection) return;
+  const cles = [...$$('#grille [data-dossier]').map(e => 'd:' + e.dataset.dossier), ...$$('#grille .carte[data-id]').map(e => e.dataset.id)];
+  const tout = cles.every(c => app.selection.has(c));
+  app.selection = new Set(tout ? [] : cles);
+  afficherBiblio();
+}
+
+async function actionSelection(action) {
+  if (!app.selection || !app.selection.size) return;
+  const livres = [...app.selection].filter(k => !k.startsWith('d:'));
+  const dos = [...app.selection].filter(k => k.startsWith('d:')).map(k => k.slice(2));
+  const tous = selectionLivres();
+  if (action === 'deplacer') {
+    if (await deplacerLivres(livres, dos)) finirSelection();
+  } else if (action === 'supprimer') {
+    const n = tous.length;
+    const txt = (n ? `<p><strong>${n} livre${n > 1 ? 's' : ''}</strong> ${n > 1 ? 'seront effacés' : 'sera effacé'} du téléphone, avec position de lecture et marque-pages.</p>` : '')
+      + (dos.length ? `<p>${dos.length} dossier${dos.length > 1 ? 's' : ''} ${dos.length > 1 ? 'seront supprimés' : 'sera supprimé'}.</p>` : '');
+    const ok = await dialogue('Supprimer la sélection ?', txt, [{ texte: 'Annuler', valeur: false }, { texte: 'Supprimer', classe: 'danger', valeur: true }]);
+    if (!ok) return;
+    for (const id of tous) {
+      if (A) A.supprimer(id);
+      ['pos:', 'signets:', 'pages:'].forEach(k => Store.del(k + id));
+    }
+    const r = rangement();
+    for (const id of tous) delete r[id];
+    sauverRangement(r);
+    supprimerDossiers(dos);
+    app.selection = null;
+    chargerLivres();
+    toast('Supprimé');
+  } else if (action === 'partager') {
+    if (!tous.length) return toast('Aucun livre dans la sélection');
+    if (A) A.partagerPlusieurs(JSON.stringify(tous));
+    finirSelection();
+  } else if (action === 'exporter') {
+    if (!tous.length) return toast('Aucun livre dans la sélection');
+    if (A) A.exporterPlusieurs(JSON.stringify(tous));
+    finirSelection();
+  } else if (action === 'lu' || action === 'nonlu') {
+    for (const id of tous) {
+      if (action === 'nonlu') Store.del('pos:' + id);
+      else {
+        const p = position(id) || { c: 0, f: 0 };
+        Store.set('pos:' + id, Object.assign(p, { p: 1, t: Date.now() }));
+      }
+    }
+    finirSelection();
+    toast(action === 'lu' ? 'Marqué comme lu' : 'Marqué comme non lu');
+  }
+}
+
+async function plusSelection() {
+  const v = await dialogue('Sélection', `<div class="liste-actions dans-dialogue">
+      <button data-a="partager"><svg><use href="#i-partage"/></svg>Partager les fichiers EPUB</button>
+      <button data-a="exporter"><svg><use href="#i-dl"/></svg>Enregistrer les EPUB dans un dossier du téléphone</button>
+      <button data-a="lu"><svg><use href="#i-coche"/></svg>Marquer comme lu</button>
+      <button data-a="nonlu"><svg><use href="#i-refaire"/></svg>Marquer comme non lu</button>
+    </div>`, [{ texte: 'Fermer', valeur: null }]);
+  return v;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.dans-dialogue [data-a]');
+  if (!b) return;
+  const a = b.dataset.a;
+  $('#d-boutons .bouton').click();
+  actionSelection(a);
+});
+
+async function menuBiblio() {
+  const v = await dialogue('Bibliothèque', `<div class="liste-actions dans-menu">
+      <button data-m="dossier"><svg><use href="#i-dossier-plus"/></svg>Nouveau dossier${app.dossier ? ' ici' : ''}</button>
+      <button data-m="selection"><svg><use href="#i-coche"/></svg>Sélectionner plusieurs livres</button>
+      <button data-m="tri"><svg><use href="#i-tri"/></svg>Trier par… <small>${esc(NOMS_TRI[app.prefs.tri] || '')}</small></button>
+      <button data-m="reglages"><svg><use href="#i-reglages"/></svg>Réglages et personnalisation</button>
+    </div>`, [{ texte: 'Fermer', valeur: null }]);
+  return v;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.dans-menu [data-m]');
+  if (!b) return;
+  const m = b.dataset.m;
+  $('#d-boutons .bouton').click();
+  if (m === 'dossier') creerDossier(app.dossier);
+  else if (m === 'selection') commencerSelection(null);
+  else if (m === 'tri') choisirTri();
+  else if (m === 'reglages') afficherParametres();
+});
 
 // ================================================================ écrans
 
@@ -315,7 +662,7 @@ app.evenement = function (e) {
     $('#import').classList.add('actif');
   } else if (e.type === 'fini' || e.type === 'reconverti' || e.type === 'erreur') {
     app.importEnCours = Math.max(0, app.importEnCours - 1);
-    if (!app.importEnCours) $('#import').classList.remove('actif');
+    if (!app.importEnCours) { $('#import').classList.remove('actif'); setTimeout(() => { if (!app.importEnCours) app.importDossier = null; }, 0); }
     chargerLivres();
     if (e.type === 'erreur') {
       dialogue('Impossible d\'ajouter ce fichier', `<p><strong>${esc(e.nom)}</strong></p><p>${esc(e.message)}</p>`);
@@ -323,6 +670,12 @@ app.evenement = function (e) {
       toast(`« ${e.titre} » a été reconverti`);
       Store.del('pages:' + e.id);
     } else {
+      if (app.importDossier && dossierParId(app.importDossier)) {
+        const r = rangement();
+        r[e.id] = app.importDossier;
+        sauverRangement(r);
+        afficherBiblio();
+      }
       toast(`« ${e.titre} » ajouté à la bibliothèque`);
       if (e.ouvrir && !app.importEnCours) {
         if (app.ecran === 'lecteur') lecteur.fermer();
@@ -345,7 +698,9 @@ app.retour = function () {
     return true;
   }
   if (app.ecran === 'parametres') { montrer('biblio'); return true; }
+  if (app.selection) { finirSelection(); return true; }
   if (!$('#zone-cherche').hidden) { $('#zone-cherche').hidden = true; $('#filtre').value = ''; afficherBiblio(); return true; }
+  if (app.dossier) { ouvrirDossier((dossierParId(app.dossier) || {}).parent || null); return true; }
   return false;
 };
 
@@ -378,6 +733,8 @@ async function faireAction(action) {
   if (!l) return;
   fermerFeuilles();
   if (action === 'lire') ouvrirLivre(l.id);
+  else if (action === 'deplacer') deplacerLivres([l.id], []);
+  else if (action === 'selectionner') commencerSelection(l.id);
   else if (action === 'infos') {
     const p = position(l.id);
     const formats = { docx: 'Document Word (.docx)', epub: 'Livre EPUB', txt: 'Texte (.txt)' };
@@ -471,6 +828,7 @@ function sauverParametres() {
 // ================================================================ branchements
 
 function importer() {
+  app.importDossier = app.dossier;
   if (A) A.importer();
   else toast('Import disponible dans l\'application Android');
 }
@@ -478,8 +836,17 @@ function importer() {
 function brancher() {
   $('#b-importer').onclick = importer;
   $('#b-importer-vide').onclick = importer;
-  $('#b-reglages').onclick = afficherParametres;
-  $('#b-tri').onclick = choisirTri;
+  $('#b-menu').onclick = menuBiblio;
+  $('#b-vue').onclick = () => {
+    app.prefs.affichage = app.prefs.affichage === 'liste' ? 'grille' : 'liste';
+    Store.set('app', app.prefs);
+    afficherBiblio();
+  };
+  $('#b-dossier-retour').onclick = () => app.retour();
+  $('#b-sel-fin').onclick = finirSelection;
+  $('#b-sel-tout').onclick = toutSelectionner;
+  $('#b-sel-plus').onclick = plusSelection;
+  $$('#barre-selection [data-sel]').forEach(b => b.onclick = () => actionSelection(b.dataset.sel));
   $('#b-raccourci').onclick = raccourciPerso;
   $('#b-cherche').onclick = () => {
     const z = $('#zone-cherche');
@@ -491,18 +858,44 @@ function brancher() {
   $$('[data-retour]').forEach(b => b.onclick = () => app.retour());
   $$('#parametres select, #parametres input').forEach(i => i.onchange = sauverParametres);
 
-  let appuiLong = null;
+  // toucher, appui long (sélection), boutons « ⋮ »
+  let appuiLong = false, minuteur = null, depart = null;
   const zone = $('#biblio-defile');
-  zone.addEventListener('click', e => {
-    const plus = e.target.closest('[data-plus]');
-    if (plus) { e.stopPropagation(); actionsLivre(plus.dataset.plus); return; }
-    if (appuiLong === 'fait') { appuiLong = null; return; }
-    const c = e.target.closest('[data-id]');
-    if (c) ouvrirLivre(c.dataset.id);
-  });
+  const cleDe = el => el.dataset.dossier ? 'd:' + el.dataset.dossier : el.dataset.id;
+  const appui = el => {
+    appuiLong = true;
+    if (navigator.vibrate) try { navigator.vibrate(25); } catch (er) { /* rien */ }
+    if (!app.selection) commencerSelection(cleDe(el));
+    else basculerChoix(cleDe(el));
+  };
+  zone.addEventListener('touchstart', e => {
+    const el = e.target.closest('#grille .carte');
+    appuiLong = false;
+    if (!el || e.target.closest('.plus')) return;
+    depart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    minuteur = setTimeout(() => appui(el), 480);
+  }, { passive: true });
+  zone.addEventListener('touchmove', e => {
+    if (depart && Math.hypot(e.touches[0].clientX - depart.x, e.touches[0].clientY - depart.y) > 10) clearTimeout(minuteur);
+  }, { passive: true });
+  zone.addEventListener('touchend', () => clearTimeout(minuteur));
   zone.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const el = e.target.closest('#grille .carte');
+    if (el && !appuiLong && !('ontouchstart' in window)) appui(el);
+  });
+  zone.addEventListener('click', e => {
+    if (appuiLong) { appuiLong = false; return; }
+    const plusD = e.target.closest('[data-plus-dossier]');
+    if (plusD) { e.stopPropagation(); if (app.selection) basculerChoix('d:' + plusD.dataset.plusDossier); else actionsDossier(plusD.dataset.plusDossier); return; }
+    const plus = e.target.closest('[data-plus]');
+    if (plus) { e.stopPropagation(); if (app.selection) basculerChoix(plus.dataset.plus); else actionsLivre(plus.dataset.plus); return; }
+    const d = e.target.closest('[data-dossier]');
+    if (d) { if (app.selection) basculerChoix('d:' + d.dataset.dossier); else ouvrirDossier(d.dataset.dossier); return; }
     const c = e.target.closest('[data-id]');
-    if (c) { e.preventDefault(); appuiLong = 'fait'; actionsLivre(c.dataset.id); }
+    if (!c) return;
+    if (app.selection && c.classList.contains('carte')) basculerChoix(c.dataset.id);
+    else if (!app.selection) ouvrirLivre(c.dataset.id);
   });
 
   $('#voile').onclick = () => { while (app.fermables.length) app.fermables.pop()(); fermerFeuilles(); };

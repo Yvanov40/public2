@@ -28,17 +28,32 @@
     <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></symbol>
     <symbol id="i-crayon" viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/></symbol>
+    <symbol id="i-dossier" viewBox="0 0 24 24"><path d="M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 18V9a1.5 1.5 0 0 0-1.5-1.5h-8L9.5 5h-5A1.5 1.5 0 0 0 3 6.5z"/></symbol>
+    <symbol id="i-dossier-plus" viewBox="0 0 24 24"><path d="M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 18V9a1.5 1.5 0 0 0-1.5-1.5h-8L9.5 5h-5A1.5 1.5 0 0 0 3 6.5z"/><path d="M12 10.5v6M9 13.5h6"/></symbol>
+    <symbol id="i-grille" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></symbol>
+    <symbol id="i-liste" viewBox="0 0 24 24"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.8" cy="6.5" r="1.2"/><circle cx="4.8" cy="12" r="1.2"/><circle cx="4.8" cy="17.5" r="1.2"/></symbol>
+    <symbol id="i-coche" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-tout" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12.2l2.8 2.8L16.5 9"/></symbol>
     <symbol id="i-refaire" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.1-5M19 4v4h-4"/></symbol>
   </defs>
 </svg>
 
 <!-- ============================================================ BIBLIOTHÈQUE -->
 <section id="biblio" class="ecran actif">
-  <header class="barre">
-    <h1>Bibliothèque</h1>
+  <header class="barre" id="barre-biblio">
+    <button class="ico" id="b-dossier-retour" aria-label="Dossier parent" hidden><svg><use href="#i-retour"/></svg></button>
+    <h1 id="titre-biblio">Bibliothèque</h1>
     <button class="ico" id="b-cherche" aria-label="Rechercher"><svg><use href="#i-cherche"/></svg></button>
-    <button class="ico" id="b-tri" aria-label="Trier"><svg><use href="#i-tri"/></svg></button>
-    <button class="ico" id="b-reglages" aria-label="Réglages"><svg><use href="#i-reglages"/></svg></button>
+    <button class="ico" id="b-vue" aria-label="Changer l'affichage (liste / couvertures)"><svg><use href="#i-liste"/></svg></button>
+    <button class="ico" id="b-menu" aria-label="Menu"><svg><use href="#i-plus-v"/></svg></button>
+  </header>
+  <header class="barre selection" id="barre-selection" hidden>
+    <button class="ico" id="b-sel-fin" aria-label="Terminer la sélection"><svg><use href="#i-fermer"/></svg></button>
+    <h1 id="nb-sel"></h1>
+    <button class="ico" id="b-sel-tout" aria-label="Tout sélectionner"><svg><use href="#i-tout"/></svg></button>
+    <button class="ico" data-sel="deplacer" aria-label="Déplacer dans un dossier"><svg><use href="#i-dossier"/></svg></button>
+    <button class="ico" data-sel="supprimer" aria-label="Supprimer"><svg><use href="#i-poubelle"/></svg></button>
+    <button class="ico" id="b-sel-plus" aria-label="Plus d'actions"><svg><use href="#i-plus-v"/></svg></button>
   </header>
   <div class="recherche-biblio" id="zone-cherche" hidden>
     <input type="search" id="filtre" placeholder="Titre ou auteur…" autocomplete="off">
@@ -257,6 +272,8 @@
   </div>
   <div class="liste-actions">
     <button data-action="lire"><svg><use href="#i-livre"/></svg>Lire</button>
+    <button data-action="deplacer"><svg><use href="#i-dossier"/></svg>Déplacer dans un dossier</button>
+    <button data-action="selectionner"><svg><use href="#i-coche"/></svg>Sélectionner plusieurs livres</button>
     <button data-action="infos"><svg><use href="#i-info"/></svg>Informations</button>
     <button data-action="renommer"><svg><use href="#i-crayon"/></svg>Modifier le titre et l'auteur</button>
     <button data-action="exporter"><svg><use href="#i-dl"/></svg>Enregistrer le fichier EPUB</button>

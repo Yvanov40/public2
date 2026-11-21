@@ -54,7 +54,8 @@ public final class MainActivity extends Activity {
 
     static final String HOTE = "appassets.androidplatform.net";
     static final String BASE = "https://" + HOTE + "/";
-    private static final int REQ_IMPORT = 1, REQ_EXPORT = 2, REQ_IMAGE = 3;
+    private static final int REQ_IMPORT = 1, REQ_EXPORT = 2, REQ_IMAGE = 3, REQ_DOSSIER = 4;
+    private org.json.JSONArray exportIds;
     static final int NB_ICONES = 8;
     private String nomRaccourci = "Liseuse";
 
@@ -502,6 +503,39 @@ public final class MainActivity extends Activity {
             if (cd != null) for (int i = 0; i < cd.getItemCount(); i++) l.add(cd.getItemAt(i).getUri());
             else if (data.getData() != null) l.add(data.getData());
             for (Uri u : l) importer(u, l.size() == 1);
+        } else if (req == REQ_DOSSIER && data.getData() != null && exportIds != null) {
+            final Uri arbre = data.getData();
+            final org.json.JSONArray ids = exportIds;
+            travail.execute(new Runnable() {
+                @Override
+                public void run() {
+                    int ok = 0;
+                    try {
+                        Uri parent = android.provider.DocumentsContract.buildDocumentUriUsingTree(arbre,
+                                android.provider.DocumentsContract.getTreeDocumentId(arbre));
+                        for (int i = 0; i < ids.length(); i++) {
+                            String id = ids.optString(i);
+                            JSONObject meta = biblio.trouver(id);
+                            File f = biblio.epub(id);
+                            if (meta == null || !f.exists()) continue;
+                            String nom = nomFichierSur(meta.optString("titre", "livre"));
+                            Uri doc = android.provider.DocumentsContract.createDocument(getContentResolver(), parent, "application/epub+zip", nom);
+                            if (doc == null) continue;
+                            OutputStream o = getContentResolver().openOutputStream(doc);
+                            InputStream in = new FileInputStream(f);
+                            byte[] b = new byte[65536];
+                            int n;
+                            while ((n = in.read(b)) > 0) o.write(b, 0, n);
+                            in.close();
+                            o.close();
+                            ok++;
+                        }
+                        toast(ok + " livre" + (ok > 1 ? "s enregistrés" : " enregistré"));
+                    } catch (Exception e) {
+                        toast("Échec de l'enregistrement : " + message(e));
+                    }
+                }
+            });
         } else if (req == REQ_IMAGE && data.getData() != null) {
             creerRaccourci(data.getData());
         } else if (req == REQ_EXPORT && exportId != null) {
@@ -864,6 +898,54 @@ public final class MainActivity extends Activity {
                         startActivity(Intent.createChooser(i, "Partager le livre"));
                     } catch (Exception e) {
                         toast("Aucune application pour partager.");
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void partagerPlusieurs(final String idsJson) {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        org.json.JSONArray ids = new org.json.JSONArray(idsJson);
+                        ArrayList<Uri> uris = new ArrayList<Uri>();
+                        ClipData clip = null;
+                        for (int i = 0; i < ids.length(); i++) {
+                            String id = ids.optString(i);
+                            JSONObject meta = biblio.trouver(id);
+                            if (meta == null) continue;
+                            Uri u = Uri.parse("content://" + Fichiers.AUTORITE + "/" + id + "/" + Uri.encode(nomFichierSur(meta.optString("titre", "livre"))));
+                            uris.add(u);
+                            if (clip == null) clip = ClipData.newRawUri("", u);
+                            else clip.addItem(new ClipData.Item(u));
+                        }
+                        if (uris.isEmpty()) return;
+                        Intent i = new Intent(uris.size() == 1 ? Intent.ACTION_SEND : Intent.ACTION_SEND_MULTIPLE);
+                        i.setType("application/epub+zip");
+                        if (uris.size() == 1) i.putExtra(Intent.EXTRA_STREAM, uris.get(0));
+                        else i.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
+                        i.setClipData(clip);
+                        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(i, "Partager " + uris.size() + " livre" + (uris.size() > 1 ? "s" : "")));
+                    } catch (Exception e) {
+                        toast("Partage impossible : " + message(e));
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void exporterPlusieurs(final String idsJson) {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        exportIds = new org.json.JSONArray(idsJson);
+                        startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQ_DOSSIER);
+                    } catch (Exception e) {
+                        toast("Enregistrement impossible sur cet appareil.");
                     }
                 }
             });

@@ -20,7 +20,9 @@ Un PDF est figé en pages ; la liseuse le **remet en texte fluide** pour qu'il s
 lignes recollées en paragraphes, mots coupés en fin de ligne réparés, titres repérés à la taille des
 caractères (chapitres et sommaire), en-têtes, pieds de page et numéros de page retirés, gras, italique
 et appels de notes gardés, images découpées dans la page. La première page sert de couverture.
-Un PDF scanné (sans texte) est gardé en images de pages. Les tableaux complexes deviennent du texte simple.
+Les **tableaux** sont reconstruits, qu'ils aient des bordures (cellules fusionnées comprises) ou des
+colonnes simplement alignées ; les **graphiques et schémas dessinés** sont gardés en image, avec leurs
+étiquettes. Un PDF scanné (sans texte) est gardé en images de pages.
 
 ## Ce que la conversion conserve
 
@@ -41,6 +43,16 @@ Un PDF scanné (sans texte) est gardé en images de pages. Les tableaux complexe
 | Première image du document | Couverture (sinon une couverture est générée) |
 
 La table des matières de Word, les en-têtes, pieds de page et numéros de page sont ignorés : la liseuse a les siens.
+
+## La bibliothèque
+
+- **Couvertures ou liste** : bouton en haut de l'écran (la liste montre format, taille, progression) ;
+- **Dossiers** et sous-dossiers : menu ⋮ → « Nouveau dossier », puis « Déplacer » sur les livres.
+  Un document ajouté depuis un dossier y est rangé directement. Supprimer un dossier ne supprime pas ses livres ;
+- **Sélection multiple** : appui long sur un livre ou un dossier (ou menu ⋮ → « Sélectionner »),
+  puis tout sélectionner, déplacer, supprimer, partager, enregistrer les EPUB dans un dossier du
+  téléphone, marquer comme lu / non lu ;
+- **Import de plusieurs fichiers** à la fois depuis le bouton « Ajouter ».
 
 ## Personnalisation de la lecture (bouton « Affichage »)
 

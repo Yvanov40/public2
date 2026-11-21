@@ -267,7 +267,7 @@ svg.mini { width: 20px; height: 20px; }
 .import { position: fixed; left: 16px; right: 16px; bottom: calc(92px + env(safe-area-inset-bottom)); background: var(--texte); color: var(--fond); padding: 14px 16px; border-radius: 14px; display: flex; gap: 12px; align-items: center; z-index: 45; transform: translateY(30px); opacity: 0; pointer-events: none; transition: .2s; box-shadow: var(--ombre-forte); max-width: 520px; margin: 0 auto; }
 .import.actif { transform: none; opacity: 1; }
 .import .rond { width: 22px; height: 22px; border-width: 2.5px; border-color: rgba(128,128,128,.4); border-top-color: var(--accent); flex: none; }
-.toast { position: fixed; left: 50%; bottom: calc(30px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); background: rgba(30, 28, 25, .94); color: #fff; padding: 12px 18px; border-radius: 12px; font-size: .9rem; opacity: 0; pointer-events: none; transition: .22s; z-index: 70; max-width: 88vw; text-align: center; line-height: 1.4; }
+.toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); background: rgba(30, 28, 25, .94); color: #fff; padding: 12px 18px; border-radius: 12px; font-size: .9rem; opacity: 0; pointer-events: none; transition: .22s; z-index: 70; max-width: 88vw; text-align: center; line-height: 1.4; }
 .toast.actif { opacity: 1; transform: translate(-50%, 0); }
 
 /* ---------------------------------------------------------------- personnalisation */
@@ -287,3 +287,43 @@ body.lecture .filtre-lumiere { display: block; }
 .icones button { border-radius: 18px; padding: 4px; border: 3px solid transparent; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: .7rem; color: var(--doux); }
 .icones img { width: 100%; max-width: 64px; aspect-ratio: 1; display: block; }
 .icones button.actif { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+
+/* ---------------------------------------------------------------- dossiers, liste, sélection */
+.carte { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.dossier-couv { background: var(--surface2); background: color-mix(in srgb, var(--dc) 22%, var(--surface)); display: flex; align-items: center; justify-content: center; box-shadow: none; border: 1.5px solid color-mix(in srgb, var(--dc) 40%, transparent); border-radius: 12px; }
+.dossier-couv::after { display: none; }
+.dossier-ico { width: 56%; height: 56%; color: var(--dc); fill: none; fill: color-mix(in srgb, var(--dc) 30%, transparent); stroke-width: 1.4; }
+.dossier-couv .minis { position: absolute; left: 12%; right: 12%; bottom: 10%; display: flex; justify-content: center; }
+.dossier-couv .minis img { position: static; width: 30%; height: auto; aspect-ratio: 2/3; object-fit: cover; border-radius: 2px; box-shadow: 0 1px 4px rgba(0,0,0,.3); margin: 0 -4%; }
+.dossier-couv .nb { position: absolute; top: 6px; left: 8px; background: var(--dc); color: #fff; font-size: .7rem; font-weight: 700; border-radius: 10px; padding: 1px 7px; }
+.carte .m { font-size: .72rem; color: var(--doux); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grille:not(.liste) .carte .m { display: none; }
+.grille.liste .carte.dossier .couv { width: 46px; aspect-ratio: 1; border-radius: 10px; }
+.grille.liste .dossier-couv .minis, .grille.liste .dossier-couv .nb { display: none; }
+.grille.liste .dossier-ico { width: 70%; height: 70%; }
+.grille.liste .carte .t { font-size: .95rem; -webkit-line-clamp: 1; }
+.vide-dossier { grid-column: 1 / -1; text-align: center; color: var(--doux); padding: 40px 20px; line-height: 1.6; }
+.coche { display: none; position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid #fff; background: rgba(0,0,0,.35); align-items: center; justify-content: center; color: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3); z-index: 2; }
+.coche svg { width: 18px; height: 18px; stroke-width: 3; opacity: 0; }
+.en-selection .coche { display: flex; }
+.en-selection .plus { display: none !important; }
+.en-selection .carte.choisi .coche { background: var(--accent); border-color: var(--accent); }
+.en-selection .carte.choisi .coche svg { opacity: 1; }
+.en-selection .carte.choisi .couv { outline: 3px solid var(--accent); outline-offset: 2px; }
+.grille.liste.en-selection .coche { position: static; flex: none; border-color: var(--doux); background: transparent; order: -1; }
+.grille.liste.en-selection .carte.choisi { background: var(--accent-doux); }
+.grille.liste.en-selection .carte.choisi .couv { outline: none; }
+.barre.selection { background: var(--accent-doux); }
+.barre.selection h1 { font-size: 1.1rem; }
+.barre .ico:disabled { opacity: .35; }
+.liste-dossiers { display: flex; flex-direction: column; margin: 0 -10px; max-height: 50vh; overflow-y: auto; }
+.choix-dossier { display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; border-radius: 10px; color: var(--texte); }
+.choix-dossier:active { background: var(--accent-doux); }
+.choix-dossier svg { color: var(--doux); }
+.choix-dossier.nouveau { color: var(--accent); font-weight: 600; }
+.choix-dossier.nouveau svg { color: var(--accent); }
+.dialogue .liste-actions { padding: 0; margin: 0 -14px; }
+.dialogue .liste-actions button { padding: 12px 14px; color: var(--texte); }
+.dialogue .liste-actions small { color: var(--doux); margin-left: auto; font-size: .8rem; }
+.danger-texte { color: #d0442f !important; }
+#d-corps .nuancier { margin-top: 4px; }
