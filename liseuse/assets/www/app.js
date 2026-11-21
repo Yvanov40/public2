@@ -49,7 +49,10 @@ function demarrer() {
   setInterval(() => { if (app.ecran === 'lecteur' && window.lecteur) lecteur.heure(); }, 20000);
   // reprendre la lecture si l'application a été fermée pendant la lecture
   const ouvert = Store.get('ouvert', null);
-  if (ouvert && app.prefs.reprendre && app.livres.some(l => l.id === ouvert)) {
+  if (/[?&]accueil=1/.test(location.search)) {
+    // retour de secours (l'affichage s'était figé) : on ne rouvre pas le livre
+    Store.del('ouvert');
+  } else if (ouvert && app.prefs.reprendre && app.livres.some(l => l.id === ouvert)) {
     ouvrirLivre(ouvert);
   }
   if (A) A.pret();
@@ -614,11 +617,11 @@ function ouvrirPdf(l) {
 }
 
 app.fermerPdf = function () {
-  visionneusePdf.fermer();
+  // l'écran d'accueil d'abord : même si la fermeture du lecteur échoue, on revient à la bibliothèque
   Store.del('ouvert');
-  appliquerApparence();
   montrer('biblio');
-  afficherBiblio();
+  try { visionneusePdf.fermer(); } catch (e) { console.error(e); }
+  try { appliquerApparence(); afficherBiblio(); } catch (e) { console.error(e); }
 };
 
 function ouvrirLivre(id) {

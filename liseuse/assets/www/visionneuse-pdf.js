@@ -59,7 +59,11 @@ const visionneusePdf = window.visionneusePdf = (() => {
         natif = true;
         n = infos.pages;
         tailles = Array.from({ length: n }, () => [infos.l, infos.h]);
-      } else if (infos && infos.erreur === 'délai dépassé') {
+      } else if (infos && infos.erreur) {
+        // le moteur d'Android refuse ce fichier : on le dit, puis lecteur de secours (pdf.js, par morceaux)
+        app.toast('Moteur PDF d\'Android : ' + infos.erreur + ' — ouverture avec le lecteur de secours.', 5000);
+      }
+      if (infos && infos.erreur === 'délai dépassé') {
         $('#pdf-chargement').classList.remove('actif');
         app.toast('Ce PDF met trop de temps à s\'ouvrir.', 4000);
         app.fermerPdf();
@@ -70,7 +74,7 @@ const visionneusePdf = window.visionneusePdf = (() => {
     if (!natif) {
       try {
         await ConversionPdf.chargerPdfJs();
-        doc = await pdfjsLib.getDocument({ url: '/pdf/' + l.id, isEvalSupported: false }).promise;
+        doc = await pdfjsLib.getDocument({ url: '/pdf/' + l.id, isEvalSupported: false, disableAutoFetch: true, disableStream: true, rangeChunkSize: 262144 }).promise;
       } catch (e) {
         $('#pdf-chargement').classList.remove('actif');
         app.toast('Ce PDF ne peut pas être ouvert : ' + ((e && e.message) || 'erreur'), 4000);
@@ -412,7 +416,7 @@ const visionneusePdf = window.visionneusePdf = (() => {
       try {
         app.toast('Lecture du sommaire…', 1500);
         await ConversionPdf.chargerPdfJs();
-        doc = await pdfjsLib.getDocument({ url: '/pdf/' + livre.id, isEvalSupported: false }).promise;
+        doc = await pdfjsLib.getDocument({ url: '/pdf/' + livre.id, isEvalSupported: false, disableAutoFetch: true, disableStream: true, rangeChunkSize: 262144 }).promise;
       } catch (e) { app.toast('Ce PDF n\'a pas de sommaire lisible.'); return; }
     }
     let plan = [];

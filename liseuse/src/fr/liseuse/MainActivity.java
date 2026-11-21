@@ -83,6 +83,12 @@ public final class MainActivity extends Activity {
         int fond = sombre ? 0xFF121212 : 0xFFF7F5F0;
         barres(fond, sombre);
 
+        creerWeb(fond);
+        web.loadUrl(BASE + "app/index.html");
+        recevoir(getIntent());
+    }
+
+    private void creerWeb(int fond) {
         web = new WebView(this);
         web.setBackgroundColor(fond);
         WebSettings s = web.getSettings();
@@ -101,8 +107,36 @@ public final class MainActivity extends Activity {
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new Client());
         setContentView(web);
-        web.loadUrl(BASE + "app/index.html");
-        recevoir(getIntent());
+    }
+
+    /**
+     * Sortie de secours : si l'interface ne répond plus (page figée), on recrée entièrement
+     * la WebView et on revient à la bibliothèque, sans rouvrir le livre en cours.
+     */
+    private void secours() {
+        generationPdf++;
+        filPdf.execute(new Runnable() {
+            @Override
+            public void run() {
+                fermerMoteurPdf();
+            }
+        });
+        WebView ancienne = web;
+        pret = false;
+        enAttente.clear();
+        boolean sombre = systemeSombre();
+        creerWeb(sombre ? 0xFF121212 : 0xFFF7F5F0);
+        try {
+            ancienne.stopLoading();
+            ancienne.destroy();
+        } catch (Throwable ignore) {
+        }
+        View d = getWindow().getDecorView();
+        d.setSystemUiVisibility(d.getSystemUiVisibility() & ~(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION));
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+        lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+        getWindow().setAttributes(lp);
+        web.loadUrl(BASE + "app/index.html?accueil=1");
     }
 
     @Override
@@ -152,12 +186,25 @@ public final class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        web.evaluateJavascript("window.app && app.retour ? app.retour() : false", new ValueCallback<String>() {
+        final boolean[] repondu = {false};
+        final WebView cible = web;
+        cible.evaluateJavascript("window.app && app.retour ? app.retour() : false", new ValueCallback<String>() {
             @Override
             public void onReceiveValue(String v) {
+                repondu[0] = true;
+                if (cible != web) return;
                 if (!"true".equals(v)) MainActivity.super.onBackPressed();
             }
         });
+        ui.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!repondu[0] && cible == web) {
+                    toast("L'affichage ne répondait plus : retour à la bibliothèque.");
+                    secours();
+                }
+            }
+        }, 1200);
     }
 
     @Override
@@ -852,7 +899,7 @@ public final class MainActivity extends Activity {
                     File f = biblio.pdf(id);
                     if (!f.exists()) f = biblio.source(id, "pdf");
                     if (!f.exists()) return introuvable();
-                    return reponse("application/pdf", new FileInputStream(f));
+                    return morceauFichier(f, "application/pdf", r.getRequestHeaders());
                 }
                 if (p.startsWith("/import/")) {
                     TravailPdf t = pdf(p.substring(8));
@@ -906,6 +953,52 @@ public final class MainActivity extends Activity {
         h.put("Access-Control-Allow-Origin", "*");
         r.setResponseHeaders(h);
         return r;
+    }
+
+    /** Réponse HTTP avec prise en charge des requêtes partielles (Range: bytes=a-b). */
+    private static WebResourceResponse morceauFichier(File f, String mime, Map<String, String> entetes) throws IOException {
+        long total = f.length();
+        String plage = null;
+        if (entetes != null) {
+            for (Map.Entry<String, String> e : entetes.entrySet()) {
+                if ("range".equalsIgnoreCase(e.getKey())) plage = e.getValue();
+            }
+        }
+        Map<String, String> h = new HashMap<String, String>();
+        h.put("Accept-Ranges", "bytes");
+        h.put("Cache-Control", "no-cache");
+        h.put("Access-Control-Allow-Origin", "*");
+        h.put("Access-Control-Expose-Headers", "Accept-Ranges, Content-Range, Content-Length");
+        if (plage != null && plage.startsWith("bytes=")) {
+            try {
+                String[] ab = plage.substring(6).split(",")[0].trim().split("-", -1);
+                long a, b;
+                if (ab[0].isEmpty()) {
+                    a = Math.max(0, total - Long.parseLong(ab[1]));
+                    b = total - 1;
+                } else {
+                    a = Long.parseLong(ab[0]);
+                    b = ab.length > 1 && !ab[1].isEmpty() ? Math.min(total - 1, Long.parseLong(ab[1])) : total - 1;
+                }
+                if (a <= b && a < total) {
+                    int n = (int) Math.min(b - a + 1, 16L * 1024 * 1024);
+                    byte[] buf = new byte[n];
+                    java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r");
+                    try {
+                        raf.seek(a);
+                        raf.readFully(buf);
+                    } finally {
+                        raf.close();
+                    }
+                    h.put("Content-Range", "bytes " + a + "-" + (a + n - 1) + "/" + total);
+                    h.put("Content-Length", String.valueOf(n));
+                    return new WebResourceResponse(mime, null, 206, "Partial Content", h, new ByteArrayInputStream(buf));
+                }
+            } catch (NumberFormatException ignore) {
+            }
+        }
+        h.put("Content-Length", String.valueOf(total));
+        return new WebResourceResponse(mime, null, 200, "OK", h, new FileInputStream(f));
     }
 
     private static WebResourceResponse introuvable() {
