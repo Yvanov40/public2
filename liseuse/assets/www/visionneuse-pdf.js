@@ -16,6 +16,8 @@ const visionneusePdf = window.visionneusePdf = (() => {
   let observateur = null;
   let barre = false;
   let natif = false;         // pages rendues par le moteur PDF d'Android (gros fichiers)
+  let attenteInfos = null;
+  let generation = 0;        // numéro de session donné par Android (réponses périmées ignorées)
   const nuit = () => !!Store.get('pdfNuit', false);
 
   function largeurBase() { return zone.clientWidth - 2 * 8; }
@@ -44,18 +46,25 @@ const visionneusePdf = window.visionneusePdf = (() => {
     lecteur.lumiere(true);
     doc = null;
     natif = false;
-    // 1. moteur PDF d'Android : lit les pages une à une dans le fichier, sans tout charger en mémoire
-    await new Promise(r => setTimeout(r, 40));
-    if (mon !== jeton) return;
-    if (A && A.pdfInfos) {
-      try {
-        const infos = JSON.parse(A.pdfInfos(l.id));
-        if (infos && !infos.erreur && infos.pages > 0) {
-          natif = true;
-          n = infos.pages;
-          tailles = infos.tailles;
-        }
-      } catch (e) { /* on essaie pdf.js */ }
+    // 1. moteur PDF d'Android : lit les pages une à une dans le fichier, sans tout charger en mémoire.
+    //    La réponse arrive de façon asynchrone (visionneusePdf.infos) : l'interface ne se fige jamais.
+    if (A && A.pdfOuvrir) {
+      const infos = await new Promise(resolve => {
+        attenteInfos = resolve;
+        A.pdfOuvrir(l.id);
+        setTimeout(() => { if (attenteInfos === resolve) { attenteInfos = null; resolve({ erreur: 'délai dépassé' }); } }, 30000);
+      });
+      if (mon !== jeton) return;
+      if (infos && !infos.erreur && infos.pages > 0) {
+        natif = true;
+        n = infos.pages;
+        tailles = Array.from({ length: n }, () => [infos.l, infos.h]);
+      } else if (infos && infos.erreur === 'délai dépassé') {
+        $('#pdf-chargement').classList.remove('actif');
+        app.toast('Ce PDF met trop de temps à s\'ouvrir.', 4000);
+        app.fermerPdf();
+        return;
+      }
     }
     // 2. sinon pdf.js (PDF que le moteur d'Android ne sait pas ouvrir)
     if (!natif) {
@@ -117,7 +126,8 @@ const visionneusePdf = window.visionneusePdf = (() => {
     elems = [];
     if (doc) { try { doc.destroy(); } catch (e) { /* rien */ } }
     doc = null;
-    if (natif && A && A.pdfFermer) A.pdfFermer();
+    if (A && A.pdfFermer) A.pdfFermer();
+    attenteInfos = null;
     natif = false;
     livre = null;
     lecteur.lumiere(false);
@@ -152,21 +162,61 @@ const visionneusePdf = window.visionneusePdf = (() => {
   function rendreNatif(i) {
     const el = elems[i];
     if (!el || !livre) return;
-    const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = Math.min(2000, Math.max(200, Math.ceil(el.clientWidth * dpr / 200) * 200));
-    if (+el.dataset.w === w) return;
-    el.dataset.w = w;
+    if (+el.dataset.w === w || +el.dataset.demande === w) return;
+    el.dataset.demande = w;
+    el.classList.add('en-cours');
+    el.classList.remove('echec');
     rendus.set(i, { natif: true });
+    envoyerVoulues();
+    A.pdfPage(livre.id, i, w);
+  }
+
+  /** Réponse d'Android : la page i est prête (ou abandonnée / illisible). */
+  function pagePrete(g, i, w, r) {
+    if (g !== generation || !natif) return;
+    const el = elems[i];
+    if (!el || +el.dataset.demande !== w) return;
+    delete el.dataset.demande;
+    el.classList.remove('en-cours');
+    if (!r) return; // abandonnée : la page n'est plus à l'écran
+    if (r.erreur) {
+      el.classList.add('echec');
+      el.querySelector('.pdf-n').textContent = `${i + 1} — page illisible`;
+      return;
+    }
+    // vraie taille de la page (si elle diffère de la première)
+    if (r.l && r.h && Math.abs(r.l / r.h - tailles[i][0] / tailles[i][1]) > 0.01) {
+      const ancre = pageCourante();
+      tailles[i] = [r.l, r.h];
+      const base = largeurBase() * zoom;
+      el.style.height = Math.round(base * r.h / r.l) + 'px';
+      if (i < ancre.i) allerA(ancre.i, ancre.f);
+    }
     const img = new Image();
     img.alt = '';
     img.decoding = 'async';
     img.onload = () => {
-      if (+el.dataset.w !== w || !el.isConnected) return;
+      if (!el.isConnected) return;
       el.querySelectorAll('img').forEach(x => { if (x !== img) x.remove(); });
       el.appendChild(img);
+      el.dataset.w = w;
     };
-    img.onerror = () => { if (+el.dataset.w === w) delete el.dataset.w; };
-    img.src = `/pdfpage/${livre.id}/${i}?w=${w}`;
+    img.src = r.url;
+  }
+
+  /** Indique à Android les pages utiles (visibles et voisines). */
+  let minuteVoulues;
+  function envoyerVoulues() {
+    clearTimeout(minuteVoulues);
+    minuteVoulues = setTimeout(() => {
+      if (!natif || !A || !A.pdfVoulues) return;
+      const { i } = pageCourante();
+      const l = [];
+      for (let k = Math.max(0, i - 2); k <= Math.min(n - 1, i + 3); k++) l.push(k);
+      A.pdfVoulues(JSON.stringify(l));
+    }, 0);
   }
 
   async function rendre(i) {
@@ -206,7 +256,12 @@ const visionneusePdf = window.visionneusePdf = (() => {
       if (Math.abs(k - i) > 4 && !r.enCours) {
         if (r.natif) {
           const el = elems[k];
-          if (el) { el.querySelectorAll('img').forEach(x => x.remove()); delete el.dataset.w; }
+          if (el) {
+            el.querySelectorAll('img').forEach(x => x.remove());
+            delete el.dataset.w;
+            delete el.dataset.demande;
+            el.classList.remove('en-cours');
+          }
         } else {
           r.canvas.width = 0;
           r.canvas.remove();
@@ -218,9 +273,10 @@ const visionneusePdf = window.visionneusePdf = (() => {
 
   function pageCourante() {
     const y = zone.scrollTop + zone.clientHeight * 0.3;
-    let i = 0;
-    for (let k = 0; k < elems.length; k++) {
-      if (elems[k].offsetTop <= y) i = k; else break;
+    let a = 0, b = elems.length - 1, i = 0;
+    while (a <= b) {
+      const m = (a + b) >> 1;
+      if (elems[m].offsetTop <= y) { i = m; a = m + 1; } else b = m - 1;
     }
     const el = elems[i];
     const f = el ? Math.max(0, Math.min(1, (zone.scrollTop - el.offsetTop) / Math.max(1, el.offsetHeight))) : 0;
@@ -257,6 +313,7 @@ const visionneusePdf = window.visionneusePdf = (() => {
     if (!livre || !elems.length) return;
     majNumero();
     montrerNumero();
+    if (natif) envoyerVoulues();
     clearTimeout(minuteSauve);
     minuteSauve = setTimeout(sauver, 400);
   }, { passive: true });
@@ -403,5 +460,10 @@ const visionneusePdf = window.visionneusePdf = (() => {
     elems.forEach((e, k) => { const b = e.getBoundingClientRect(); if (b.bottom > 0 && b.top < innerHeight) rendre(k); });
   });
 
-  return { ouvrir, fermer, sauver, barreVisible: () => barre, cacherBarre: () => basculerBarre(false) };
+  function infos(g, r) {
+    generation = g;
+    if (attenteInfos) { const f = attenteInfos; attenteInfos = null; f(r); }
+  }
+
+  return { ouvrir, fermer, sauver, infos, pagePrete, barreVisible: () => barre, cacherBarre: () => basculerBarre(false) };
 })();

@@ -125,9 +125,14 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        synchronized (verrouPdf) {
-            fermerMoteurPdf();
-        }
+        generationPdf++;
+        filPdf.execute(new Runnable() {
+            @Override
+            public void run() {
+                fermerMoteurPdf();
+            }
+        });
+        filPdf.shutdown();
         for (ZipFile z : zips.values()) {
             try {
                 z.close();
@@ -435,12 +440,15 @@ public final class MainActivity extends Activity {
     }
 
     // ================================================================ PDF tel quel : rendu natif page par page
+    // Tout le travail sur le PDF se fait sur un seul fil d'arrière-plan ; l'interface ne l'attend jamais.
+    // Les pages demandées puis devenues inutiles (on a défilé plus loin) sont abandonnées.
 
-    private final Object verrouPdf = new Object();
+    private final ExecutorService filPdf = Executors.newSingleThreadExecutor();
+    private volatile int generationPdf;
+    private final java.util.Set<Integer> pagesVoulues = java.util.Collections.synchronizedSet(new java.util.HashSet<Integer>());
     private String renduId;
     private android.os.ParcelFileDescriptor renduFd;
     private android.graphics.pdf.PdfRenderer rendu;
-    private String renduTailles;
 
     private File fichierPdf(String id) {
         File f = biblio.pdf(id);
@@ -448,7 +456,13 @@ public final class MainActivity extends Activity {
         return f;
     }
 
-    /** Ouvre (ou réutilise) le moteur PDF d'Android pour ce livre. À appeler sous verrouPdf. */
+    private File dossierPages() {
+        File d = new File(getCacheDir(), "pdfpages");
+        if (!d.exists()) d.mkdirs();
+        return d;
+    }
+
+    /** À n'appeler que sur filPdf. */
     private android.graphics.pdf.PdfRenderer moteurPdf(String id) throws IOException {
         if (rendu != null && id.equals(renduId)) return rendu;
         fermerMoteurPdf();
@@ -464,13 +478,13 @@ public final class MainActivity extends Activity {
         } catch (SecurityException e) {
             renduFd.close();
             renduFd = null;
-            throw new IOException("PDF protégé.");
+            throw new IOException("PDF protégé par un mot de passe.");
         }
         renduId = id;
-        renduTailles = null;
         return rendu;
     }
 
+    /** À n'appeler que sur filPdf. */
     private void fermerMoteurPdf() {
         if (rendu != null) {
             try {
@@ -487,40 +501,43 @@ public final class MainActivity extends Activity {
         rendu = null;
         renduFd = null;
         renduId = null;
-        renduTailles = null;
     }
 
-    private WebResourceResponse pagePdf(String id, int i, int largeur) {
-        synchronized (verrouPdf) {
-            android.graphics.Bitmap b = null;
-            try {
-                android.graphics.pdf.PdfRenderer r = moteurPdf(id);
-                if (i < 0 || i >= r.getPageCount()) return introuvable();
-                android.graphics.pdf.PdfRenderer.Page pg = r.openPage(i);
-                try {
-                    int w = Math.max(100, Math.min(2000, largeur));
-                    int h = Math.max(1, Math.round((float) w * pg.getHeight() / Math.max(1, pg.getWidth())));
-                    if ((long) w * h > 7000000L) { // limite mémoire (pages très allongées)
-                        float k = (float) Math.sqrt(7000000.0 / ((long) w * h));
-                        w = Math.max(1, (int) (w * k));
-                        h = Math.max(1, (int) (h * k));
-                    }
-                    b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888);
-                    b.eraseColor(0xFFFFFFFF);
-                    pg.render(b, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
-                } finally {
-                    pg.close();
-                }
-                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
-                b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, bo);
-                Map<String, String> h = new HashMap<String, String>();
-                h.put("Cache-Control", "max-age=86400");
-                return new WebResourceResponse("image/jpeg", null, 200, "OK", h, new ByteArrayInputStream(bo.toByteArray()));
-            } catch (Throwable e) {
-                return introuvable();
-            } finally {
-                if (b != null) b.recycle();
+    private void viderPages() {
+        File[] l = dossierPages().listFiles();
+        if (l != null) for (File f : l) f.delete();
+    }
+
+    /** Rend une page en JPEG dans le cache (sur filPdf). Renvoie {largeur, hauteur} de la page en points. */
+    private int[] rendrePage(String id, int i, int largeur, File sortie) throws IOException {
+        android.graphics.pdf.PdfRenderer r = moteurPdf(id);
+        if (i < 0 || i >= r.getPageCount()) throw new IOException("page hors du document");
+        android.graphics.pdf.PdfRenderer.Page pg = r.openPage(i);
+        android.graphics.Bitmap b = null;
+        try {
+            int pw = pg.getWidth(), ph = pg.getHeight();
+            int w = Math.max(100, Math.min(2000, largeur));
+            int h = Math.max(1, Math.round((float) w * ph / Math.max(1, pw)));
+            if ((long) w * h > 6000000L) { // limite mémoire (pages très allongées)
+                float k = (float) Math.sqrt(6000000.0 / ((long) w * h));
+                w = Math.max(1, (int) (w * k));
+                h = Math.max(1, (int) (h * k));
             }
+            b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888);
+            b.eraseColor(0xFFFFFFFF);
+            pg.render(b, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+            File tmp = new File(sortie.getPath() + ".tmp");
+            OutputStream o = new FileOutputStream(tmp);
+            try {
+                b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 86, o);
+            } finally {
+                o.close();
+            }
+            if (!tmp.renameTo(sortie)) throw new IOException("écriture impossible");
+            return new int[]{pw, ph};
+        } finally {
+            pg.close();
+            if (b != null) b.recycle();
         }
     }
 
@@ -824,15 +841,11 @@ public final class MainActivity extends Activity {
                     boolean html = u.getQueryParameter("html") != null;
                     return reponse(mime(chemin, html), z.getInputStream(e));
                 }
-                if (p.startsWith("/pdfpage/")) {
-                    String[] m = p.substring(9).split("/");
-                    if (m.length < 2) return introuvable();
-                    int largeur = 1200;
-                    try {
-                        largeur = Integer.parseInt(u.getQueryParameter("w"));
-                    } catch (Exception ignore) {
-                    }
-                    return pagePdf(m[0].replaceAll("[^0-9a-f]", ""), Integer.parseInt(m[1].replaceAll("[^0-9]", "")), largeur);
+                if (p.startsWith("/pdfcache/")) {
+                    String nom = p.substring(10).replaceAll("[^0-9a-z.\\-]", "");
+                    File f = new File(dossierPages(), nom);
+                    if (!f.exists()) return introuvable();
+                    return reponse("image/jpeg", new FileInputStream(f));
                 }
                 if (p.startsWith("/pdf/")) {
                     String id = p.substring(5).replaceAll("[^0-9a-f]", "");
@@ -1292,36 +1305,86 @@ public final class MainActivity extends Activity {
             if (t != null && t.ep != null && href != null && !href.isEmpty()) t.ep.couverture = href;
         }
 
-        /** Nombre et tailles des pages d'un PDF gardé tel quel (moteur natif d'Android). */
+        /** Ouvre un PDF tel quel ; la réponse arrive par visionneusePdf.infos(...). */
         @JavascriptInterface
-        public String pdfInfos(String id) {
-            synchronized (verrouPdf) {
-                try {
-                    android.graphics.pdf.PdfRenderer r = moteurPdf(id);
-                    if (renduTailles != null) return renduTailles;
-                    int n = r.getPageCount();
-                    StringBuilder sb = new StringBuilder("{\"pages\":").append(n).append(",\"tailles\":[");
-                    for (int i = 0; i < n; i++) {
-                        android.graphics.pdf.PdfRenderer.Page pg = r.openPage(i);
-                        if (i > 0) sb.append(',');
-                        sb.append('[').append(pg.getWidth()).append(',').append(pg.getHeight()).append(']');
-                        pg.close();
+        public void pdfOuvrir(final String id) {
+            final int g = ++generationPdf;
+            pagesVoulues.clear();
+            filPdf.execute(new Runnable() {
+                @Override
+                public void run() {
+                    if (g != generationPdf) return;
+                    try {
+                        viderPages();
+                        android.graphics.pdf.PdfRenderer r = moteurPdf(id);
+                        int n = r.getPageCount();
+                        int w = 595, h = 842;
+                        if (n > 0) {
+                            android.graphics.pdf.PdfRenderer.Page pg = r.openPage(0);
+                            w = pg.getWidth();
+                            h = pg.getHeight();
+                            pg.close();
+                        }
+                        js("window.visionneusePdf && visionneusePdf.infos(" + g + "," + obj("pages", n, "l", w, "h", h) + ")");
+                    } catch (Throwable e) {
+                        fermerMoteurPdf();
+                        js("window.visionneusePdf && visionneusePdf.infos(" + g + "," + obj("erreur", message(e)) + ")");
                     }
-                    sb.append("]}");
-                    renduTailles = sb.toString();
-                    return renduTailles;
-                } catch (Throwable e) {
-                    fermerMoteurPdf();
-                    return obj("erreur", message(e)).toString();
                 }
+            });
+        }
+
+        /** Pages actuellement à l'écran (ou presque) : les autres demandes sont abandonnées. */
+        @JavascriptInterface
+        public void pdfVoulues(String json) {
+            try {
+                org.json.JSONArray a = new org.json.JSONArray(json);
+                java.util.Set<Integer> n = new java.util.HashSet<Integer>();
+                for (int i = 0; i < a.length(); i++) n.add(a.optInt(i));
+                synchronized (pagesVoulues) {
+                    pagesVoulues.clear();
+                    pagesVoulues.addAll(n);
+                }
+            } catch (Exception ignore) {
             }
+        }
+
+        /** Demande le rendu d'une page ; la réponse arrive par visionneusePdf.pagePrete(...). */
+        @JavascriptInterface
+        public void pdfPage(final String id, final int i, final int largeur) {
+            final int g = generationPdf;
+            filPdf.execute(new Runnable() {
+                @Override
+                public void run() {
+                    if (g != generationPdf) return;
+                    if (!pagesVoulues.isEmpty() && !pagesVoulues.contains(i)) {
+                        js("window.visionneusePdf && visionneusePdf.pagePrete(" + g + "," + i + "," + largeur + ",null)");
+                        return;
+                    }
+                    String nom = id + "-" + i + "-" + largeur + ".jpg";
+                    File f = new File(dossierPages(), nom);
+                    try {
+                        int[] t = f.exists() ? null : rendrePage(id, i, largeur, f);
+                        js("window.visionneusePdf && visionneusePdf.pagePrete(" + g + "," + i + "," + largeur + ","
+                                + obj("url", "/pdfcache/" + nom, "l", t == null ? 0 : t[0], "h", t == null ? 0 : t[1]) + ")");
+                    } catch (Throwable e) {
+                        js("window.visionneusePdf && visionneusePdf.pagePrete(" + g + "," + i + "," + largeur + "," + obj("erreur", message(e)) + ")");
+                    }
+                }
+            });
         }
 
         @JavascriptInterface
         public void pdfFermer() {
-            synchronized (verrouPdf) {
-                fermerMoteurPdf();
-            }
+            generationPdf++;
+            pagesVoulues.clear();
+            filPdf.execute(new Runnable() {
+                @Override
+                public void run() {
+                    fermerMoteurPdf();
+                    viderPages();
+                }
+            });
         }
 
         @JavascriptInterface

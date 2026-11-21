@@ -357,3 +357,7 @@ html, body { touch-action: pan-x pan-y; }
 .feuille.petite { padding-bottom: calc(26px + env(safe-area-inset-bottom)); }
 .pdf-page img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #lecteur-pdf.nuit .pdf-page img { filter: invert(.9) hue-rotate(180deg); }
+.pdf-page.en-cours::after { content: ""; position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%; border: 3px solid rgba(128,128,128,.3); border-top-color: var(--accent); animation: tourne .8s linear infinite; }
+.pdf-page.echec .pdf-n { font-size: .9rem; color: #c55; white-space: nowrap; }
+#lecteur-pdf.nuit .pdf-page { background: #2a2a2a; }
+#lecteur-pdf.nuit .pdf-n { color: #666; }
