@@ -127,6 +127,8 @@ final class Store {
     boolean badges() { return flag(BADGES, true); }
     int badgeStyle() { return num(BADGE_STYLE, 1); }         // 0 point, 1 nombre
     int badgeColor() { return num(BADGE_COLOR, 0xFFFF5A5F); } // 0 = couleur d'accent
+    static final String KEEP_ALIVE = "keepAlive";
+    boolean keepAlive() { return flag(KEEP_ALIVE, true); }
     static final String NAV_KEYS = "navKeys";
     int navKeys() { return num(NAV_KEYS, 0); }               // 0 comme la barre d'état, 1 toujours claires
 

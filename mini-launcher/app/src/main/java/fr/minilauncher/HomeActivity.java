@@ -260,6 +260,7 @@ public final class HomeActivity extends Activity
         }
         applyClockSettings();
         applyAppearance();
+        KeepAliveService.sync(this);
         grid.reload();
         strip.refresh();
         home.invalidate();

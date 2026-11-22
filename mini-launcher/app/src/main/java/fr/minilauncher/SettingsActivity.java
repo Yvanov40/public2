@@ -101,8 +101,18 @@ public final class SettingsActivity extends Activity {
                 startActivity(new Intent(Settings.ACTION_SETTINGS));
             }
         });
+        toggle("Garder le launcher actif", "Évite qu'il redémarre quand on ferme toutes les applis",
+                store.keepAlive(), on -> {
+                    store.setFlag(Store.KEEP_ALIVE, on);
+                    if (on && android.os.Build.VERSION.SDK_INT >= 33) {
+                        requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 2);
+                    }
+                    KeepAliveService.sync(this);
+                });
         note("Appui long sur une zone vide de l'accueil : ajouter une appli, un dossier, un widget, "
-                + "changer le fond d'écran.");
+                + "changer le fond d'écran. « Garder le launcher actif » ajoute une notification "
+                + "discrète, imposée par Android. Aide aussi : Paramètres > Applis > Mini Launcher > "
+                + "Démarrage automatique, et Économiseur de batterie > Aucune restriction.");
 
         // ---------------------------------------------------------- alphabet
         section("Alphabet sur les bords");

@@ -3,6 +3,10 @@
 
     <!-- Ouvrir le volet des notifications et le centre de contrôle. -->
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
+    <!-- Facultatif : « Garder le launcher actif » (service de premier plan). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Facultatif (accordé par l'utilisateur dans les réglages) : applis récentes complètes. -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
 
@@ -53,6 +57,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".KeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Garder l'écran d'accueil en mémoire pour qu'il ne redémarre pas" />
+        </service>
 
         <!-- Facultatif (« Accès aux notifications ») : pastilles de notification. -->
         <service
