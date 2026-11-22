@@ -29,19 +29,22 @@ jobs:
         working-directory: mini-launcher
         run: gradle assembleDebug --no-daemon --stacktrace
 
-      - name: Renommer l'APK
-        run: cp mini-launcher/app/build/outputs/apk/debug/app-debug.apk MiniLauncher.apk
+      - name: Renommer l'APK (avec le numéro de version)
+        run: |
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' mini-launcher/app/build.gradle.kts)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          cp mini-launcher/app/build/outputs/apk/debug/app-debug.apk "MiniLauncher-$VERSION.apk"
 
       - uses: actions/upload-artifact@v4
         with:
           name: MiniLauncher-apk
-          path: MiniLauncher.apk
+          path: MiniLauncher-*.apk
 
       - name: Publier en téléchargement direct (une release par build)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "mini-launcher-v${{ github.run_number }}" MiniLauncher.apk \
+          gh release create "mini-launcher-v${{ github.run_number }}" "MiniLauncher-$VERSION.apk" \
             --target "${{ github.sha }}" \
-            --title "Mini Launcher (build ${{ github.run_number }})" \
+            --title "Mini Launcher $VERSION (build ${{ github.run_number }})" \
             --notes "APK construit depuis ${{ github.ref_name }} (${{ github.sha }}). Ouvrir le fichier sur le téléphone pour l'installer."

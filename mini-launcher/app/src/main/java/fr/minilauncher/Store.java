@@ -68,6 +68,17 @@ final class Store {
         return prefs.getBoolean(name, def);
     }
 
+    /** « 3.9 (build 20) » : la version installée, à vérifier après une mise à jour. */
+    static String version(android.content.Context c) {
+        try {
+            android.content.pm.PackageInfo p = c.getPackageManager().getPackageInfo(c.getPackageName(), 0);
+            long code = android.os.Build.VERSION.SDK_INT >= 28 ? p.getLongVersionCode() : p.versionCode;
+            return p.versionName + " (build " + code + ")";
+        } catch (Exception e) {
+            return "?";
+        }
+    }
+
     String text(String name) {
         return prefs.getString(name, null);
     }

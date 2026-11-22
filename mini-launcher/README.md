@@ -64,7 +64,7 @@ Appui long sur une zone vide > Réglages du launcher (ou « Mini Launcher » dan
 ## Installer
 
 Chaque envoi sur GitHub construit l'APK (action « Mini Launcher (APK) ») et le publie dans
-une release `mini-launcher-vN`. Les versions suivantes s'installent par-dessus (clé de
+une release `mini-launcher-vN` (fichier `MiniLauncher-<version>.apk`). Les versions suivantes s'installent par-dessus (clé de
 signature fixe dans `app/debug.keystore` : clé de test, pas pour le Play Store).
 
 ## Code

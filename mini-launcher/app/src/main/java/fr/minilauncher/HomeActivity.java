@@ -224,7 +224,7 @@ public final class HomeActivity extends Activity
     public void onHomeLongPress() {
         String[] items = {"Ajouter une appli", "Créer un dossier", "Ajouter un widget", "Fond d'écran",
                 "Réglages du launcher"};
-        Sheet.list(this, "Écran d'accueil", items, which -> {
+        Sheet.list(this, "Mini Launcher " + Store.version(this), items, which -> {
             switch (which) {
                 case 0:
                     Menus.pickApp(this, "Ajouter à l'accueil", grid.sortedApps(), app -> {

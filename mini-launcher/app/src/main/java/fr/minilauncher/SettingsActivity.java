@@ -226,7 +226,7 @@ public final class SettingsActivity extends Activity {
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         title.setPadding(px(6), px(8), 0, 0);
         page.addView(title);
-        TextView sub = text("Réglages", 15, MUTED);
+        TextView sub = text("Réglages · version " + Store.version(this), 15, MUTED);
         sub.setPadding(px(6), px(2), 0, px(6));
         page.addView(sub);
     }
