@@ -1,0 +1,48 @@
+name: Mini Launcher (APK)
+
+on:
+  push:
+    paths:
+      - 'mini-launcher/**'
+      - '.github/workflows/mini-launcher.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Construire l'APK
+        working-directory: mini-launcher
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Renommer l'APK
+        run: cp mini-launcher/app/build/outputs/apk/debug/app-debug.apk MiniLauncher.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MiniLauncher-apk
+          path: MiniLauncher.apk
+
+      - name: Publier en téléchargement direct (release « mini-launcher-latest »)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete mini-launcher-latest --yes --cleanup-tag || true
+          gh release create mini-launcher-latest MiniLauncher.apk \
+            --target "${{ github.sha }}" --prerelease \
+            --title "Mini Launcher (dernière version)" \
+            --notes "APK construit depuis ${{ github.ref_name }} (${{ github.sha }}). Ouvrir le fichier sur le téléphone pour l'installer."
