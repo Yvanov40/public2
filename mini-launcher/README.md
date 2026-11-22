@@ -17,6 +17,15 @@ habituel reste en place.
 - Beaucoup d'applis pour une lettre : une case « +n » mène à la suite.
 - Les lettres accentuées sont regroupées (É → E) ; chiffres et symboles vont dans « # ».
 
+## Position de la roue
+
+- **Widget Mini Launcher (1×1)** : le plus fiable. Android transmet lui-même la position
+  du widget, la roue s'ouvre donc toujours autour, quel que soit le launcher.
+- **Icône** : certains launchers ne donnent pas (ou donnent mal) la position de l'icône.
+  Dans ce cas, **maintenir le ×** au centre puis glisser place la roue où l'on veut ; la
+  position est mémorisée pour les ouvertures suivantes.
+- Près d'un bord ou dans un coin, les lettres s'étalent en éventail (un ou plusieurs arcs).
+
 ## Installer
 
 Chaque envoi sur GitHub construit l'APK (action « Mini Launcher (APK) ») et le publie dans

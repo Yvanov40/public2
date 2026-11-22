@@ -2,6 +2,7 @@ package fr.minilauncher;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -71,6 +72,9 @@ final class RadialView extends View {
     private final Map<String, List<AppRepository.AppEntry>> byLetter = new HashMap<>();
 
     private Rect anchor;
+    private boolean anchorUsable;
+    private final SharedPreferences prefs;
+    private boolean dragging; // déplacement de la roue (appui long sur le centre)
     private int mode = MODE_LETTERS;
     private float cx, cy;
     // Position de chaque lettre (rayon et angle en degrés), et arcs de fond à dessiner.
@@ -118,6 +122,18 @@ final class RadialView extends View {
         }
     };
 
+    private final Runnable startDrag = new Runnable() {
+        @Override
+        public void run() {
+            if (mode != MODE_LETTERS || moved) return;
+            dragging = true;
+            hoverLetter = HIT_NONE;
+            removeCallbacks(dwell);
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            invalidate();
+        }
+    };
+
     private final Runnable longPress = new Runnable() {
         @Override
         public void run() {
@@ -146,6 +162,7 @@ final class RadialView extends View {
         label.setShadowLayer(3 * dp, 0, dp, 0xCC000000);
         setHapticFeedbackEnabled(true);
         setFocusable(true);
+        prefs = context.getSharedPreferences("roue", Context.MODE_PRIVATE);
     }
 
     void setListener(Listener l) {
@@ -218,12 +235,19 @@ final class RadialView extends View {
     private void layoutCenter() {
         int w = getWidth(), h = getHeight();
         if (w == 0 || h == 0) return;
-        float ax = w / 2f, ay = h * 0.62f;
+        float ax = prefs.getFloat("x", 0.5f) * w, ay = prefs.getFloat("y", 0.62f) * h;
+        anchorUsable = false;
         if (anchor != null) {
             int[] loc = new int[2];
             getLocationOnScreen(loc);
-            ax = anchor.exactCenterX() - loc[0];
-            ay = anchor.exactCenterY() - loc[1];
+            // Certains launchers donnent une position fausse, collée en haut à gauche
+            // (sous la barre d'état) : on l'ignore et on garde la position mémorisée.
+            float minTop = Math.max(safe.top, 24 * dp);
+            if (anchor.top >= minTop && anchor.left >= 0 && anchor.width() > 0) {
+                anchorUsable = true;
+                ax = anchor.exactCenterX() - loc[0];
+                ay = anchor.exactCenterY() - loc[1];
+            }
         }
         // Le centre reste sur l'icône (juste assez à l'intérieur pour que le rond central se voie).
         float in = 30 * dp;
@@ -399,7 +423,10 @@ final class RadialView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         canvas.drawColor(Color.argb((int) (165 * dim), 0, 0, 0));
-        if (mode == MODE_LETTERS) drawLetters(canvas);
+        if (mode == MODE_LETTERS) {
+            drawLetters(canvas);
+            if (dragging || (!anchorUsable && !prefs.contains("x"))) drawHint(canvas);
+        }
         else drawApps(canvas);
     }
 
@@ -511,6 +538,17 @@ final class RadialView extends View {
         drawCentered(canvas, letter == null ? "" : letter, cx, cy, text);
     }
 
+    private void drawHint(Canvas canvas) {
+        String s = dragging ? "Lâche le doigt sur ton icône" : "Maintiens le × puis glisse pour placer la roue";
+        float y = cy > getHeight() / 2f ? safe.top + 60 * dp : getHeight() - safe.bottom - 60 * dp;
+        label.setAlpha(255);
+        float tw = label.measureText(s);
+        fill.setColor(COLOR_PANEL);
+        oval.set(getWidth() / 2f - tw / 2 - 14 * dp, y - 22 * dp, getWidth() / 2f + tw / 2 + 14 * dp, y + 12 * dp);
+        canvas.drawRoundRect(oval, 17 * dp, 17 * dp, fill);
+        canvas.drawText(s, getWidth() / 2f, y, label);
+    }
+
     private void drawCentered(Canvas canvas, String s, float x, float y, Paint paint) {
         paint.getTextBounds(s, 0, s.length(), tmp);
         canvas.drawText(s, x, y + tmp.height() / 2f - tmp.bottom, paint);
@@ -569,15 +607,25 @@ final class RadialView extends View {
                 moved = false;
                 waitMoveAfterSwitch = false;
                 longPressFired = false;
+                dragging = false;
                 updateHover(x, y);
                 if (mode == MODE_APPS && hoverCell >= 0) postDelayed(longPress, LONG_PRESS_MS);
+                if (mode == MODE_LETTERS && letterAt(x, y) == HIT_CENTER) postDelayed(startDrag, LONG_PRESS_MS);
                 return true;
 
             case MotionEvent.ACTION_MOVE:
                 if (!tracking) return true;
+                if (dragging) {
+                    cx = clamp(x, safe.left + 30 * dp, getWidth() - safe.right - 30 * dp);
+                    cy = clamp(y, safe.top + 30 * dp, getHeight() - safe.bottom - 30 * dp);
+                    layoutLetters();
+                    invalidate();
+                    return true;
+                }
                 if (!moved && Math.hypot(x - downX, y - downY) > touchSlop) {
                     moved = true;
                     removeCallbacks(longPress);
+                    removeCallbacks(startDrag);
                 }
                 if (waitMoveAfterSwitch) {
                     if (Math.hypot(x - switchX, y - switchY) < 24 * dp) return true;
@@ -589,8 +637,15 @@ final class RadialView extends View {
             case MotionEvent.ACTION_UP:
                 removeCallbacks(longPress);
                 removeCallbacks(dwell);
+                removeCallbacks(startDrag);
                 if (!tracking) return true;
                 tracking = false;
+                if (dragging) {
+                    dragging = false;
+                    prefs.edit().putFloat("x", cx / getWidth()).putFloat("y", cy / getHeight()).apply();
+                    invalidate();
+                    return true;
+                }
                 if (longPressFired) return true;
                 if (waitMoveAfterSwitch) {
                     // Les applis viennent de s'ouvrir sous le doigt : on les laisse affichées.
@@ -601,6 +656,8 @@ final class RadialView extends View {
                 return true;
 
             case MotionEvent.ACTION_CANCEL:
+                removeCallbacks(startDrag);
+                dragging = false;
                 removeCallbacks(longPress);
                 removeCallbacks(dwell);
                 tracking = false;
