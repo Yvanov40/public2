@@ -38,6 +38,9 @@ final class HomeView extends FrameLayout {
         void onLaunchHomeApp(AppRepository.AppEntry app, Rect bounds);
 
         void onHomeItemMenu(Store.HomeItem item);
+
+        /** Applis récentes, de la plus récente à la plus ancienne. */
+        List<AppRepository.AppEntry> recentApps();
     }
 
     private static final long LONG_PRESS_MS = 500;
@@ -239,7 +242,13 @@ final class HomeView extends FrameLayout {
                 if (dy > 0 && dy > 1.3f * Math.abs(dx)) {
                     host.onGesture(downX > getWidth() / 2f ? "gDownRight" : "gDownLeft");
                 } else if (dy < 0 && -dy > 1.3f * Math.abs(dx)) {
-                    host.onGesture("gUp");
+                    if (Actions.actionFor(getContext(), "gUp") == Actions.RECENTS) {
+                        // Un seul geste : la roue des récentes s'ouvre là où le doigt est parti,
+                        // on continue jusqu'à l'appli et on lâche.
+                        openRecents(downX, downY, e);
+                    } else {
+                        host.onGesture("gUp");
+                    }
                 } else if (Math.abs(dx) > 1.3f * Math.abs(dy)) {
                     host.onGesture(dx < 0 ? "gLeft" : "gRight");
                 }
@@ -285,6 +294,27 @@ final class HomeView extends FrameLayout {
         }
         if (toChildren) return super.dispatchTouchEvent(e);
         return true;
+    }
+
+    /**
+     * Ouvre la roue des applis récentes autour de (x, y). Si {@code current} n'est pas nul, le
+     * geste en cours continue dans la roue.
+     */
+    void openRecents(float x, float y, MotionEvent current) {
+        List<AppRepository.AppEntry> apps = host.recentApps();
+        if (apps.isEmpty()) {
+            android.widget.Toast.makeText(getContext(), "Aucune appli récente pour l'instant",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        folderWheel.open("Récentes", Store.get(getContext()).accent(), apps, x, y, false);
+        if (current == null) return;
+        folderForwarding = true;
+        MotionEvent down = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(),
+                MotionEvent.ACTION_DOWN, x, y, 0);
+        folderWheel.handleTouch(down);
+        down.recycle();
+        folderWheel.handleTouch(current);
     }
 
     /** Déplacement d'une appli, d'un dossier ou d'un widget. */

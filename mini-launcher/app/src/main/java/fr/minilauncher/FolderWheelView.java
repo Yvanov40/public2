@@ -52,6 +52,7 @@ final class FolderWheelView extends View {
 
     private Listener listener;
     private String folder;
+    private boolean realFolder = true;
     private int color;
     private float cx, cy;
     private boolean open, sticky, moved, tracking;
@@ -63,7 +64,7 @@ final class FolderWheelView extends View {
         if (moved || hover < 0 || listener == null) return;
         tracking = false;
         haptic(HapticFeedbackConstants.LONG_PRESS);
-        listener.onFolderAppMenu(spots.get(hover).app, folder);
+        listener.onFolderAppMenu(spots.get(hover).app, realFolder ? folder : null);
     };
 
     FolderWheelView(Context context) {
@@ -106,6 +107,12 @@ final class FolderWheelView extends View {
 
     /** Ouvre le dossier autour du point (x, y) de la vue. */
     void open(String folder, int color, List<AppRepository.AppEntry> apps, float x, float y) {
+        open(folder, color, apps, x, y, true);
+    }
+
+    /** {@code realFolder} = false pour les applis récentes (pas de « Retirer du dossier »). */
+    void open(String folder, int color, List<AppRepository.AppEntry> apps, float x, float y, boolean realFolder) {
+        this.realFolder = realFolder;
         this.folder = folder;
         this.color = color;
         cx = x;
@@ -325,7 +332,7 @@ final class FolderWheelView extends View {
                 icon.draw(canvas);
                 icon.setAlpha(255);
             }
-            Badges.draw(getContext(), canvas, x, y, hh, Badges.count(getContext(), s.app));
+
             if (labels) {
                 small.setAlpha((int) (255 * k));
                 CharSequence nm = TextUtils.ellipsize(s.app.label, small, 64 * dp, TextUtils.TruncateAt.END);

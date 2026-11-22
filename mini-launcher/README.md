@@ -31,13 +31,6 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
   les réglages proposent plusieurs méthodes (relance, fermer puis ouvrir, notifications puis
   centre de contrôle, ou désactivé) avec un bouton « Essayer ».
 
-## Pastilles de notification
-
-Sur les applis et dossiers de l'accueil, dans le cercle des dossiers et dans l'alphabet
-(un point à côté des lettres concernées). Il faut l'« Accès aux notifications » (réglages
-de l'appli > Pastilles) : il sert seulement à compter, le contenu n'est ni lu ni gardé.
-Réglages : afficher, style (point ou nombre), couleur.
-
 ## Gestes
 
 Réglables dans les réglages : double tap dans le vide (par défaut : verrouiller), glisser
@@ -45,7 +38,8 @@ vers le haut (par défaut : applis récentes), vers le bas à gauche (notificati
 la gauche, vers la droite. Actions : rien, verrouiller, notifications, centre de contrôle,
 ouvrir une appli, lampe torche, appareil photo, recherche, réglages, applis récentes.
 
-Applis récentes : une rangée de cartes, toucher = basculer. Avec l'« Accès aux données
+Applis récentes : glisser vers le haut les ouvre en roue autour du doigt ; continuer jusqu'à
+l'appli et lâcher (un toucher garde la roue ouverte). Avec l'« Accès aux données
 d'utilisation » (autorisation Android, pas l'accessibilité), toutes les applis utilisées ;
 sans, celles ouvertes depuis le launcher.
 

@@ -594,7 +594,6 @@ final class HomeGrid extends FrameLayout {
                     }
                 }
             }
-            Badges.draw(getContext(), canvas, cx, iy, half, Badges.count(getContext(), apps));
             if (!showLabel) return;
             CharSequence s = TextUtils.ellipsize(g.name, label, getWidth() - 8 * dp, TextUtils.TruncateAt.END);
             canvas.drawText(s, 0, s.length(), cx, iy + half + 18 * dp, label);
@@ -631,7 +630,6 @@ final class HomeGrid extends FrameLayout {
                 icon.setBounds((int) (cx - half), (int) (iy - half), (int) (cx + half), (int) (iy + half));
                 icon.draw(canvas);
             }
-            Badges.draw(getContext(), canvas, cx, iy, half, Badges.count(getContext(), app));
             if (!showLabel) return;
             CharSequence s = TextUtils.ellipsize(app.label, label, getWidth() - 8 * dp, TextUtils.TruncateAt.END);
             canvas.drawText(s, 0, s.length(), cx, iy + half + 18 * dp, label);

@@ -54,16 +54,16 @@ public final class SettingsActivity extends Activity {
     private LinearLayout page;     // la colonne de toute la page
     private LinearLayout card;     // la carte en cours
     private LinearLayout footer;   // les explications sous la carte en cours
-    private LinearLayout badgeAccess;
+    private LinearLayout usageAccess;
 
     @Override
     protected void onResume() {
         super.onResume();
         // Retour de l'écran d'autorisation : le libellé suit l'état réel.
-        if (badgeAccess != null) {
-            TextView t = (TextView) ((LinearLayout) badgeAccess.getChildAt(0)).getChildAt(0);
-            t.setText(Badges.accessGranted(this) ? "Accès aux notifications : activé ✓"
-                    : "Autoriser l'accès aux notifications");
+        if (usageAccess != null) {
+            TextView t = (TextView) ((LinearLayout) usageAccess.getChildAt(0)).getChildAt(0);
+            t.setText(Recents.hasUsageAccess(this) ? "Accès aux données d'utilisation : activé ✓"
+                    : "Autoriser l'accès aux données d'utilisation");
         }
     }
 
@@ -121,7 +121,21 @@ public final class SettingsActivity extends Activity {
         // ---------------------------------------------------------- gestes
         section("Gestes");
         for (int i = 0; i < Actions.GESTURES.length; i++) gestureChoice(i);
-        note("Les gestes marchent dans les zones vides du milieu de l'écran.");
+        usageAccess = row("", "Applis récentes : toutes celles utilisées, pas seulement celles ouvertes "
+                + "depuis le launcher", accent);
+        usageAccess.addView(chevron());
+        clickable(usageAccess, v -> {
+            Intent i = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= 29) i.setData(android.net.Uri.parse("package:" + getPackageName()));
+                startActivity(i);
+            } catch (ActivityNotFoundException e) {
+                startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
+            }
+        });
+        addRow(usageAccess);
+        note("Les gestes marchent dans les zones vides du milieu de l'écran. Glisser vers le haut "
+                + "ouvre les applis récentes en roue : continuer jusqu'à l'appli et lâcher.");
 
         section("Centre de contrôle");
         choice("Méthode d'ouverture", Shade.METHODS, store.ccMethod(), i -> store.setNum(Store.CC_METHOD, i));
@@ -143,31 +157,6 @@ public final class SettingsActivity extends Activity {
         });
         note("« Verrouiller l'écran » utilise le droit administrateur de l'appareil, limité au "
                 + "verrouillage. Ensuite, certains téléphones demandent le code au lieu de l'empreinte.");
-
-        // ---------------------------------------------------------- pastilles
-        section("Pastilles de notification");
-        badgeAccess = row(Badges.accessGranted(this) ? "Accès aux notifications : activé"
-                : "Autoriser l'accès aux notifications", "Pour savoir quelles applis ont des notifications", accent);
-        badgeAccess.addView(chevron());
-        clickable(badgeAccess, v -> {
-            try {
-                startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
-            } catch (ActivityNotFoundException e) {
-                startActivity(new Intent(Settings.ACTION_SETTINGS));
-            }
-            Toast.makeText(this, "Active « Mini Launcher »", Toast.LENGTH_LONG).show();
-        });
-        addRow(badgeAccess);
-        toggle("Afficher les pastilles", null, store.badges(), on -> store.setFlag(Store.BADGES, on));
-        choice("Style", new String[]{"Point", "Nombre"}, store.badgeStyle(), i -> store.setNum(Store.BADGE_STYLE, i));
-        int[] badgeSwatches = Badges.COLORS.clone();
-        badgeSwatches[badgeSwatches.length - 1] = accent;
-        colorChoice("Couleur", Badges.COLOR_NAMES, badgeSwatches,
-                store.badgeColor() == 0 ? accent : store.badgeColor(),
-                c -> store.setNum(Store.BADGE_COLOR, c == accent ? 0 : (0xFF000000 | c)));
-        note("L'accès aux notifications sert seulement à compter les notifications de chaque appli ; "
-                + "leur contenu n'est ni lu ni gardé. S'il est grisé (appli installée hors Play Store) : "
-                + "Paramètres > Applis > Mini Launcher > ⋮ > « Autoriser les paramètres restreints ».");
 
         // ---------------------------------------------------------- horloge
         section("Horloge");

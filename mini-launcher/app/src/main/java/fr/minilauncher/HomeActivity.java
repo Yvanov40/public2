@@ -86,25 +86,10 @@ public final class HomeActivity extends Activity
         clockBox.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> updateGridTop());
         setContentView(home);
 
-        Badges.addListener(badgeListener);
         repository = AppRepository.get(this);
         grid.setApps(repository.cached());
         strip.setApps(repository.cached());
         grid.reload();
-    }
-
-    /** Nouvelles notifications : on redessine les pastilles. */
-    private final Runnable badgeListener = () -> {
-        if (isDestroyed()) return;
-        grid.invalidateIcons();
-        strip.invalidate();
-        folderWheel.invalidate();
-    };
-
-    @Override
-    protected void onDestroy() {
-        Badges.removeListener(badgeListener);
-        super.onDestroy();
     }
 
     // ------------------------------------------------------------ horloge
@@ -221,7 +206,18 @@ public final class HomeActivity extends Activity
 
     @Override
     public void onGesture(String gesture) {
+        if (Actions.actionFor(this, gesture) == Actions.RECENTS) {
+            home.openRecents(home.getWidth() / 2f, home.getHeight() * 0.55f, null);
+            return;
+        }
         Actions.runGesture(this, gesture);
+    }
+
+    @Override
+    public List<AppRepository.AppEntry> recentApps() {
+        List<AppRepository.AppEntry> out = new ArrayList<>();
+        for (Object[] r : Recents.load(this, repository.cached())) out.add((AppRepository.AppEntry) r[0]);
+        return out;
     }
 
     @Override
