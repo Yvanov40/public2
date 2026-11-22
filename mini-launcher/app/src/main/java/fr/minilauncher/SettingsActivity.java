@@ -1,9 +1,11 @@
 package fr.minilauncher;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -14,6 +16,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -21,9 +24,16 @@ import android.widget.Toast;
 /** Réglages, ouverts par un appui long sur l'écran d'accueil ou depuis le tiroir d'applis. */
 public final class SettingsActivity extends Activity {
 
+    private static final int[] ACCENTS = {
+            0xFF8FA6FF, 0xFF6FD3FF, 0xFF7EE0A1, 0xFFB3E36B,
+            0xFFFFE07A, 0xFFFFB86B, 0xFFFF8FA3, 0xFFC9A7FF, 0xFFFFFFFF};
+    private static final String[] ACCENT_NAMES = {
+            "Bleu", "Turquoise", "Vert", "Anis", "Jaune", "Orange", "Rose", "Violet", "Blanc"};
+
     private Store store;
     private Switch bubbleSwitch;
     private float dp;
+    private LinearLayout col;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -31,14 +41,15 @@ public final class SettingsActivity extends Activity {
         store = Store.get(this);
         dp = getResources().getDisplayMetrics().density;
 
-        LinearLayout col = new LinearLayout(this);
+        col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         int pad = (int) (20 * dp);
         col.setPadding(pad, (int) (40 * dp), pad, pad);
 
         col.addView(title("Mini Launcher"));
 
-        col.addView(section("Launcher"));
+        // ---------------------------------------------------------- launcher
+        section("Launcher");
         col.addView(button("Choisir l'écran d'accueil par défaut", v -> {
             try {
                 startActivity(new Intent(Settings.ACTION_HOME_SETTINGS));
@@ -46,22 +57,53 @@ public final class SettingsActivity extends Activity {
                 startActivity(new Intent(Settings.ACTION_SETTINGS));
             }
         }));
-        col.addView(note("Sur l'écran d'accueil : bandes à gauche et à droite = la roue "
-                + "(poser le doigt puis glisser jusqu'à l'appli). Glisser vers le bas : à gauche les "
-                + "notifications, à droite le centre de contrôle. Glisser vers le haut au milieu : la "
-                + "roue. Appui long au milieu : ces réglages."));
+        note("Bandes à gauche et à droite = la roue (poser le doigt puis glisser jusqu'à l'appli). "
+                + "Glisser vers le bas : à gauche les notifications, à droite le centre de contrôle. "
+                + "Glisser vers le haut au milieu : la roue. Appui long sur une zone vide : ajouter une "
+                + "appli ou un widget.");
+        slider("Largeur des bandes latérales", 10, 40, store.band(), "%d %%", v -> store.setNum(Store.BAND, v));
 
-        col.addView(section("Roue"));
-        col.addView(toggle("Compléter les favoris avec les applis les plus utilisées",
-                store.autoFavorites(), on -> store.setFlag("autoFav", on)));
-        col.addView(toggle("Le centre rouvre la dernière appli",
-                store.centerLast(), on -> store.setFlag("centerLast", on)));
-        col.addView(toggle("Une seule appli pour une lettre : l'ouvrir directement",
-                store.directSingle(), on -> store.setFlag("directSingle", on)));
-        col.addView(note("Appui long sur une appli : épingler en favori, ranger dans un groupe. "
-                + "Appui long au centre d'un groupe ouvert : le renommer ou le supprimer."));
+        // ---------------------------------------------------------- horloge
+        section("Horloge");
+        toggle("Afficher l'horloge", store.clock(), on -> store.setFlag(Store.CLOCK, on));
+        note("Masque-la pour mettre un widget horloge à la place. La toucher ouvre les alarmes.");
+        slider("Taille", 30, 110, store.clockSize(), "%d", v -> store.setNum(Store.CLOCK_SIZE, v));
+        choice("Position", new String[]{"À gauche", "Au centre", "À droite"}, store.clockAlign(),
+                i -> store.setNum(Store.CLOCK_ALIGN, i));
+        toggle("Afficher la date", store.clockDate(), on -> store.setFlag(Store.CLOCK_DATE, on));
 
-        col.addView(section("Bulle flottante"));
+        // ---------------------------------------------------------- grille
+        section("Grille de l'accueil");
+        slider("Colonnes", 3, 6, store.cols(), "%d", v -> store.setNum(Store.COLS, v));
+        slider("Lignes (0 = automatique)", 0, 9, store.rowsSetting(), "%d", v -> store.setNum(Store.ROWS, v));
+        slider("Taille des icônes", 36, 72, store.iconSize(), "%d dp", v -> store.setNum(Store.ICON, v));
+        toggle("Afficher le nom des applis", store.labels(), on -> store.setFlag(Store.LABELS, on));
+
+        // ---------------------------------------------------------- roue
+        section("Roue");
+        toggle("Compléter les favoris avec les applis les plus utilisées",
+                store.autoFavorites(), on -> store.setFlag("autoFav", on));
+        slider("Nombre de favoris", 0, 8, store.maxFav(), "%d", v -> store.setNum(Store.MAXFAV, v));
+        toggle("Le centre rouvre la dernière appli",
+                store.centerLast(), on -> store.setFlag("centerLast", on));
+        toggle("Une seule appli pour une lettre : l'ouvrir directement",
+                store.directSingle(), on -> store.setFlag("directSingle", on));
+        note("Appui long sur une appli : épingler en favori, ranger dans un groupe, poser sur "
+                + "l'accueil. Appui long au centre d'un groupe ouvert : le renommer ou le supprimer.");
+
+        // ---------------------------------------------------------- effets
+        section("Effets");
+        accentChoice();
+        slider("Taille de la roue", 80, 130, store.wheelScale(), "%d %%", v -> store.setNum(Store.WHEEL, v));
+        slider("Assombrissement du fond", 0, 90, store.dimPercent(), "%d %%", v -> store.setNum(Store.DIM, v));
+        choice("Animations", new String[]{"Aucune", "Normales", "Rapides", "Lentes"}, store.speed(),
+                i -> store.setNum(Store.SPEED, i));
+        slider("Temps d'arrêt pour ouvrir une lettre", 150, 800, store.dwell(), "%d ms",
+                v -> store.setNum(Store.DWELL, v));
+        toggle("Vibrations", store.haptic(), on -> store.setFlag(Store.HAPTIC, on));
+
+        // ---------------------------------------------------------- bulle
+        section("Bulle flottante");
         bubbleSwitch = toggle("Afficher la bulle par-dessus les applis", store.bubble(), on -> {
             store.setFlag("bubble", on);
             if (on && !Settings.canDrawOverlays(this)) {
@@ -75,11 +117,10 @@ public final class SettingsActivity extends Activity {
             }
             BubbleService.sync(this);
         });
-        col.addView(bubbleSwitch);
-        col.addView(note("Poser le doigt sur la bulle ouvre la roue : glisser jusqu'à l'appli et "
-                + "lâcher. Maintenir la bulle sans bouger permet de la déplacer."));
+        note("Poser le doigt sur la bulle ouvre la roue : glisser jusqu'à l'appli et lâcher. "
+                + "Maintenir la bulle sans bouger permet de la déplacer.");
 
-        col.addView(section("Position"));
+        section("Position");
         col.addView(button("Remettre la roue de l'icône au milieu", v -> {
             store.clearPosition();
             Toast.makeText(this, "Position effacée", Toast.LENGTH_SHORT).show();
@@ -98,6 +139,8 @@ public final class SettingsActivity extends Activity {
         BubbleService.sync(this);
     }
 
+    // ------------------------------------------------------------ éléments
+
     private TextView title(String s) {
         TextView t = new TextView(this);
         t.setText(s);
@@ -106,26 +149,30 @@ public final class SettingsActivity extends Activity {
         return t;
     }
 
-    private TextView section(String s) {
+    private void section(String s) {
         TextView t = new TextView(this);
         t.setText(s);
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         t.setTextColor(0xFF8FA6FF);
         t.setPadding(0, (int) (28 * dp), 0, (int) (6 * dp));
-        return t;
+        col.addView(t);
     }
 
-    private TextView note(String s) {
+    private void note(String s) {
         TextView t = new TextView(this);
         t.setText(s);
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         t.setTextColor(0xAAFFFFFF);
         t.setPadding(0, (int) (6 * dp), 0, (int) (6 * dp));
-        return t;
+        col.addView(t);
     }
 
     interface Toggle {
         void set(boolean on);
+    }
+
+    interface IntSetter {
+        void set(int v);
     }
 
     private Switch toggle(String label, boolean value, Toggle onChange) {
@@ -136,7 +183,68 @@ public final class SettingsActivity extends Activity {
         s.setChecked(value);
         s.setPadding(0, (int) (10 * dp), 0, (int) (10 * dp));
         s.setOnCheckedChangeListener((b, on) -> onChange.set(on));
+        col.addView(s);
         return s;
+    }
+
+    private void slider(String label, int min, int max, int value, String format, IntSetter onChange) {
+        TextView t = new TextView(this);
+        t.setTextColor(Color.WHITE);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        t.setPadding(0, (int) (10 * dp), 0, 0);
+        t.setText(label + " : " + String.format(format, value));
+        SeekBar bar = new SeekBar(this);
+        bar.setMax(max - min);
+        bar.setProgress(Math.max(0, Math.min(max - min, value - min)));
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
+                t.setText(label + " : " + String.format(format, p + min));
+                if (fromUser) onChange.set(p + min);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+        col.addView(t);
+        col.addView(bar);
+    }
+
+    private void choice(String label, String[] options, int index, IntSetter onChange) {
+        Button b = button(label + " : " + options[Math.max(0, Math.min(options.length - 1, index))], null);
+        b.setOnClickListener(v -> new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(label)
+                .setItems(options, (d, which) -> {
+                    onChange.set(which);
+                    b.setText(label + " : " + options[which]);
+                }).show());
+        col.addView(b);
+    }
+
+    private void accentChoice() {
+        Button b = button("Couleur de la roue", null);
+        updateSwatch(b, store.accent());
+        b.setOnClickListener(v -> new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Couleur de la roue")
+                .setItems(ACCENT_NAMES, (d, which) -> {
+                    store.setNum(Store.ACCENT, ACCENTS[which]);
+                    updateSwatch(b, ACCENTS[which]);
+                }).show());
+        col.addView(b);
+    }
+
+    private void updateSwatch(Button b, int color) {
+        GradientDrawable dot = new GradientDrawable();
+        dot.setShape(GradientDrawable.OVAL);
+        dot.setColor(color);
+        int size = (int) (18 * dp);
+        dot.setSize(size, size);
+        b.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, dot, null);
     }
 
     private Button button(String label, View.OnClickListener l) {
@@ -144,7 +252,7 @@ public final class SettingsActivity extends Activity {
         b.setText(label);
         b.setAllCaps(false);
         b.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        b.setOnClickListener(l);
+        if (l != null) b.setOnClickListener(l);
         return b;
     }
 }

@@ -62,9 +62,12 @@ final class RadialView extends View {
     private static final int FAV = 1000; // cibles FAV + i = i-ème favori
 
     private static final int COLOR_PANEL = 0xF01B1D26;
-    private static final int COLOR_ACCENT = 0xFF8FA6FF;
+    private int COLOR_ACCENT = 0xFF8FA6FF; // couleur choisie dans les réglages
+    private float scale = 1f;               // taille de la roue
+    private int dimAlpha = 165;
+    private long dwellMs = 380;
+    private boolean haptics = true;
     private static final int COLOR_DARK = 0xFF111320;
-    private static final long DWELL_MS = 380;
     private static final long LONG_PRESS_MS = 550;
     private static final long FLICK_MS = 260;
 
@@ -145,7 +148,7 @@ final class RadialView extends View {
 
     private final Runnable dwell = () -> {
         if (mode != MODE_LETTERS || hover < 0 || hover >= FAV || !tracking) return;
-        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+        haptic(HapticFeedbackConstants.VIRTUAL_KEY);
         openItem(items.get(hover), true);
     };
 
@@ -154,7 +157,7 @@ final class RadialView extends View {
         dragging = true;
         hover = HIT_NONE;
         removeCallbacks(dwell);
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        haptic(HapticFeedbackConstants.LONG_PRESS);
         invalidate();
     };
 
@@ -163,18 +166,18 @@ final class RadialView extends View {
         if (mode == MODE_LETTERS) {
             if (pressTarget >= FAV && pressTarget - FAV < favCount) {
                 longPressFired = true;
-                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                haptic(HapticFeedbackConstants.LONG_PRESS);
                 listener.onAppMenu(favs.get(pressTarget - FAV), null);
             }
         } else if (pressTarget >= 0 && pressTarget < cells.size()) {
             Cell c = cells.get(pressTarget);
             if (c.app == null) return;
             longPressFired = true;
-            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            haptic(HapticFeedbackConstants.LONG_PRESS);
             listener.onAppMenu(c.app, current != null && current.group ? current.label : null);
         } else if (pressTarget == HIT_CENTER && current != null && current.group) {
             longPressFired = true;
-            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            haptic(HapticFeedbackConstants.LONG_PRESS);
             listener.onGroupMenu(current.label);
         }
     };
@@ -197,6 +200,10 @@ final class RadialView extends View {
         label.setShadowLayer(3 * dp, 0, dp, 0xCC000000);
         setHapticFeedbackEnabled(true);
         setFocusable(true);
+    }
+
+    private void haptic(int type) {
+        if (haptics) performHapticFeedback(type);
     }
 
     void setMovable(boolean m) {
@@ -285,6 +292,12 @@ final class RadialView extends View {
     // ---------------------------------------------------------------- données
 
     private void reload() {
+        COLOR_ACCENT = store.accent();
+        scale = store.wheelScale() / 100f;
+        dimAlpha = (int) (255 * store.dimPercent() / 100f);
+        dwellMs = store.dwell();
+        haptics = store.haptic();
+        int maxFav = Math.max(0, Math.min(MAX_FAVS, store.maxFav()));
         Map<String, AppRepository.AppEntry> byKey = new HashMap<>();
         Map<String, Item> letters = new HashMap<>();
         String currentLabel = current == null ? null : current.label;
@@ -312,11 +325,11 @@ final class RadialView extends View {
         favs.clear();
         for (String k : store.pinned()) {
             AppRepository.AppEntry e = byKey.get(k);
-            if (e != null && favs.size() < MAX_FAVS) favs.add(e);
+            if (e != null && favs.size() < maxFav) favs.add(e);
         }
         if (store.autoFavorites()) {
             for (Map.Entry<String, Integer> u : store.usage()) {
-                if (favs.size() >= MAX_FAVS || u.getValue() < 2) break;
+                if (favs.size() >= maxFav || u.getValue() < 2) break;
                 AppRepository.AppEntry e = byKey.get(u.getKey());
                 if (e != null && !favs.contains(e)) favs.add(e);
             }
@@ -388,10 +401,10 @@ final class RadialView extends View {
         arcs.clear();
         favCount = 0;
         if (!favs.isEmpty()) {
-            float r = 70 * dp;
+            float r = 70 * dp * scale;
             float[] arc = visibleArc(r, 24 * dp);
             if (arc != null) {
-                favCount = Math.min(favs.size(), capacity(r, arc[1], 50 * dp));
+                favCount = Math.min(favs.size(), capacity(r, arc[1], 50 * dp * Math.min(1f, scale)));
                 if (favCount > 0) {
                     float[] a = spread(favCount, arc, r, 50 * dp);
                     for (int i = 0; i < favCount; i++) {
@@ -403,9 +416,9 @@ final class RadialView extends View {
         }
 
         int n = items.size();
-        float spacing = 31 * dp;
-        float base = favCount > 0 ? 122 * dp : 105 * dp;
-        for (float r = base; r <= base + 45 * dp; r += 3 * dp) {
+        float spacing = 31 * dp * Math.min(1f, scale);
+        float base = (favCount > 0 ? 122 * dp : 105 * dp) * scale;
+        for (float r = base; r <= base + 45 * dp * scale; r += 3 * dp) {
             float[] arc = visibleArc(r, 20 * dp);
             if (arc != null && capacity(r, arc[1], spacing) >= n) {
                 placeItems(0, n, r, arc);
@@ -414,7 +427,7 @@ final class RadialView extends View {
         }
         int placed = 0;
         float r = base;
-        for (int guard = 0; placed < n && guard < 14; guard++, r += 42 * dp) {
+        for (int guard = 0; placed < n && guard < 14; guard++, r += 42 * dp * Math.min(1f, scale)) {
             float[] arc = visibleArc(r, 20 * dp);
             if (arc == null) continue;
             int take = Math.min(n - placed, capacity(r, arc[1], spacing));
@@ -566,7 +579,7 @@ final class RadialView extends View {
     private void animate(float from, float to, long ms) {
         if (animator != null) animator.cancel();
         animator = ValueAnimator.ofFloat(from, to);
-        animator.setDuration(ms);
+        animator.setDuration((long) (ms * store.speedFactor()));
         animator.setInterpolator(new DecelerateInterpolator(1.6f));
         final boolean closingAnim = closing;
         animator.addUpdateListener(a -> {
@@ -600,7 +613,7 @@ final class RadialView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        canvas.drawColor(Color.argb((int) (165 * dim), 0, 0, 0));
+        canvas.drawColor(Color.argb((int) (dimAlpha * dim), 0, 0, 0));
         if (mode == MODE_LETTERS) {
             drawLetters(canvas);
             if (dragging || (!anchorUsable && !anchorForced && store.position() == null)) drawHint(canvas);
@@ -920,10 +933,10 @@ final class RadialView extends View {
                 hover = h;
                 removeCallbacks(dwell);
                 if (h >= FAV) {
-                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                    haptic(HapticFeedbackConstants.CLOCK_TICK);
                 } else if (h >= 0 && !items.get(h).apps.isEmpty()) {
-                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
-                    postDelayed(dwell, DWELL_MS);
+                    haptic(HapticFeedbackConstants.CLOCK_TICK);
+                    postDelayed(dwell, dwellMs);
                 }
                 invalidate();
             }
@@ -932,7 +945,7 @@ final class RadialView extends View {
             int h = hit >= 0 ? hit : HIT_NONE;
             if (h != hoverCell) {
                 hoverCell = h;
-                if (h >= 0) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                if (h >= 0) haptic(HapticFeedbackConstants.CLOCK_TICK);
                 invalidate();
             }
         }

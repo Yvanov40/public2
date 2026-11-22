@@ -21,6 +21,17 @@ réglages de l'appli).
   s'ouvre que depuis les zones vides des bandes.
 - Depuis la roue, appui long sur une appli > « Ajouter à l'écran d'accueil ».
 
+## Réglages (appui long sur une zone vide > Réglages du launcher)
+
+- **Horloge** : afficher/masquer, taille, position, date. La toucher ouvre les alarmes.
+- **Grille** : colonnes (3–6), lignes (automatique ou 1–9), taille des icônes, noms.
+- **Bandes latérales** : largeur.
+- **Roue** : nombre de favoris, complément automatique, centre = dernière appli,
+  ouverture directe.
+- **Effets** : couleur, taille de la roue, assombrissement du fond, vitesse des
+  animations, temps d'arrêt pour ouvrir une lettre, vibrations.
+- Widgets : appui long > « Régler le widget » pour ceux qui ont un écran de réglages.
+
 ## La roue
 
 - **Centre** : la dernière appli utilisée (un toucher la rouvre).

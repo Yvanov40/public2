@@ -123,8 +123,22 @@ final class HomeView extends FrameLayout {
         activateWheel(getWidth() / 2f, getHeight() * 0.55f, false);
     }
 
+    private View clockView;
+    private Runnable onClockTap;
+
+    void setClock(View clock, Runnable onTap) {
+        clockView = clock;
+        onClockTap = onTap;
+    }
+
     private float bandWidth() {
-        return getWidth() * 0.25f;
+        return getWidth() * Store.get(getContext()).band() / 100f;
+    }
+
+    private boolean onClock(float x, float y) {
+        return clockView != null && clockView.getVisibility() == View.VISIBLE
+                && x >= clockView.getLeft() && x < clockView.getRight()
+                && y >= clockView.getTop() && y < clockView.getBottom();
     }
 
     @Override
@@ -179,7 +193,7 @@ final class HomeView extends FrameLayout {
                 toChildren = touchedItem != null && touchedItem.widget;
                 inBand = x < bandWidth() || x > getWidth() - bandWidth();
                 if (toChildren) super.dispatchTouchEvent(e);
-                if (touchedItem == null && inBand) postDelayed(holdOpen, HOLD_MS);
+                if (touchedItem == null && inBand && !onClock(x, y)) postDelayed(holdOpen, HOLD_MS);
                 postDelayed(longPress, LONG_PRESS_MS);
                 return true;
 
@@ -233,7 +247,9 @@ final class HomeView extends FrameLayout {
                     return wheel.dispatchTouchEvent(e);
                 }
                 if (!decided) {
-                    if (touchedItem != null) {
+                    if (touchedItem == null && onClock(downX, downY) && onClockTap != null) {
+                        onClockTap.run();
+                    } else if (touchedItem != null) {
                         AppRepository.AppEntry app = grid.appOf(touchedItem);
                         if (app != null) host.onLaunchHomeApp(app, grid.screenBoundsOf(touchedItem));
                     } else if (inBand) {

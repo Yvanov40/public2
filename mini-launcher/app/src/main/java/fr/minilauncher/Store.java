@@ -71,6 +71,51 @@ final class Store {
         prefs.edit().putBoolean(name, value).apply();
     }
 
+    boolean flag(String name, boolean def) {
+        return prefs.getBoolean(name, def);
+    }
+
+    int num(String name, int def) {
+        return prefs.getInt(name, def);
+    }
+
+    void setNum(String name, int value) {
+        prefs.edit().putInt(name, value).apply();
+    }
+
+    // Réglages de personnalisation (valeurs par défaut au même endroit).
+    static final String CLOCK = "clock", CLOCK_SIZE = "clockSize", CLOCK_ALIGN = "clockAlign",
+            CLOCK_DATE = "clockDate", COLS = "cols", ROWS = "rows", ICON = "iconSize",
+            LABELS = "labels", BAND = "band", ACCENT = "accent", DIM = "dim", SPEED = "speed",
+            DWELL = "dwell", HAPTIC = "haptic", WHEEL = "wheelScale", MAXFAV = "maxFav";
+
+    boolean clock() { return flag(CLOCK, true); }
+    int clockSize() { return num(CLOCK_SIZE, 60); }          // sp
+    int clockAlign() { return num(CLOCK_ALIGN, 0); }         // 0 gauche, 1 centre, 2 droite
+    boolean clockDate() { return flag(CLOCK_DATE, true); }
+    int cols() { return num(COLS, 4); }
+    int rowsSetting() { return num(ROWS, 0); }               // 0 = automatique
+    int iconSize() { return num(ICON, 52); }                 // dp
+    boolean labels() { return flag(LABELS, true); }
+    int band() { return num(BAND, 25); }                     // % de la largeur
+    int accent() { return num(ACCENT, 0xFF8FA6FF); }
+    int dimPercent() { return num(DIM, 65); }
+    int speed() { return num(SPEED, 1); }                    // 0 aucune, 1 normale, 2 rapide, 3 lente
+    int dwell() { return num(DWELL, 380); }                  // ms
+    boolean haptic() { return flag(HAPTIC, true); }
+    int wheelScale() { return num(WHEEL, 100); }             // %
+    int maxFav() { return num(MAXFAV, 8); }
+
+    /** Multiplicateur de durée des animations. */
+    float speedFactor() {
+        switch (speed()) {
+            case 0: return 0f;
+            case 2: return 0.6f;
+            case 3: return 1.6f;
+            default: return 1f;
+        }
+    }
+
     // ------------------------------------------------------------ position de la roue
 
     /** {x, y} en fraction de l'écran, ou null si jamais réglée. */

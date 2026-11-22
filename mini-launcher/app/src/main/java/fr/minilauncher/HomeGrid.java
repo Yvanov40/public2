@@ -32,7 +32,8 @@ import java.util.Map;
  */
 final class HomeGrid extends FrameLayout {
 
-    static final int COLS = 4;
+    private int cols = 4;
+    private float topOffset = -1; // bas de l'horloge (-1 : pas encore connu)
 
     private final float dp;
     private final Store store;
@@ -95,6 +96,18 @@ final class HomeGrid extends FrameLayout {
         return rows;
     }
 
+    int cols() {
+        return cols;
+    }
+
+    /** Le haut de la grille : juste sous l'horloge (ou en haut si elle est masquée). */
+    void setTopOffset(float y) {
+        if (Math.abs(y - topOffset) > 1) {
+            topOffset = y;
+            rebuild();
+        }
+    }
+
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
@@ -104,13 +117,21 @@ final class HomeGrid extends FrameLayout {
     private boolean computeGrid() {
         int w = getWidth(), h = getHeight();
         if (w == 0 || h == 0) return false;
+        cols = Math.max(2, Math.min(7, store.cols()));
         float pad = 10 * dp;
         left = safe.left + pad;
-        cellW = (w - safe.left - safe.right - 2 * pad) / COLS;
-        top = safe.top + 150 * dp;
-        cellH = 100 * dp;
+        cellW = (w - safe.left - safe.right - 2 * pad) / cols;
+        top = Math.max(safe.top + 8 * dp, topOffset >= 0 ? topOffset : safe.top + 150 * dp);
         float bottom = h - Math.max(safe.bottom, 16 * dp) - 8 * dp;
-        rows = Math.max(1, (int) ((bottom - top) / cellH));
+        int wanted = store.rowsSetting();
+        float iconCell = (store.iconSize() + (store.labels() ? 40 : 20)) * dp;
+        if (wanted > 0) {
+            rows = wanted;
+            cellH = (bottom - top) / rows;
+        } else {
+            cellH = Math.max(iconCell, 90 * dp);
+            rows = Math.max(1, (int) ((bottom - top) / cellH));
+        }
         return true;
     }
 
@@ -141,9 +162,9 @@ final class HomeGrid extends FrameLayout {
         }
         // Placement des nouveaux et de ceux qui ne tiennent plus (écran plus petit).
         for (Store.HomeItem it : items) {
-            it.w = Math.max(1, Math.min(COLS, it.w));
+            it.w = Math.max(1, Math.min(cols, it.w));
             it.h = Math.max(1, Math.min(rows, it.h));
-            if (it.col < 0 || it.row < 0 || it.col + it.w > COLS || it.row + it.h > rows || !fits(it.col, it.row, it.w, it.h, it)) {
+            if (it.col < 0 || it.row < 0 || it.col + it.w > cols || it.row + it.h > rows || !fits(it.col, it.row, it.w, it.h, it)) {
                 int[] free = findFree(it.w, it.h, it);
                 if (free == null) {
                     it.col = -1;
@@ -182,7 +203,7 @@ final class HomeGrid extends FrameLayout {
     private View appView(Store.HomeItem it) {
         AppRepository.AppEntry app = apps.get(it.key);
         if (app == null) return null;
-        return new AppIconView(getContext(), app);
+        return new AppIconView(getContext(), app, store.iconSize(), store.labels());
     }
 
     private AppWidgetHostView widgetView(Store.HomeItem it) {
@@ -218,11 +239,11 @@ final class HomeGrid extends FrameLayout {
         }
         if (w <= 0) w = (int) Math.ceil(info.minWidth / Math.max(1f, cellW));
         if (h <= 0) h = (int) Math.ceil(info.minHeight / Math.max(1f, cellH));
-        return new int[]{Math.max(1, Math.min(COLS, w)), Math.max(1, Math.min(Math.max(1, rows), h))};
+        return new int[]{Math.max(1, Math.min(cols, w)), Math.max(1, Math.min(Math.max(1, rows), h))};
     }
 
     boolean fits(int col, int row, int w, int h, Store.HomeItem exclude) {
-        if (col < 0 || row < 0 || col + w > COLS || row + h > rows) return false;
+        if (col < 0 || row < 0 || col + w > cols || row + h > rows) return false;
         for (Store.HomeItem o : items) {
             if (o == exclude || o.col < 0) continue;
             if (col < o.col + o.w && o.col < col + w && row < o.row + o.h && o.row < row + h) return false;
@@ -232,7 +253,7 @@ final class HomeGrid extends FrameLayout {
 
     int[] findFree(int w, int h, Store.HomeItem exclude) {
         for (int r = 0; r + h <= rows; r++) {
-            for (int c = 0; c + w <= COLS; c++) {
+            for (int c = 0; c + w <= cols; c++) {
                 if (fits(c, r, w, h, exclude)) return new int[]{c, r};
             }
         }
@@ -379,7 +400,7 @@ final class HomeGrid extends FrameLayout {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setColor(0x33FFFFFF);
         for (int r = 0; r <= rows; r++) {
-            for (int c = 0; c <= COLS; c++) {
+            for (int c = 0; c <= cols; c++) {
                 canvas.drawCircle(left + c * cellW, top + r * cellH, 2 * dp, p);
             }
         }
@@ -390,10 +411,14 @@ final class HomeGrid extends FrameLayout {
         private final AppRepository.AppEntry app;
         private final TextPaint label = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         private final float dp;
+        private final int iconDp;
+        private final boolean showLabel;
 
-        AppIconView(Context c, AppRepository.AppEntry app) {
+        AppIconView(Context c, AppRepository.AppEntry app, int iconDp, boolean showLabel) {
             super(c);
             this.app = app;
+            this.iconDp = iconDp;
+            this.showLabel = showLabel;
             dp = getResources().getDisplayMetrics().density;
             label.setColor(Color.WHITE);
             label.setTextAlign(Paint.Align.CENTER);
@@ -403,12 +428,15 @@ final class HomeGrid extends FrameLayout {
 
         @Override
         protected void onDraw(Canvas canvas) {
-            float cx = getWidth() / 2f, half = 26 * dp, iy = 12 * dp + half;
+            float half = iconDp * dp / 2f;
+            float block = 2 * half + (showLabel ? 22 * dp : 0);
+            float cx = getWidth() / 2f, iy = Math.max(4 * dp, (getHeight() - block) / 2f) + half;
             Drawable icon = app.icon;
             if (icon != null) {
                 icon.setBounds((int) (cx - half), (int) (iy - half), (int) (cx + half), (int) (iy + half));
                 icon.draw(canvas);
             }
+            if (!showLabel) return;
             CharSequence s = TextUtils.ellipsize(app.label, label, getWidth() - 8 * dp, TextUtils.TruncateAt.END);
             canvas.drawText(s, 0, s.length(), cx, iy + half + 18 * dp, label);
         }

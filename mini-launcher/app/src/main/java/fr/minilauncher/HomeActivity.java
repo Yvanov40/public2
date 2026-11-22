@@ -41,6 +41,8 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
     private AppRepository repository;
     private AppWidgetHost widgetHost;
     private AppWidgetManager widgetManager;
+    private LinearLayout clockBox;
+    private TextClock clockTime, clockDate;
 
     private boolean pickMode; // la roue sert à choisir une appli à poser sur l'accueil
     private int pendingWidgetId = -1;
@@ -79,7 +81,11 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
         home.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-        home.addView(clock(), 0);
+        clockBox = clock();
+        home.addView(clockBox, 0);
+        home.setClock(clockBox, this::openAlarms);
+        // La grille commence juste sous l'horloge.
+        clockBox.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> updateGridTop());
         setContentView(home);
 
         repository = AppRepository.get(this);
@@ -89,7 +95,36 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
         BubbleService.sync(this);
     }
 
-    private View clock() {
+    private void updateGridTop() {
+        float dp = getResources().getDisplayMetrics().density;
+        grid.setTopOffset(clockBox.getVisibility() == View.VISIBLE ? clockBox.getBottom() + 12 * dp : 0);
+    }
+
+    /** Applique les réglages de l'horloge (taille, alignement, date, masquée). */
+    private void applyClockSettings() {
+        Store store = Store.get(this);
+        clockBox.setVisibility(store.clock() ? View.VISIBLE : View.GONE);
+        clockTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, store.clockSize());
+        clockDate.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(13, store.clockSize() * 0.3f));
+        clockDate.setVisibility(store.clockDate() ? View.VISIBLE : View.GONE);
+        int align = store.clockAlign();
+        int g = align == 1 ? Gravity.CENTER_HORIZONTAL : align == 2 ? Gravity.END : Gravity.START;
+        clockBox.setGravity(g);
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) clockBox.getLayoutParams();
+        lp.gravity = Gravity.TOP | g;
+        clockBox.setLayoutParams(lp);
+        updateGridTop();
+    }
+
+    private void openAlarms() {
+        try {
+            startActivity(new Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (ActivityNotFoundException ignored) {
+        }
+    }
+
+    private LinearLayout clock() {
         float dp = getResources().getDisplayMetrics().density;
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -108,6 +143,8 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
         date.setShadowLayer(6 * dp, 0, dp, 0x66000000);
         box.addView(time);
         box.addView(date);
+        clockTime = time;
+        clockDate = date;
         box.setLayoutParams(new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.START));
@@ -121,7 +158,9 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
             widgetHost.startListening();
         } catch (RuntimeException ignored) {
         }
+        applyClockSettings();
         grid.reload();
+        wheel.refresh();
         repository.refresh(callback);
     }
 
@@ -204,9 +243,23 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
     @Override
     public void onHomeItemMenu(Store.HomeItem item) {
         if (item.widget) {
-            dialog().setItems(new String[]{"Taille…", "Retirer de l'accueil"}, (d, which) -> {
-                if (which == 0) chooseSize(item);
-                else grid.remove(item);
+            AppWidgetProviderInfo info = widgetManager.getAppWidgetInfo(item.widgetId);
+            boolean configurable = info != null && info.configure != null;
+            String[] opts = configurable
+                    ? new String[]{"Taille…", "Régler le widget", "Retirer de l'accueil"}
+                    : new String[]{"Taille…", "Retirer de l'accueil"};
+            dialog().setItems(opts, (d, which) -> {
+                if (which == 0) {
+                    chooseSize(item);
+                } else if (configurable && which == 1) {
+                    try {
+                        widgetHost.startAppWidgetConfigureActivityForResult(this, item.widgetId, 0, 99, null);
+                    } catch (RuntimeException e) {
+                        Toast.makeText(this, "Ce widget ne peut pas être réglé ici", Toast.LENGTH_SHORT).show();
+                    }
+                } else {
+                    grid.remove(item);
+                }
             }).show();
         } else {
             AppRepository.AppEntry app = grid.appOf(item);
@@ -222,7 +275,7 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
         List<int[]> sizes = new ArrayList<>();
         List<String> labels = new ArrayList<>();
         for (int h = 1; h <= Math.min(4, grid.rows()); h++) {
-            for (int w = 1; w <= HomeGrid.COLS; w++) {
+            for (int w = 1; w <= grid.cols(); w++) {
                 sizes.add(new int[]{w, h});
                 labels.add(w + " × " + h + (w == item.w && h == item.h ? "  (actuelle)" : ""));
             }
