@@ -4,16 +4,20 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
-import android.os.Build;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.Button;
+import android.view.Window;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -21,8 +25,18 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
-/** Réglages, ouverts par un appui long sur l'écran d'accueil ou depuis le tiroir d'applis. */
+/**
+ * Réglages, en cartes : une carte par thème, une ligne par réglage (nom à gauche, valeur à
+ * droite), les explications en petit sous la carte.
+ */
 public final class SettingsActivity extends Activity {
+
+    private static final int BG = 0xFF0F1015;
+    private static final int CARD = 0xFF1A1C23;
+    private static final int DIVIDER = 0xFF272A34;
+    private static final int TEXT = 0xFFF2F3F7;
+    private static final int MUTED = 0xFF8C92A3;
+    private static final int DANGER = 0xFFFF8F8F;
 
     private static final int[] ACCENTS = {
             0xFF8FA6FF, 0xFF6FD3FF, 0xFF7EE0A1, 0xFFB3E36B,
@@ -37,7 +51,10 @@ public final class SettingsActivity extends Activity {
 
     private Store store;
     private float dp;
-    private LinearLayout col;
+    private int accent;
+    private LinearLayout page;     // la colonne de toute la page
+    private LinearLayout card;     // la carte en cours
+    private LinearLayout footer;   // les explications sous la carte en cours
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,152 +63,238 @@ public final class SettingsActivity extends Activity {
         AppRepository.get(this).refresh(apps -> {
         }); // pour le choix d'une appli dans les gestes
         dp = getResources().getDisplayMetrics().density;
+        accent = store.accent();
 
-        col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) (20 * dp);
-        col.setPadding(pad, (int) (40 * dp), pad, pad);
+        Window w = getWindow();
+        w.setStatusBarColor(BG);
+        w.setNavigationBarColor(BG);
+        w.setBackgroundDrawable(new ColorDrawable(BG));
 
-        col.addView(title("Mini Launcher"));
+        page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setPadding(px(16), px(28), px(16), px(32));
+        header();
 
-        // ---------------------------------------------------------- launcher
-        section("Launcher");
-        col.addView(button("Choisir l'écran d'accueil par défaut", v -> {
+        // ---------------------------------------------------------- accueil
+        section("Écran d'accueil");
+        action("Définir comme écran d'accueil", "Choisir Mini Launcher par défaut", v -> {
             try {
                 startActivity(new Intent(Settings.ACTION_HOME_SETTINGS));
             } catch (ActivityNotFoundException e) {
                 startActivity(new Intent(Settings.ACTION_SETTINGS));
             }
-        }));
-        note("Alphabet sur les bords : poser le doigt sur un bord et le glisser de haut en bas ; les "
-                + "applis de la lettre apparaissent à côté. Glisser vers l'intérieur jusqu'à l'appli et "
-                + "lâcher. En haut ★ les favoris, en bas les dossiers.");
-        choice("Côté de l'alphabet", new String[]{"Les deux", "Gauche", "Droite"}, store.alphaSide(),
+        });
+        note("Appui long sur une zone vide de l'accueil : ajouter une appli, un dossier, un widget, "
+                + "changer le fond d'écran.");
+
+        // ---------------------------------------------------------- alphabet
+        section("Alphabet sur les bords");
+        choice("Côté", new String[]{"Les deux", "Gauche", "Droite"}, store.alphaSide(),
                 i -> store.setNum(Store.SIDE, i));
-        toggle("Lettres toujours visibles sur le bord", store.alphaVisible(),
+        toggle("Toujours visible", "Sinon, seulement au toucher", store.alphaVisible(),
                 on -> store.setFlag(Store.ALPHA_VISIBLE, on));
-        slider("Hauteur de l'alphabet", 25, 100, store.stripHeight(), "%d %%",
-                v -> store.setNum(Store.STRIP_H, v));
-        slider("Position verticale (0 = en haut, 100 = en bas)", 0, 100, store.stripPos(), "%d",
-                v -> store.setNum(Store.STRIP_POS, v));
-        choice("Effet loupe sur les lettres", new String[]{"Aucun", "Léger", "Normal", "Fort"}, store.zoom(),
+        slider("Hauteur", 25, 100, store.stripHeight(), "%d %%", v -> store.setNum(Store.STRIP_H, v));
+        slider("Position verticale", 0, 100, store.stripPos(), "%d %%", v -> store.setNum(Store.STRIP_POS, v));
+        choice("Effet loupe", new String[]{"Aucun", "Léger", "Normal", "Fort"}, store.zoom(),
                 i -> store.setNum(Store.ZOOM, i));
-        choiceColor("Couleur de la zone des lettres", ZONE_NAMES, ZONE_COLORS, store.stripBg(),
+        colorChoice("Couleur de la zone", ZONE_NAMES, ZONE_COLORS, store.stripBg(),
                 c -> store.setNum(Store.STRIP_BG, c));
         slider("Opacité de la zone", 0, 100, store.stripAlpha(), "%d %%", v -> store.setNum(Store.STRIP_ALPHA, v));
-        choiceColor("Couleur des lettres", LETTER_NAMES, LETTER_COLORS, store.stripFg(),
+        colorChoice("Couleur des lettres", LETTER_NAMES, LETTER_COLORS, store.stripFg(),
                 c -> store.setNum(Store.STRIP_FG, c));
-        slider("Largeur de la zone tactile des bords", 8, 40, store.band(), "%d %%", v -> store.setNum(Store.BAND, v));
-        choice("Centre de contrôle (glisser vers le bas à droite)", Shade.METHODS, store.ccMethod(),
-                i -> store.setNum(Store.CC_METHOD, i));
-        col.addView(button("Essayer le centre de contrôle", v -> {
+        slider("Zone tactile", 8, 40, store.band(), "%d %%", v -> store.setNum(Store.BAND, v));
+        note("Poser le doigt sur un bord et le glisser de haut en bas : les applis de la lettre "
+                + "apparaissent à côté. Glisser vers l'intérieur jusqu'à l'appli et lâcher. "
+                + "En haut ★ les favoris, en bas les dossiers.");
+
+        // ---------------------------------------------------------- gestes
+        section("Gestes");
+        for (int i = 0; i < Actions.GESTURES.length; i++) gestureChoice(i);
+        note("Les gestes marchent dans les zones vides du milieu de l'écran.");
+
+        section("Centre de contrôle");
+        choice("Méthode d'ouverture", Shade.METHODS, store.ccMethod(), i -> store.setNum(Store.CC_METHOD, i));
+        action("Essayer", null, v -> {
             if (store.ccMethod() == Shade.DISABLED) {
                 Toast.makeText(this, "Désactivé : glisse depuis la barre d'état, en haut à droite",
                         Toast.LENGTH_LONG).show();
             } else if (!Shade.open(this, true)) {
                 Toast.makeText(this, "Le téléphone refuse cet appel", Toast.LENGTH_SHORT).show();
             }
-        }));
-        note("Si le centre de contrôle s'ouvre à moitié, essaie les autres méthodes avec ce bouton "
-                + "et garde celle qui marche. Autre piste sur HyperOS : Paramètres > Notifications et "
-                + "centre de contrôle > Style du centre de contrôle > ancienne version.");
-        note("Glisser vers le bas au milieu de l'écran : à gauche les notifications, à droite le "
-                + "centre de contrôle. Appui long sur une zone vide : ajouter une appli, un dossier ou "
-                + "un widget.");
+        });
+        note("S'il s'ouvre à moitié, essaie les autres méthodes et garde celle qui marche. Sur "
+                + "HyperOS, le style « ancienne version » du centre de contrôle aide aussi.");
 
-        // ---------------------------------------------------------- gestes
-        section("Gestes sur l'accueil");
-        for (int i = 0; i < Actions.GESTURES.length; i++) gestureChoice(i);
-        note("« Verrouiller l'écran » utilise le droit administrateur de l'appareil, limité au "
-                + "verrouillage : Android le demande au premier usage. Après ce verrouillage, certains "
-                + "téléphones demandent le code au lieu de l'empreinte.");
-        col.addView(button("Retirer le droit de verrouillage (avant de désinstaller)", v -> {
+        section("Verrouillage");
+        danger("Retirer le droit de verrouillage", "À faire avant de désinstaller l'appli", v -> {
             Actions.removeLock(this);
             Toast.makeText(this, "Droit de verrouillage retiré", Toast.LENGTH_SHORT).show();
-        }));
+        });
+        note("« Verrouiller l'écran » utilise le droit administrateur de l'appareil, limité au "
+                + "verrouillage. Ensuite, certains téléphones demandent le code au lieu de l'empreinte.");
 
         // ---------------------------------------------------------- horloge
         section("Horloge");
-        toggle("Afficher l'horloge", store.clock(), on -> store.setFlag(Store.CLOCK, on));
-        note("Masque-la pour mettre un widget horloge à la place. La toucher ouvre les alarmes.");
+        toggle("Afficher l'horloge", "La toucher ouvre les alarmes", store.clock(),
+                on -> store.setFlag(Store.CLOCK, on));
         slider("Taille", 30, 110, store.clockSize(), "%d", v -> store.setNum(Store.CLOCK_SIZE, v));
         choice("Position", new String[]{"À gauche", "Au centre", "À droite"}, store.clockAlign(),
                 i -> store.setNum(Store.CLOCK_ALIGN, i));
-        toggle("Afficher la date", store.clockDate(), on -> store.setFlag(Store.CLOCK_DATE, on));
+        toggle("Afficher la date", null, store.clockDate(), on -> store.setFlag(Store.CLOCK_DATE, on));
+        note("Masque l'horloge pour mettre un widget horloge à la place.");
 
         // ---------------------------------------------------------- grille
-        section("Grille de l'accueil");
+        section("Grille");
         slider("Colonnes", 3, 6, store.cols(), "%d", v -> store.setNum(Store.COLS, v));
-        slider("Lignes (0 = automatique)", 0, 9, store.rowsSetting(), "%d", v -> store.setNum(Store.ROWS, v));
+        slider("Lignes", 0, 9, store.rowsSetting(), "%d", v -> store.setNum(Store.ROWS, v));
         slider("Taille des icônes", 36, 72, store.iconSize(), "%d dp", v -> store.setNum(Store.ICON, v));
-        toggle("Afficher le nom des applis", store.labels(), on -> store.setFlag(Store.LABELS, on));
+        toggle("Nom des applis", null, store.labels(), on -> store.setFlag(Store.LABELS, on));
+        note("Lignes à 0 : automatique, selon la taille de l'écran.");
 
-        // ---------------------------------------------------------- favoris et dossiers
-        section("Favoris (★) et dossiers");
-        toggle("Compléter les favoris avec les applis les plus utilisées",
-                store.autoFavorites(), on -> store.setFlag("autoFav", on));
+        // ---------------------------------------------------------- favoris
+        section("Favoris ★");
+        toggle("Compléter automatiquement", "Avec les applis les plus utilisées", store.autoFavorites(),
+                on -> store.setFlag("autoFav", on));
         slider("Nombre de favoris", 0, 8, store.maxFav(), "%d", v -> store.setNum(Store.MAXFAV, v));
-        note("Appui long sur une appli : épingler en favori, ajouter à un dossier, poser sur "
-                + "l'accueil. Sur l'accueil, lâcher une appli sur une autre crée un dossier. Poser le "
-                + "doigt sur un dossier l'ouvre en cercle : glisser jusqu'à l'appli et lâcher.");
+        note("Appui long sur une appli : l'épingler en favori, l'ajouter à un dossier ou la poser "
+                + "sur l'accueil.");
 
         // ---------------------------------------------------------- dossiers
         section("Dossiers");
-        note("Pour un dossier en particulier (couleur, style, forme) : maintenir le dossier puis "
-                + "lâcher sur place > Personnaliser.");
-        choiceColor("Fond du cercle", ZONE_NAMES, ZONE_COLORS, store.folderBg(),
-                c -> store.setNum(Store.F_BG, c));
-        slider("Opacité du fond du cercle", 0, 100, store.folderBgAlpha(), "%d %%",
-                v -> store.setNum(Store.F_BG_ALPHA, v));
-        slider("Taille des icônes dans le cercle", 34, 64, store.folderIcon(), "%d dp",
-                v -> store.setNum(Store.F_ICON, v));
-        slider("Taille du cercle", 70, 140, store.folderRadius(), "%d %%",
-                v -> store.setNum(Store.F_RADIUS, v));
-        toggle("Noms des applis dans le cercle", store.folderLabels(), on -> store.setFlag(Store.F_LABELS, on));
-        toggle("Bordure de couleur sur l'icône", store.folderBorder(), on -> store.setFlag(Store.F_BORDER, on));
-        slider("Opacité du fond de l'icône", 0, 100, store.folderTile(), "%d %%",
-                v -> store.setNum(Store.F_TILE_ALPHA, v));
+        colorChoice("Fond du cercle", ZONE_NAMES, ZONE_COLORS, store.folderBg(), c -> store.setNum(Store.F_BG, c));
+        slider("Opacité du cercle", 0, 100, store.folderBgAlpha(), "%d %%", v -> store.setNum(Store.F_BG_ALPHA, v));
+        slider("Taille des icônes", 34, 64, store.folderIcon(), "%d dp", v -> store.setNum(Store.F_ICON, v));
+        slider("Taille du cercle", 70, 140, store.folderRadius(), "%d %%", v -> store.setNum(Store.F_RADIUS, v));
+        toggle("Noms dans le cercle", null, store.folderLabels(), on -> store.setFlag(Store.F_LABELS, on));
+        toggle("Bordure de couleur", "Sur l'icône du dossier", store.folderBorder(),
+                on -> store.setFlag(Store.F_BORDER, on));
+        slider("Opacité de l'icône", 0, 100, store.folderTile(), "%d %%", v -> store.setNum(Store.F_TILE_ALPHA, v));
+        note("Lâcher une appli sur une autre crée un dossier. Pour un dossier précis (couleur, "
+                + "style, forme) : le maintenir puis lâcher sur place > Personnaliser.");
 
         // ---------------------------------------------------------- effets
         section("Effets");
         accentChoice();
-        slider("Assombrissement du fond", 0, 90, store.dimPercent(), "%d %%", v -> store.setNum(Store.DIM, v));
+        slider("Assombrissement", 0, 90, store.dimPercent(), "%d %%", v -> store.setNum(Store.DIM, v));
         choice("Animations", new String[]{"Aucune", "Normales", "Rapides", "Lentes"}, store.speed(),
                 i -> store.setNum(Store.SPEED, i));
-        toggle("Vibrations", store.haptic(), on -> store.setFlag(Store.HAPTIC, on));
+        toggle("Vibrations", null, store.haptic(), on -> store.setFlag(Store.HAPTIC, on));
+
+        versionFooter();
 
         ScrollView scroll = new ScrollView(this);
-        scroll.addView(col);
+        scroll.setBackgroundColor(BG);
+        scroll.setFillViewport(true);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(page);
         setContentView(scroll);
     }
 
-    // ------------------------------------------------------------ éléments
+    // ------------------------------------------------------------ structure
 
-    private TextView title(String s) {
-        TextView t = new TextView(this);
-        t.setText(s);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
-        t.setTextColor(Color.WHITE);
-        return t;
+    private int px(float v) {
+        return (int) (v * dp);
     }
 
-    private void section(String s) {
-        TextView t = new TextView(this);
-        t.setText(s);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        t.setTextColor(0xFF8FA6FF);
-        t.setPadding(0, (int) (28 * dp), 0, (int) (6 * dp));
-        col.addView(t);
+    private void header() {
+        TextView title = text("Mini Launcher", 30, TEXT);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setPadding(px(6), px(8), 0, 0);
+        page.addView(title);
+        TextView sub = text("Réglages", 15, MUTED);
+        sub.setPadding(px(6), px(2), 0, px(6));
+        page.addView(sub);
+    }
+
+    private void section(String name) {
+        TextView t = text(name.toUpperCase(), 12, accent);
+        t.setLetterSpacing(0.08f);
+        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        t.setPadding(px(14), px(22), 0, px(8));
+        page.addView(t);
+
+        card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(CARD);
+        bg.setCornerRadius(px(20));
+        card.setBackground(bg);
+        card.setClipToOutline(true);
+        page.addView(card);
+
+        footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.VERTICAL);
+        page.addView(footer);
     }
 
     private void note(String s) {
+        TextView t = text(s, 13, MUTED);
+        t.setLineSpacing(0, 1.15f);
+        t.setPadding(px(14), px(8), px(14), 0);
+        footer.addView(t);
+    }
+
+    private void addRow(View row) {
+        if (card.getChildCount() > 0) {
+            View line = new View(this);
+            line.setBackgroundColor(DIVIDER);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Math.max(1, px(0.7f)));
+            lp.leftMargin = px(18);
+            card.addView(line, lp);
+        }
+        card.addView(row);
+    }
+
+    private TextView text(String s, float sp, int color) {
         TextView t = new TextView(this);
         t.setText(s);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        t.setTextColor(0xAAFFFFFF);
-        t.setPadding(0, (int) (6 * dp), 0, (int) (6 * dp));
-        col.addView(t);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        t.setTextColor(color);
+        return t;
     }
+
+    /** Une ligne : titre (et sous-titre) à gauche, un élément à droite. */
+    private LinearLayout row(String title, String subtitle, int titleColor) {
+        LinearLayout r = new LinearLayout(this);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setMinimumHeight(px(58));
+        r.setPadding(px(18), px(12), px(16), px(12));
+        LinearLayout left = new LinearLayout(this);
+        left.setOrientation(LinearLayout.VERTICAL);
+        left.addView(text(title, 16, titleColor));
+        if (subtitle != null) {
+            TextView sub = text(subtitle, 13, MUTED);
+            sub.setPadding(0, px(2), 0, 0);
+            left.addView(sub);
+        }
+        r.addView(left, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        return r;
+    }
+
+    private void clickable(View v, View.OnClickListener l) {
+        GradientDrawable mask = new GradientDrawable();
+        mask.setColor(Color.WHITE);
+        v.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22FFFFFF), null, mask));
+        v.setOnClickListener(l);
+    }
+
+    private TextView valueText(String s) {
+        TextView t = text(s, 15, accent);
+        t.setSingleLine(true);
+        t.setEllipsize(TextUtils.TruncateAt.END);
+        t.setMaxWidth(px(170));
+        t.setPadding(px(10), 0, 0, 0);
+        return t;
+    }
+
+    private TextView chevron() {
+        TextView t = text("›", 22, 0xFF5C6273);
+        t.setPadding(px(8), 0, 0, px(2));
+        return t;
+    }
+
+    // ------------------------------------------------------------ types de lignes
 
     interface Toggle {
         void set(boolean on);
@@ -201,31 +304,54 @@ public final class SettingsActivity extends Activity {
         void set(int v);
     }
 
-    private Switch toggle(String label, boolean value, Toggle onChange) {
-        Switch s = new Switch(this);
-        s.setText(label);
-        s.setTextColor(Color.WHITE);
-        s.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        s.setChecked(value);
-        s.setPadding(0, (int) (10 * dp), 0, (int) (10 * dp));
-        s.setOnCheckedChangeListener((b, on) -> onChange.set(on));
-        col.addView(s);
-        return s;
+    private void action(String title, String subtitle, View.OnClickListener l) {
+        LinearLayout r = row(title, subtitle, accent);
+        r.addView(chevron());
+        clickable(r, l);
+        addRow(r);
     }
 
-    private void slider(String label, int min, int max, int value, String format, IntSetter onChange) {
-        TextView t = new TextView(this);
-        t.setTextColor(Color.WHITE);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        t.setPadding(0, (int) (10 * dp), 0, 0);
-        t.setText(label + " : " + String.format(format, value));
+    private void danger(String title, String subtitle, View.OnClickListener l) {
+        LinearLayout r = row(title, subtitle, DANGER);
+        clickable(r, l);
+        addRow(r);
+    }
+
+    private void toggle(String title, String subtitle, boolean value, Toggle onChange) {
+        LinearLayout r = row(title, subtitle, TEXT);
+        Switch s = new Switch(this);
+        s.setChecked(value);
+        int[][] states = {{android.R.attr.state_checked}, {}};
+        s.setThumbTintList(new ColorStateList(states, new int[]{accent, 0xFFB8BCC8}));
+        s.setTrackTintList(new ColorStateList(states, new int[]{(accent & 0x00FFFFFF) | 0x77000000, 0xFF3A3D48}));
+        s.setOnCheckedChangeListener((b, on) -> onChange.set(on));
+        r.addView(s);
+        clickable(r, v -> s.toggle());
+        addRow(r);
+    }
+
+    private void slider(String title, int min, int max, int value, String format, IntSetter onChange) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(0, px(12), 0, px(8));
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setPadding(px(18), 0, px(18), 0);
+        top.addView(text(title, 16, TEXT), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        TextView val = text(String.format(format, value), 15, accent);
+        top.addView(val);
+        box.addView(top);
         SeekBar bar = new SeekBar(this);
         bar.setMax(max - min);
         bar.setProgress(Math.max(0, Math.min(max - min, value - min)));
+        bar.setProgressTintList(ColorStateList.valueOf(accent));
+        bar.setThumbTintList(ColorStateList.valueOf(accent));
+        bar.setProgressBackgroundTintList(ColorStateList.valueOf(0xFF3A3D48));
+        bar.setPadding(px(18), px(10), px(18), px(4));
         bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
-                t.setText(label + " : " + String.format(format, p + min));
+                val.setText(String.format(format, p + min));
                 if (fromUser) onChange.set(p + min);
             }
 
@@ -237,48 +363,52 @@ public final class SettingsActivity extends Activity {
             public void onStopTrackingTouch(SeekBar s) {
             }
         });
-        col.addView(t);
-        col.addView(bar);
+        box.addView(bar);
+        addRow(box);
     }
 
-    private void choice(String label, String[] options, int index, IntSetter onChange) {
-        Button b = button(label + " : " + options[Math.max(0, Math.min(options.length - 1, index))], null);
-        b.setOnClickListener(v -> new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle(label)
-                .setItems(options, (d, which) -> {
-                    onChange.set(which);
-                    b.setText(label + " : " + options[which]);
-                }).show());
-        col.addView(b);
+    private void choice(String title, String[] options, int index, IntSetter onChange) {
+        LinearLayout r = row(title, null, TEXT);
+        TextView val = valueText(options[Math.max(0, Math.min(options.length - 1, index))]);
+        r.addView(val);
+        r.addView(chevron());
+        clickable(r, v -> dialog(title).setItems(options, (d, which) -> {
+            onChange.set(which);
+            val.setText(options[which]);
+        }).show());
+        addRow(r);
     }
 
     private void gestureChoice(int index) {
         String key = Actions.GESTURES[index];
-        String label = Actions.GESTURE_NAMES[index];
-        Button b = button("", null);
+        String title = Actions.GESTURE_NAMES[index];
+        LinearLayout r = row(title, null, TEXT);
+        TextView val = valueText("");
+        r.addView(val);
+        r.addView(chevron());
         Runnable update = () -> {
             int action = Actions.actionFor(this, key);
-            String text = Actions.NAMES[action];
-            if (action == Actions.OPEN_APP) text = "Ouvrir " + appName(store.text(key + "App"));
-            b.setText(label + " : " + text);
+            String t = Actions.NAMES[action];
+            if (action == Actions.OPEN_APP) t = appName(store.text(key + "App"));
+            if (action == Actions.NONE) t = "—";
+            val.setText(t);
+            val.setTextColor(action == Actions.NONE ? MUTED : accent);
         };
         update.run();
-        b.setOnClickListener(v -> new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle(label)
-                .setItems(Actions.NAMES, (d, which) -> {
-                    if (which == Actions.OPEN_APP) {
-                        Menus.pickApp(this, "Appli à ouvrir", AppRepository.get(this).cached(), app -> {
-                            store.setText(key + "App", Store.key(app.component));
-                            store.setNum(key, Actions.OPEN_APP);
-                            update.run();
-                        });
-                    } else {
-                        store.setNum(key, which);
-                        update.run();
-                        if (which == Actions.LOCK && !Actions.lockAllowed(this)) Actions.lock(this);
-                    }
-                }).show());
-        col.addView(b);
+        clickable(r, v -> dialog(title).setItems(Actions.NAMES, (d, which) -> {
+            if (which == Actions.OPEN_APP) {
+                Menus.pickApp(this, "Appli à ouvrir", AppRepository.get(this).cached(), app -> {
+                    store.setText(key + "App", Store.key(app.component));
+                    store.setNum(key, Actions.OPEN_APP);
+                    update.run();
+                });
+            } else {
+                store.setNum(key, which);
+                update.run();
+                if (which == Actions.LOCK && !Actions.lockAllowed(this)) Actions.lock(this);
+            }
+        }).show());
+        addRow(r);
     }
 
     private String appName(String key) {
@@ -286,48 +416,61 @@ public final class SettingsActivity extends Activity {
         for (AppRepository.AppEntry e : AppRepository.get(this).cached()) {
             if (Store.key(e.component).equals(key)) return e.label;
         }
-        return "(appli introuvable)";
+        return "(introuvable)";
     }
 
-    private void choiceColor(String label, String[] names, int[] colors, int current, IntSetter onChange) {
-        Button b = button(label, null);
-        updateSwatch(b, 0xFF000000 | current);
-        b.setOnClickListener(v -> new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle(label)
-                .setItems(names, (d, which) -> {
-                    onChange.set(colors[which]);
-                    updateSwatch(b, 0xFF000000 | colors[which]);
-                }).show());
-        col.addView(b);
+    private View swatch(int color) {
+        View dot = new View(this);
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(color);
+        g.setStroke(px(1), 0x33FFFFFF);
+        dot.setBackground(g);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(px(22), px(22));
+        lp.leftMargin = px(10);
+        dot.setLayoutParams(lp);
+        return dot;
+    }
+
+    private void colorChoice(String title, String[] names, int[] colors, int current, IntSetter onChange) {
+        LinearLayout r = row(title, null, TEXT);
+        View dot = swatch(0xFF000000 | current);
+        r.addView(dot);
+        r.addView(chevron());
+        clickable(r, v -> dialog(title).setItems(names, (d, which) -> {
+            onChange.set(colors[which]);
+            ((GradientDrawable) dot.getBackground()).setColor(0xFF000000 | colors[which]);
+        }).show());
+        addRow(r);
     }
 
     private void accentChoice() {
-        Button b = button("Couleur d'accent", null);
-        updateSwatch(b, store.accent());
-        b.setOnClickListener(v -> new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Couleur d'accent")
-                .setItems(ACCENT_NAMES, (d, which) -> {
-                    store.setNum(Store.ACCENT, ACCENTS[which]);
-                    updateSwatch(b, ACCENTS[which]);
-                }).show());
-        col.addView(b);
+        LinearLayout r = row("Couleur d'accent", "Lettres, survol, réglages", TEXT);
+        View dot = swatch(accent);
+        r.addView(dot);
+        r.addView(chevron());
+        clickable(r, v -> dialog("Couleur d'accent").setItems(ACCENT_NAMES, (d, which) -> {
+            store.setNum(Store.ACCENT, ACCENTS[which]);
+            recreate(); // toute la page reprend la nouvelle couleur
+        }).show());
+        addRow(r);
     }
 
-    private void updateSwatch(Button b, int color) {
-        GradientDrawable dot = new GradientDrawable();
-        dot.setShape(GradientDrawable.OVAL);
-        dot.setColor(color);
-        int size = (int) (18 * dp);
-        dot.setSize(size, size);
-        b.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, dot, null);
+    private AlertDialog.Builder dialog(String title) {
+        return new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle(title);
     }
 
-    private Button button(String label, View.OnClickListener l) {
-        Button b = new Button(this);
-        b.setText(label);
-        b.setAllCaps(false);
-        b.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        if (l != null) b.setOnClickListener(l);
-        return b;
+    private void versionFooter() {
+        String v = "";
+        try {
+            PackageInfo p = getPackageManager().getPackageInfo(getPackageName(), 0);
+            v = " " + p.versionName;
+        } catch (Exception ignored) {
+        }
+        TextView t = text("Mini Launcher" + v, 12, 0xFF5C6273);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(0, px(28), 0, px(8));
+        page.addView(t, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
     }
 }
