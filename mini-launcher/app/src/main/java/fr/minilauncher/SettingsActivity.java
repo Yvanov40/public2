@@ -158,6 +158,17 @@ public final class SettingsActivity extends Activity {
         note("« Verrouiller l'écran » utilise le droit administrateur de l'appareil, limité au "
                 + "verrouillage. Ensuite, certains téléphones demandent le code au lieu de l'empreinte.");
 
+        // ---------------------------------------------------------- lisibilité
+        section("Lisibilité");
+        choice("Icônes de la barre d'état", new String[]{"Automatique", "Claires", "Foncées"}, store.barIcons(),
+                i -> store.setNum(Store.BAR_ICONS, i));
+        choice("Texte de l'accueil", new String[]{"Automatique", "Blanc", "Noir"}, store.homeText(),
+                i -> store.setNum(Store.HOME_TEXT, i));
+        toggle("Voile sombre en haut", "Garde les icônes claires lisibles sur tout fond", store.topScrim(),
+                on -> store.setFlag(Store.TOP_SCRIM, on));
+        note("Automatique : foncé sur un fond d'écran clair, blanc sur un fond sombre. Le texte de "
+                + "l'accueil comprend l'horloge et le nom des applis.");
+
         // ---------------------------------------------------------- horloge
         section("Horloge");
         toggle("Afficher l'horloge", "La toucher ouvre les alarmes", store.clock(),

@@ -33,6 +33,8 @@ import java.util.Map;
 final class HomeGrid extends FrameLayout {
 
     private int cols = 4;
+    /** Textes de l'accueil en foncé (fond d'écran clair). Réglé par HomeActivity. */
+    static boolean darkText;
     private float topOffset = -1; // bas de l'horloge (-1 : pas encore connu)
 
     private final float dp;
@@ -527,10 +529,10 @@ final class HomeGrid extends FrameLayout {
             border = store.folderBorder();
             tileAlpha = (int) (255 * store.folderTile() / 100f);
             dp = getResources().getDisplayMetrics().density;
-            label.setColor(Color.WHITE);
+            label.setColor(darkText ? 0xFF15171C : Color.WHITE);
             label.setTextAlign(Paint.Align.CENTER);
             label.setTextSize(12 * getResources().getDisplayMetrics().scaledDensity);
-            label.setShadowLayer(3 * dp, 0, dp, 0xCC000000);
+            label.setShadowLayer(3 * dp, 0, dp, darkText ? 0x88FFFFFF : 0xCC000000);
             big.setTextAlign(Paint.Align.CENTER);
             big.setFakeBoldText(true);
         }
@@ -614,10 +616,10 @@ final class HomeGrid extends FrameLayout {
             this.iconDp = iconDp;
             this.showLabel = showLabel;
             dp = getResources().getDisplayMetrics().density;
-            label.setColor(Color.WHITE);
+            label.setColor(darkText ? 0xFF15171C : Color.WHITE);
             label.setTextAlign(Paint.Align.CENTER);
             label.setTextSize(12 * getResources().getDisplayMetrics().scaledDensity);
-            label.setShadowLayer(3 * dp, 0, dp, 0xCC000000);
+            label.setShadowLayer(3 * dp, 0, dp, darkText ? 0x88FFFFFF : 0xCC000000);
         }
 
         @Override

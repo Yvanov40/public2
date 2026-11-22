@@ -40,6 +40,8 @@ public final class HomeActivity extends Activity
     private AppWidgetHost widgetHost;
     private AppWidgetManager widgetManager;
     private LinearLayout clockBox;
+    private View scrim;
+    private android.app.WallpaperManager.OnColorsChangedListener colorsListener;
     private TextClock clockTime, clockDate;
 
     private int pendingWidgetId = -1;
@@ -81,6 +83,17 @@ public final class HomeActivity extends Activity
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         clockBox = clock();
         home.addView(clockBox, 0);
+        scrim = new View(this);
+        scrim.setBackground(new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0x80000000, 0x40000000, 0x00000000}));
+        home.addView(scrim, 0, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+                (int) (150 * getResources().getDisplayMetrics().density), Gravity.TOP));
+        if (Build.VERSION.SDK_INT >= 27) {
+            colorsListener = (colors, which) -> applyAppearance();
+            android.app.WallpaperManager.getInstance(this).addOnColorsChangedListener(colorsListener,
+                    new android.os.Handler(android.os.Looper.getMainLooper()));
+        }
         home.setClock(clockBox, this::openAlarms);
         // La grille commence juste sous l'horloge.
         clockBox.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> updateGridTop());
@@ -90,6 +103,71 @@ public final class HomeActivity extends Activity
         grid.setApps(repository.cached());
         strip.setApps(repository.cached());
         grid.reload();
+    }
+
+    // ------------------------------------------------------------ lisibilité
+
+    /** Le fond d'écran est-il clair (texte foncé conseillé) ? D'après les couleurs qu'Android en extrait. */
+    private boolean wallpaperIsLight() {
+        if (Build.VERSION.SDK_INT < 27) return false;
+        try {
+            android.app.WallpaperColors wc = android.app.WallpaperManager.getInstance(this)
+                    .getWallpaperColors(android.app.WallpaperManager.FLAG_SYSTEM);
+            if (wc == null) return false;
+            if (Build.VERSION.SDK_INT >= 31) {
+                return (wc.getColorHints() & android.app.WallpaperColors.HINT_SUPPORTS_DARK_TEXT) != 0;
+            }
+            return wc.getPrimaryColor().luminance() > 0.6f;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /** Couleur des icônes de la barre d'état, de l'horloge et des noms d'applis ; voile en haut. */
+    private void applyAppearance() {
+        Store st = Store.get(this);
+        boolean light = wallpaperIsLight();
+        boolean withScrim = st.topScrim();
+        int bar = st.barIcons();
+        boolean darkIcons = bar == 2 || (bar == 0 && light && !withScrim);
+        int t = st.homeText();
+        boolean darkText = t == 2 || (t == 0 && light);
+
+        int layout = View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+        if (Build.VERSION.SDK_INT >= 30) {
+            home.setSystemUiVisibility(layout);
+            android.view.WindowInsetsController c = getWindow().getInsetsController();
+            if (c != null) {
+                int mask = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                        | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                c.setSystemBarsAppearance(darkIcons ? mask : 0, mask);
+            }
+        } else {
+            home.setSystemUiVisibility(layout | (darkIcons
+                    ? View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0));
+        }
+
+        float dp = getResources().getDisplayMetrics().density;
+        int color = darkText ? 0xFF15171C : Color.WHITE;
+        int shadow = darkText ? 0x55FFFFFF : 0x66000000;
+        clockTime.setTextColor(color);
+        clockTime.setShadowLayer(6 * dp, 0, dp, shadow);
+        clockDate.setTextColor(color);
+        clockDate.setShadowLayer(6 * dp, 0, dp, shadow);
+        scrim.setVisibility(withScrim ? View.VISIBLE : View.GONE);
+        if (HomeGrid.darkText != darkText) {
+            HomeGrid.darkText = darkText;
+            grid.reload();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (colorsListener != null && Build.VERSION.SDK_INT >= 27) {
+            android.app.WallpaperManager.getInstance(this).removeOnColorsChangedListener(colorsListener);
+        }
+        super.onDestroy();
     }
 
     // ------------------------------------------------------------ horloge
@@ -160,6 +238,7 @@ public final class HomeActivity extends Activity
         } catch (RuntimeException ignored) {
         }
         applyClockSettings();
+        applyAppearance();
         grid.reload();
         strip.refresh();
         home.invalidate();

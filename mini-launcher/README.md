@@ -53,6 +53,8 @@ Appui long sur une zone vide > Réglages du launcher (ou « Mini Launcher » dan
 
 - Alphabet : côté(s), hauteur, position, effet loupe, couleur et opacité de la zone,
   couleur des lettres, toujours visible, largeur de la zone tactile.
+- Lisibilité : icônes de la barre d'état et texte de l'accueil (horloge, noms) automatiques
+  selon la clarté du fond d'écran, ou forcés clair/foncé ; voile sombre en haut.
 - Horloge : afficher, taille, position, date.
 - Grille : colonnes, lignes, taille des icônes, noms.
 - Favoris : nombre, complément automatique.
