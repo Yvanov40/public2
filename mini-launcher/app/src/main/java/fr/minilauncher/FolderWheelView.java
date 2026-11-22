@@ -325,6 +325,7 @@ final class FolderWheelView extends View {
                 icon.draw(canvas);
                 icon.setAlpha(255);
             }
+            Badges.draw(getContext(), canvas, x, y, hh, Badges.count(getContext(), s.app));
             if (labels) {
                 small.setAlpha((int) (255 * k));
                 CharSequence nm = TextUtils.ellipsize(s.app.label, small, 64 * dp, TextUtils.TruncateAt.END);

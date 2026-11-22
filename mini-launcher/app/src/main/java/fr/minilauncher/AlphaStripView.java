@@ -501,6 +501,11 @@ final class AlphaStripView extends View {
             text.setColor(sel && !empty ? 0xFF111320 : base);
             text.setAlpha(empty ? (active ? 70 : 45) : (active ? 255 : 150));
             drawCentered(canvas, e.label, x, y, text);
+            if (!empty && Badges.count(getContext(), e.apps) > 0) {
+                // Un point à côté de la lettre : une de ses applis a une notification.
+                Badges.dot(getContext(), canvas, x + inwardSign * size * 0.75f * z, y - size * 0.45f * z,
+                        Math.max(2.2f * dp, size * 0.18f * z));
+            }
         }
     }
 
@@ -547,6 +552,7 @@ final class AlphaStripView extends View {
                 fill.setColor(0x33FFFFFF);
                 canvas.drawCircle(c.x, iy, hh, fill);
             }
+            Badges.draw(getContext(), canvas, c.x, iy, hh, Badges.count(getContext(), c.app));
             label.setAlpha(alpha);
             CharSequence name = TextUtils.ellipsize(c.app.label, label, 70 * dp, TextUtils.TruncateAt.END);
             canvas.drawText(name, 0, name.length(), c.x, c.y + 32 * dp, label);

@@ -31,6 +31,13 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
   les réglages proposent plusieurs méthodes (relance, fermer puis ouvrir, notifications puis
   centre de contrôle, ou désactivé) avec un bouton « Essayer ».
 
+## Pastilles de notification
+
+Sur les applis et dossiers de l'accueil, dans le cercle des dossiers et dans l'alphabet
+(un point à côté des lettres concernées). Il faut l'« Accès aux notifications » (réglages
+de l'appli > Pastilles) : il sert seulement à compter, le contenu n'est ni lu ni gardé.
+Réglages : afficher, style (point ou nombre), couleur.
+
 ## Gestes
 
 Réglables dans les réglages : double tap dans le vide (par défaut : verrouiller), glisser

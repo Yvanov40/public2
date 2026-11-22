@@ -86,10 +86,25 @@ public final class HomeActivity extends Activity
         clockBox.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> updateGridTop());
         setContentView(home);
 
+        Badges.addListener(badgeListener);
         repository = AppRepository.get(this);
         grid.setApps(repository.cached());
         strip.setApps(repository.cached());
         grid.reload();
+    }
+
+    /** Nouvelles notifications : on redessine les pastilles. */
+    private final Runnable badgeListener = () -> {
+        if (isDestroyed()) return;
+        grid.invalidateIcons();
+        strip.invalidate();
+        folderWheel.invalidate();
+    };
+
+    @Override
+    protected void onDestroy() {
+        Badges.removeListener(badgeListener);
+        super.onDestroy();
     }
 
     // ------------------------------------------------------------ horloge

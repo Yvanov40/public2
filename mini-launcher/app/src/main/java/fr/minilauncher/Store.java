@@ -106,6 +106,11 @@ final class Store {
     int folderTile() { return num(F_TILE_ALPHA, 80); }       // opacité du fond de l'icône, %
 
     static final String CC_METHOD = "ccMethod";
+    static final String BADGES = "badges", BADGE_STYLE = "badgeStyle", BADGE_COLOR = "badgeColor";
+
+    boolean badges() { return flag(BADGES, true); }
+    int badgeStyle() { return num(BADGE_STYLE, 1); }         // 0 point, 1 nombre
+    int badgeColor() { return num(BADGE_COLOR, 0xFFFF5A5F); } // 0 = couleur d'accent
 
     int ccMethod() { return num(CC_METHOD, 0); }             // voir Shade.METHODS
 
