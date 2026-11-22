@@ -27,8 +27,9 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
   déplacer le dossier, ou son menu (applis, renommer, retirer, supprimer).
 - **Widgets** : reçoivent les touchers ; appui long = déplacer, taille, régler, retirer.
 - **Glisser vers le bas** au milieu : à gauche les notifications, à droite le centre de
-  contrôle. Sur HyperOS, le centre de contrôle s'affiche parfois mal par ce biais ; glisser
-  depuis la barre d'état, tout en haut à droite, ouvre toujours le vrai.
+  contrôle. Sur HyperOS, le centre de contrôle s'ouvre parfois à moitié par l'appel direct :
+  les réglages proposent plusieurs méthodes (relance, fermer puis ouvrir, notifications puis
+  centre de contrôle, ou désactivé) avec un bouton « Essayer ».
 
 ## Réglages
 

@@ -80,6 +80,19 @@ public final class SettingsActivity extends Activity {
         choiceColor("Couleur des lettres", LETTER_NAMES, LETTER_COLORS, store.stripFg(),
                 c -> store.setNum(Store.STRIP_FG, c));
         slider("Largeur de la zone tactile des bords", 8, 40, store.band(), "%d %%", v -> store.setNum(Store.BAND, v));
+        choice("Centre de contrôle (glisser vers le bas à droite)", Shade.METHODS, store.ccMethod(),
+                i -> store.setNum(Store.CC_METHOD, i));
+        col.addView(button("Essayer le centre de contrôle", v -> {
+            if (store.ccMethod() == Shade.DISABLED) {
+                Toast.makeText(this, "Désactivé : glisse depuis la barre d'état, en haut à droite",
+                        Toast.LENGTH_LONG).show();
+            } else if (!Shade.open(this, true)) {
+                Toast.makeText(this, "Le téléphone refuse cet appel", Toast.LENGTH_SHORT).show();
+            }
+        }));
+        note("Si le centre de contrôle s'ouvre à moitié, essaie les autres méthodes avec ce bouton "
+                + "et garde celle qui marche. Autre piste sur HyperOS : Paramètres > Notifications et "
+                + "centre de contrôle > Style du centre de contrôle > ancienne version.");
         note("Glisser vers le bas au milieu de l'écran : à gauche les notifications, à droite le "
                 + "centre de contrôle. Appui long sur une zone vide : ajouter une appli, un dossier ou "
                 + "un widget.");

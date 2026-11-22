@@ -97,6 +97,10 @@ final class Store {
     boolean folderBorder() { return flag(F_BORDER, true); }
     int folderTile() { return num(F_TILE_ALPHA, 80); }       // opacité du fond de l'icône, %
 
+    static final String CC_METHOD = "ccMethod";
+
+    int ccMethod() { return num(CC_METHOD, 0); }             // voir Shade.METHODS
+
     int stripHeight() { return num(STRIP_H, 55); }           // % de la hauteur utile
     int stripPos() { return num(STRIP_POS, 55); }            // centre, % de la hauteur utile
     int zoom() { return num(ZOOM, 2); }                      // 0 aucun, 1 léger, 2 normal, 3 fort
