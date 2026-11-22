@@ -104,7 +104,7 @@ public final class SettingsActivity extends Activity {
         slider("Zone tactile", 8, 40, store.band(), "%d %%", v -> store.setNum(Store.BAND, v));
         note("Poser le doigt sur un bord et le glisser de haut en bas : les applis de la lettre "
                 + "apparaissent à côté. Glisser vers l'intérieur jusqu'à l'appli et lâcher. "
-                + "En haut ★ les favoris, en bas les dossiers.");
+                + "En haut ★ les favoris.");
 
         // ---------------------------------------------------------- gestes
         section("Gestes");

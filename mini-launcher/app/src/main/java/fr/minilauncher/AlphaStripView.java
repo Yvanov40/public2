@@ -27,7 +27,7 @@ import java.util.Set;
  * On pose le doigt sur un bord et on le fait glisser de haut en bas : la lettre sous le
  * doigt s'allume et ses applis apparaissent à côté, en direct. On glisse vers l'intérieur
  * jusqu'à l'appli et on lâche. Si on lâche sur l'alphabet, les applis restent affichées et
- * on peut les toucher. En haut : ★ les favoris ; en bas : les dossiers.
+ * on peut les toucher. En haut : ★ les favoris.
  */
 final class AlphaStripView extends View {
 
@@ -180,14 +180,6 @@ final class AlphaStripView extends View {
         for (AppRepository.AppEntry e : allApps) {
             Entry en = letters.get(e.letter);
             if (en != null) en.apps.add(e);
-        }
-        for (Store.Group g : store.groups()) {
-            Entry en = new Entry(g.name, g.color, true);
-            Set<String> members = new HashSet<>(g.apps);
-            for (AppRepository.AppEntry e : allApps) {
-                if (members.contains(Store.key(e.component))) en.apps.add(e);
-            }
-            entries.add(en);
         }
         current = -1;
         if (currentLabel != null) {

@@ -191,6 +191,35 @@ final class Store {
             prefs.edit().putString("counts", o.toString()).putString("last", key).apply();
         } catch (JSONException ignored) {
         }
+        // Historique des lancements, du plus récent au plus ancien (pour les applis récentes).
+        try {
+            JSONArray old = new JSONArray(prefs.getString("recent", "[]"));
+            JSONArray now = new JSONArray();
+            JSONObject first = new JSONObject();
+            first.put("k", key);
+            first.put("t", System.currentTimeMillis());
+            now.put(first);
+            for (int i = 0; i < old.length() && now.length() < 20; i++) {
+                JSONObject e = old.getJSONObject(i);
+                if (!key.equals(e.optString("k"))) now.put(e);
+            }
+            prefs.edit().putString("recent", now.toString()).apply();
+        } catch (JSONException ignored) {
+        }
+    }
+
+    /** Applis lancées depuis le launcher : {clé, heure}, de la plus récente à la plus ancienne. */
+    List<Object[]> recentLaunches() {
+        List<Object[]> out = new ArrayList<>();
+        try {
+            JSONArray a = new JSONArray(prefs.getString("recent", "[]"));
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject e = a.getJSONObject(i);
+                out.add(new Object[]{e.getString("k"), e.getLong("t")});
+            }
+        } catch (JSONException ignored) {
+        }
+        return out;
     }
 
     String last() {

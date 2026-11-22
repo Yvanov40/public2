@@ -3,6 +3,8 @@
 
     <!-- Ouvrir le volet des notifications et le centre de contrôle. -->
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
+    <!-- Facultatif (accordé par l'utilisateur dans les réglages) : applis récentes complètes. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
 
     <!-- Nécessaire depuis Android 11 pour voir les applis installées. -->
     <queries>

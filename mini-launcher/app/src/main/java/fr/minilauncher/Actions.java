@@ -19,18 +19,18 @@ import android.widget.Toast;
 final class Actions {
 
     static final int NONE = 0, LOCK = 1, NOTIFICATIONS = 2, CONTROL_CENTER = 3, OPEN_APP = 4,
-            TORCH = 5, CAMERA = 6, SEARCH = 7, SETTINGS = 8;
+            TORCH = 5, CAMERA = 6, SEARCH = 7, SETTINGS = 8, RECENTS = 9;
 
     static final String[] NAMES = {
             "Rien", "Verrouiller l'écran", "Notifications", "Centre de contrôle", "Ouvrir une appli…",
-            "Lampe torche", "Appareil photo", "Recherche", "Réglages du launcher"};
+            "Lampe torche", "Appareil photo", "Recherche", "Réglages du launcher", "Applis récentes"};
 
     /** Gestes réglables : clé d'enregistrement, nom affiché, action par défaut. */
     static final String[] GESTURES = {"gDouble", "gUp", "gDownLeft", "gDownRight", "gLeft", "gRight"};
     static final String[] GESTURE_NAMES = {
             "Double tap dans le vide", "Glisser vers le haut", "Glisser vers le bas (moitié gauche)",
             "Glisser vers le bas (moitié droite)", "Glisser vers la gauche", "Glisser vers la droite"};
-    static final int[] DEFAULTS = {LOCK, NONE, NOTIFICATIONS, CONTROL_CENTER, NONE, NONE};
+    static final int[] DEFAULTS = {LOCK, RECENTS, NOTIFICATIONS, CONTROL_CENTER, NONE, NONE};
 
     private static boolean torchOn;
     private static boolean torchListening;
@@ -78,6 +78,10 @@ final class Actions {
                 break;
             case SETTINGS:
                 start(a, new Intent(a, SettingsActivity.class));
+                break;
+            case RECENTS:
+                Recents.show(a, AppRepository.get(a).cached(), () -> {
+                });
                 break;
             default:
                 break;

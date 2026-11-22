@@ -12,7 +12,7 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
   grossit (effet loupe) et ses applis apparaissent à côté, en direct.
 - Glisser vers l'intérieur jusqu'à l'appli et lâcher. Lâcher sur l'alphabet laisse les
   applis affichées pour un toucher.
-- En haut ★ les favoris (épinglés + plus utilisés), en bas les dossiers.
+- En haut ★ les favoris (épinglés + plus utilisés).
 - Appui long sur une appli : épingler, ajouter à un dossier, poser sur l'accueil, infos.
 
 ## Accueil
@@ -34,9 +34,13 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
 ## Gestes
 
 Réglables dans les réglages : double tap dans le vide (par défaut : verrouiller), glisser
-vers le haut, vers le bas à gauche (notifications) et à droite (centre de contrôle), vers
+vers le haut (par défaut : applis récentes), vers le bas à gauche (notifications) et à droite (centre de contrôle), vers
 la gauche, vers la droite. Actions : rien, verrouiller, notifications, centre de contrôle,
-ouvrir une appli, lampe torche, appareil photo, recherche, réglages.
+ouvrir une appli, lampe torche, appareil photo, recherche, réglages, applis récentes.
+
+Applis récentes : une rangée de cartes, toucher = basculer. Avec l'« Accès aux données
+d'utilisation » (autorisation Android, pas l'accessibilité), toutes les applis utilisées ;
+sans, celles ouvertes depuis le launcher.
 
 Le verrouillage utilise le droit « administrateur de l'appareil » limité au verrouillage
 (demandé au premier usage). Pour désinstaller l'appli : d'abord « Retirer le droit de
