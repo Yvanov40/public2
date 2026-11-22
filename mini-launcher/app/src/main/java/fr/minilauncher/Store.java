@@ -68,6 +68,14 @@ final class Store {
         return prefs.getBoolean(name, def);
     }
 
+    String text(String name) {
+        return prefs.getString(name, null);
+    }
+
+    void setText(String name, String value) {
+        prefs.edit().putString(name, value).apply();
+    }
+
     int num(String name, int def) {
         return prefs.getInt(name, def);
     }

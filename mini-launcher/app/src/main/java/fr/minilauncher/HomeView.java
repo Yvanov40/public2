@@ -18,7 +18,8 @@ import java.util.List;
  * L'écran d'accueil et ses gestes.
  *
  * - Bords : l'alphabet vertical (glisser de haut en bas, puis vers l'appli).
- * - Glisser vers le bas : moitié gauche → notifications, moitié droite → centre de contrôle.
+ * - Gestes réglables : double tap dans le vide, glisser vers le haut, vers le bas (moitié
+ *   gauche / droite), vers la gauche, vers la droite.
  * - Dossier : poser le doigt l'ouvre en cercle ; glisser jusqu'à l'appli et lâcher.
  *   Maintenir sans bouger : déplacer le dossier (ou son menu si on lâche sur place).
  * - Applis posées : toucher = ouvrir ; appui long = déplacer (ou menu si on ne bouge pas).
@@ -29,7 +30,8 @@ import java.util.List;
 final class HomeView extends FrameLayout {
 
     interface Host {
-        void onShade(boolean controlCenter);
+        /** Un geste réglable : voir {@link Actions#GESTURES}. */
+        void onGesture(String gesture);
 
         void onHomeLongPress();
 
@@ -56,6 +58,8 @@ final class HomeView extends FrameLayout {
     private Store.HomeItem touchedItem;
     private float downX, downY;
     private long downTime;
+    private long lastTapTime;
+    private float lastTapX, lastTapY;
     private View clockView;
     private Runnable onClockTap;
 
@@ -231,7 +235,14 @@ final class HomeView extends FrameLayout {
                 if (decided || !far) return true;
                 decided = true;
                 removeCallbacks(longPress);
-                if (dy > 0 && dy > 1.3f * Math.abs(dx)) host.onShade(downX > getWidth() / 2f);
+                lastTapTime = 0;
+                if (dy > 0 && dy > 1.3f * Math.abs(dx)) {
+                    host.onGesture(downX > getWidth() / 2f ? "gDownRight" : "gDownLeft");
+                } else if (dy < 0 && -dy > 1.3f * Math.abs(dx)) {
+                    host.onGesture("gUp");
+                } else if (Math.abs(dx) > 1.3f * Math.abs(dy)) {
+                    host.onGesture(dx < 0 ? "gLeft" : "gRight");
+                }
                 return true;
             }
 
@@ -247,6 +258,17 @@ final class HomeView extends FrameLayout {
                     } else if (touchedItem != null) {
                         AppRepository.AppEntry app = grid.appOf(touchedItem);
                         if (app != null) host.onLaunchHomeApp(app, grid.screenBoundsOf(touchedItem));
+                    } else {
+                        // Toucher dans le vide : un second toucher rapide au même endroit = double tap.
+                        long now = e.getEventTime();
+                        if (now - lastTapTime < 320 && Math.hypot(x - lastTapX, y - lastTapY) < 60 * dp) {
+                            lastTapTime = 0;
+                            host.onGesture("gDouble");
+                        } else {
+                            lastTapTime = now;
+                            lastTapX = x;
+                            lastTapY = y;
+                        }
                     }
                 }
                 decided = true;

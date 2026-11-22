@@ -213,10 +213,8 @@ public final class HomeActivity extends Activity
     // ------------------------------------------------------------ HomeView.Host
 
     @Override
-    public void onShade(boolean controlCenter) {
-        if (!Shade.open(this, controlCenter)) {
-            Toast.makeText(this, "Le téléphone ne permet pas d'ouvrir ce volet", Toast.LENGTH_SHORT).show();
-        }
+    public void onGesture(String gesture) {
+        Actions.runGesture(this, gesture);
     }
 
     @Override

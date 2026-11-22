@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">Mini Launcher</string>
     <string name="settings_name">Mini Launcher</string>
+    <string name="lock_admin_description">Verrouiller l\'écran par un geste sur l\'accueil (seul droit utilisé).</string>
 </resources>

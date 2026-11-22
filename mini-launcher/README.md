@@ -31,6 +31,17 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
   les réglages proposent plusieurs méthodes (relance, fermer puis ouvrir, notifications puis
   centre de contrôle, ou désactivé) avec un bouton « Essayer ».
 
+## Gestes
+
+Réglables dans les réglages : double tap dans le vide (par défaut : verrouiller), glisser
+vers le haut, vers le bas à gauche (notifications) et à droite (centre de contrôle), vers
+la gauche, vers la droite. Actions : rien, verrouiller, notifications, centre de contrôle,
+ouvrir une appli, lampe torche, appareil photo, recherche, réglages.
+
+Le verrouillage utilise le droit « administrateur de l'appareil » limité au verrouillage
+(demandé au premier usage). Pour désinstaller l'appli : d'abord « Retirer le droit de
+verrouillage » dans les réglages.
+
 ## Réglages
 
 Appui long sur une zone vide > Réglages du launcher (ou « Mini Launcher » dans le tiroir).

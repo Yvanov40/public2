@@ -43,6 +43,8 @@ public final class SettingsActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         store = Store.get(this);
+        AppRepository.get(this).refresh(apps -> {
+        }); // pour le choix d'une appli dans les gestes
         dp = getResources().getDisplayMetrics().density;
 
         col = new LinearLayout(this);
@@ -96,6 +98,17 @@ public final class SettingsActivity extends Activity {
         note("Glisser vers le bas au milieu de l'écran : à gauche les notifications, à droite le "
                 + "centre de contrôle. Appui long sur une zone vide : ajouter une appli, un dossier ou "
                 + "un widget.");
+
+        // ---------------------------------------------------------- gestes
+        section("Gestes sur l'accueil");
+        for (int i = 0; i < Actions.GESTURES.length; i++) gestureChoice(i);
+        note("« Verrouiller l'écran » utilise le droit administrateur de l'appareil, limité au "
+                + "verrouillage : Android le demande au premier usage. Après ce verrouillage, certains "
+                + "téléphones demandent le code au lieu de l'empreinte.");
+        col.addView(button("Retirer le droit de verrouillage (avant de désinstaller)", v -> {
+            Actions.removeLock(this);
+            Toast.makeText(this, "Droit de verrouillage retiré", Toast.LENGTH_SHORT).show();
+        }));
 
         // ---------------------------------------------------------- horloge
         section("Horloge");
@@ -237,6 +250,43 @@ public final class SettingsActivity extends Activity {
                     b.setText(label + " : " + options[which]);
                 }).show());
         col.addView(b);
+    }
+
+    private void gestureChoice(int index) {
+        String key = Actions.GESTURES[index];
+        String label = Actions.GESTURE_NAMES[index];
+        Button b = button("", null);
+        Runnable update = () -> {
+            int action = Actions.actionFor(this, key);
+            String text = Actions.NAMES[action];
+            if (action == Actions.OPEN_APP) text = "Ouvrir " + appName(store.text(key + "App"));
+            b.setText(label + " : " + text);
+        };
+        update.run();
+        b.setOnClickListener(v -> new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(label)
+                .setItems(Actions.NAMES, (d, which) -> {
+                    if (which == Actions.OPEN_APP) {
+                        Menus.pickApp(this, "Appli à ouvrir", AppRepository.get(this).cached(), app -> {
+                            store.setText(key + "App", Store.key(app.component));
+                            store.setNum(key, Actions.OPEN_APP);
+                            update.run();
+                        });
+                    } else {
+                        store.setNum(key, which);
+                        update.run();
+                        if (which == Actions.LOCK && !Actions.lockAllowed(this)) Actions.lock(this);
+                    }
+                }).show());
+        col.addView(b);
+    }
+
+    private String appName(String key) {
+        if (key == null) return "(à choisir)";
+        for (AppRepository.AppEntry e : AppRepository.get(this).cached()) {
+            if (Store.key(e.component).equals(key)) return e.label;
+        }
+        return "(appli introuvable)";
     }
 
     private void choiceColor(String label, String[] names, int[] colors, int current, IntSetter onChange) {
