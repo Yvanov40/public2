@@ -34,6 +34,7 @@ final class AppRepository {
         final ComponentName component;
         final ResolveInfo info;
         volatile Drawable icon;
+        volatile boolean diskIcon; // icône provisoire lue sur le disque (à remplacer par la vraie)
 
         AppEntry(String label, ComponentName component, ResolveInfo info, Drawable icon) {
             this.label = label;
@@ -57,8 +58,89 @@ final class AppRepository {
     private final Map<String, Drawable> iconCache = new HashMap<>();
     private volatile List<AppEntry> apps = Collections.emptyList();
 
+    private final Map<String, Drawable> diskIcons = new HashMap<>();
+    private final java.util.Set<String> savedThisRun = new java.util.HashSet<>();
+
     private AppRepository(Context context) {
         this.context = context;
+        loadFromDisk();
+    }
+
+    // ------------------------------------------------------------ copie sur le disque
+    // Quand HyperOS arrête le launcher (« tout fermer »), il redémarre à froid : la liste et
+    // les icônes gardées sur le disque permettent de réafficher l'accueil tout de suite.
+
+    private java.io.File iconDir() {
+        java.io.File d = new java.io.File(context.getFilesDir(), "icons");
+        if (!d.exists()) d.mkdirs();
+        return d;
+    }
+
+    private static String fileOf(String key) {
+        return Integer.toHexString(key.hashCode()) + ".png";
+    }
+
+    private void loadFromDisk() {
+        String json = context.getSharedPreferences("apps_cache", Context.MODE_PRIVATE).getString("list", null);
+        if (json == null) return;
+        List<AppEntry> list = new ArrayList<>();
+        try {
+            org.json.JSONArray a = new org.json.JSONArray(json);
+            java.io.File dir = iconDir();
+            for (int i = 0; i < a.length(); i++) {
+                org.json.JSONObject o = a.getJSONObject(i);
+                ComponentName cn = ComponentName.unflattenFromString(o.getString("c"));
+                if (cn == null) continue;
+                Drawable icon = null;
+                java.io.File f = new java.io.File(dir, fileOf(cn.flattenToShortString()));
+                if (f.exists()) {
+                    android.graphics.Bitmap b = android.graphics.BitmapFactory.decodeFile(f.getPath());
+                    if (b != null) {
+                        icon = new android.graphics.drawable.BitmapDrawable(context.getResources(), b);
+                        diskIcons.put(cn.flattenToShortString(), icon);
+                    }
+                }
+                AppEntry e = new AppEntry(o.getString("l"), cn, null, icon);
+                e.diskIcon = icon != null;
+                list.add(e);
+            }
+        } catch (org.json.JSONException | RuntimeException ignored) {
+        }
+        apps = Collections.unmodifiableList(list);
+    }
+
+    private void saveToDisk(List<AppEntry> list) {
+        org.json.JSONArray a = new org.json.JSONArray();
+        java.io.File dir = iconDir();
+        int size = (int) (56 * context.getResources().getDisplayMetrics().density);
+        for (AppEntry e : list) {
+            try {
+                org.json.JSONObject o = new org.json.JSONObject();
+                o.put("l", e.label);
+                o.put("c", e.component.flattenToString());
+                a.put(o);
+            } catch (org.json.JSONException ignored) {
+            }
+            String key = e.component.flattenToShortString();
+            Drawable d = e.icon;
+            if (d == null || e.diskIcon || savedThisRun.contains(key)) continue;
+            try {
+                android.graphics.Bitmap b = android.graphics.Bitmap.createBitmap(size, size,
+                        android.graphics.Bitmap.Config.ARGB_8888);
+                android.graphics.Canvas c = new android.graphics.Canvas(b);
+                // Une copie : l'icône affichée à l'écran n'est pas touchée depuis ce fil.
+                Drawable copy = d.getConstantState() != null ? d.getConstantState().newDrawable().mutate() : null;
+                if (copy == null) continue;
+                copy.setBounds(0, 0, size, size);
+                copy.draw(c);
+                try (java.io.FileOutputStream out = new java.io.FileOutputStream(new java.io.File(dir, fileOf(key)))) {
+                    b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out);
+                }
+                savedThisRun.add(key);
+            } catch (java.io.IOException | RuntimeException ignored) {
+            }
+        }
+        context.getSharedPreferences("apps_cache", Context.MODE_PRIVATE).edit().putString("list", a.toString()).apply();
     }
 
     List<AppEntry> cached() {
@@ -79,10 +161,17 @@ final class AppRepository {
                 CharSequence raw = ri.loadLabel(pm);
                 String label = raw == null ? cn.getPackageName() : raw.toString().trim();
                 Drawable icon;
+                boolean fromDisk = false;
                 synchronized (iconCache) {
                     icon = iconCache.get(cn.flattenToShortString());
+                    if (icon == null) {
+                        icon = diskIcons.get(cn.flattenToShortString());
+                        fromDisk = icon != null;
+                    }
                 }
-                list.add(new AppEntry(label, cn, ri, icon));
+                AppEntry entry = new AppEntry(label, cn, ri, icon);
+                entry.diskIcon = fromDisk;
+                list.add(entry);
             }
             Collator collator = Collator.getInstance(Locale.getDefault());
             collator.setStrength(Collator.PRIMARY);
@@ -94,7 +183,7 @@ final class AppRepository {
             long lastPost = SystemClock.uptimeMillis();
             boolean pending = false;
             for (AppEntry e : list) {
-                if (e.icon != null) continue;
+                if (e.icon != null && !e.diskIcon) continue;
                 Drawable d;
                 try {
                     d = e.info.loadIcon(pm);
@@ -102,6 +191,7 @@ final class AppRepository {
                     continue;
                 }
                 e.icon = d;
+                e.diskIcon = false;
                 synchronized (iconCache) {
                     iconCache.put(e.component.flattenToShortString(), d);
                 }
@@ -113,6 +203,7 @@ final class AppRepository {
                 }
             }
             if (pending) post(callback, result);
+            saveToDisk(list);
         });
     }
 
