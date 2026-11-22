@@ -88,7 +88,16 @@ final class Store {
             CLOCK_DATE = "clockDate", COLS = "cols", ROWS = "rows", ICON = "iconSize",
             LABELS = "labels", BAND = "band", ACCENT = "accent", DIM = "dim", SPEED = "speed",
             DWELL = "dwell", HAPTIC = "haptic", WHEEL = "wheelScale", MAXFAV = "maxFav",
-            EDGE = "edgeMode", SIDE = "alphaSide", ALPHA_VISIBLE = "alphaVisible";
+            EDGE = "edgeMode", SIDE = "alphaSide", ALPHA_VISIBLE = "alphaVisible",
+            STRIP_H = "stripHeight", STRIP_POS = "stripPos", ZOOM = "zoom",
+            STRIP_BG = "stripBg", STRIP_ALPHA = "stripAlpha", STRIP_FG = "stripFg";
+
+    int stripHeight() { return num(STRIP_H, 55); }           // % de la hauteur utile
+    int stripPos() { return num(STRIP_POS, 55); }            // centre, % de la hauteur utile
+    int zoom() { return num(ZOOM, 2); }                      // 0 aucun, 1 léger, 2 normal, 3 fort
+    int stripBg() { return num(STRIP_BG, 0x1B1D26); }        // couleur RVB de la zone
+    int stripAlpha() { return num(STRIP_ALPHA, 88); }        // opacité de la zone, %
+    int stripFg() { return num(STRIP_FG, 0xFFFFFFFF); }      // couleur des lettres
 
     int edgeMode() { return num(EDGE, 0); }                  // 0 alphabet vertical, 1 roue
     int alphaSide() { return num(SIDE, 0); }                 // 0 les deux, 1 gauche, 2 droite

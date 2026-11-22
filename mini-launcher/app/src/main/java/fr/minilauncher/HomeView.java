@@ -24,7 +24,6 @@ import java.util.List;
  * - Bandes latérales (un quart de la largeur de chaque côté, presque toute la hauteur) :
  *   poser le doigt sur une zone vide ouvre la roue dessous, et le même geste continue
  *   jusqu'à l'appli. Glisser vers l'intérieur l'ouvre tout de suite.
- * - Glisser vers le haut au milieu : la roue, comme un tiroir d'applis.
  * - Appui long sur une zone vide : le menu de l'accueil (ajouter appli/widget…).
  * - Applis posées : toucher = ouvrir ; appui long = déplacer (ou menu si on ne bouge pas).
  * - Widgets : reçoivent les touchers normalement ; appui long = déplacer ou menu.
@@ -216,14 +215,16 @@ final class HomeView extends FrameLayout {
                 toChildren = touchedItem != null && touchedItem.widget;
                 inBand = x < bandWidth() || x > getWidth() - bandWidth();
                 if (toChildren) super.dispatchTouchEvent(e);
-                if (touchedItem == null && inBand && !onClock(x, y) && alphaSide(x) != 0) {
+                if (touchedItem == null && inBand && !onClock(x, y) && alphaSide(x) != 0 && strip.containsY(y)) {
                     // Mode alphabet : l'index s'ouvre tout de suite sous le doigt.
                     decided = true;
                     stripForwarding = true;
                     strip.begin(alphaSide(x));
                     return strip.handleTouch(e);
                 }
-                if (touchedItem == null && inBand && !onClock(x, y)) postDelayed(holdOpen, HOLD_MS);
+                if (touchedItem == null && inBand && !onClock(x, y) && Store.get(getContext()).edgeMode() == 1) {
+                    postDelayed(holdOpen, HOLD_MS);
+                }
                 postDelayed(longPress, LONG_PRESS_MS);
                 return true;
 
@@ -246,11 +247,9 @@ final class HomeView extends FrameLayout {
                 removeCallbacks(longPress);
                 if (dy > 0 && dy > 1.3f * Math.abs(dx)) {
                     host.onShade(downX > getWidth() / 2f);
-                } else if (inBand) {
+                } else if (inBand && Store.get(getContext()).edgeMode() == 1) {
                     activateWheel(downX, downY, true);
                     wheel.dispatchTouchEvent(e);
-                } else if (dy < 0 && -dy > 1.3f * Math.abs(dx)) {
-                    activateWheel(getWidth() / 2f, getHeight() * 0.62f, false);
                 }
                 return true;
             }
@@ -282,7 +281,7 @@ final class HomeView extends FrameLayout {
                     } else if (touchedItem != null) {
                         AppRepository.AppEntry app = grid.appOf(touchedItem);
                         if (app != null) host.onLaunchHomeApp(app, grid.screenBoundsOf(touchedItem));
-                    } else if (inBand) {
+                    } else if (inBand && Store.get(getContext()).edgeMode() == 1) {
                         // Simple toucher sur un bord : la roue s'ouvre et attend le doigt suivant.
                         activateWheel(downX, downY, false);
                     }

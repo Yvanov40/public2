@@ -219,12 +219,40 @@ final class AlphaStripView extends View {
 
     // ------------------------------------------------------------ géométrie
 
-    private float top() {
+    private float usableTop() {
         return Math.max(safe.top, 24 * dp) + 16 * dp;
     }
 
-    private float bottom() {
+    private float usableBottom() {
         return getHeight() - Math.max(safe.bottom, 16 * dp) - 16 * dp;
+    }
+
+    /** Haut de l'alphabet : hauteur et position réglables. */
+    private float top() {
+        float u0 = usableTop(), u1 = usableBottom(), u = u1 - u0;
+        float h = u * Math.max(20, Math.min(100, store.stripHeight())) / 100f;
+        float c = u0 + u * store.stripPos() / 100f;
+        return Math.max(u0, Math.min(u1 - h, c - h / 2f));
+    }
+
+    private float bottom() {
+        float u = usableBottom() - usableTop();
+        return top() + u * Math.max(20, Math.min(100, store.stripHeight())) / 100f;
+    }
+
+    /** Le doigt est-il à hauteur de l'alphabet (avec une petite marge) ? */
+    boolean containsY(float y) {
+        return y >= top() - 28 * dp && y <= bottom() + 28 * dp;
+    }
+
+    /** Grossissement d'une lettre selon sa distance au doigt (effet loupe). */
+    private float zoomAt(float y) {
+        int z = store.zoom();
+        if (z == 0 || phase != PHASE_LETTERS) return 1f;
+        float amp = z == 1 ? 0.8f : z == 3 ? 2.4f : 1.5f;
+        float sigma = 30 * dp;
+        float d = (y - fingerY) / sigma;
+        return 1f + amp * (float) Math.exp(-d * d);
     }
 
     private float entryY(int i) {
@@ -259,11 +287,11 @@ final class AlphaStripView extends View {
         int n = apps.size();
         if (n == 0) return;
         float cellW = 74 * dp, cellH = 80 * dp;
-        float edgeGap = 62 * dp;
+        float edgeGap = (store.zoom() >= 2 ? 78 : 64) * dp;
         float startPanel = Math.max(edgeGap, (side == LEFT ? startX - stripX(LEFT) : stripX(RIGHT) - startX) + 36 * dp);
         float avail = getWidth() - safe.left - safe.right - startPanel - 8 * dp;
         int maxCols = Math.max(1, (int) (avail / cellW));
-        int maxRows = Math.max(1, (int) ((bottom() - top()) / cellH));
+        int maxRows = Math.max(1, (int) ((usableBottom() - usableTop()) / cellH));
         int rows = Math.min(n, Math.min(maxRows, 5));
         int cols = (n + rows - 1) / rows;
         if (cols > maxCols) {
@@ -272,7 +300,7 @@ final class AlphaStripView extends View {
         }
         int count = Math.min(n, rows * cols);
         float h = rows * cellH;
-        panelCenterY = Math.max(top() + h / 2f, Math.min(bottom() - h / 2f, fingerY));
+        panelCenterY = Math.max(usableTop() + h / 2f, Math.min(usableBottom() - h / 2f, fingerY));
         float y0 = panelCenterY - h / 2f + cellH / 2f;
         for (int i = 0; i < count; i++) {
             int c = i / rows, r = i % rows;
@@ -437,37 +465,44 @@ final class AlphaStripView extends View {
     }
 
     private void drawStrip(Canvas canvas, int s, boolean active) {
-        float x = stripX(s);
-        if (active) {
-            fill.setColor(0xE01B1D26);
-            rect.set(x - 13 * dp, top() - 12 * dp, x + 13 * dp, bottom() + 12 * dp);
+        float x0 = stripX(s);
+        int bgAlpha = (int) (255 * store.stripAlpha() / 100f * (active ? 1f : 0.45f));
+        if (bgAlpha > 0) {
+            fill.setColor(0xFF000000 | store.stripBg());
+            fill.setAlpha(bgAlpha);
+            rect.set(x0 - 13 * dp, top() - 12 * dp, x0 + 13 * dp, bottom() + 12 * dp);
             canvas.drawRoundRect(rect, 13 * dp, 13 * dp, fill);
         }
-        float size = Math.min(12 * dp, (bottom() - top()) / Math.max(1, entries.size()) * 0.62f);
+        float size = Math.min(12 * dp, (bottom() - top()) / Math.max(1, entries.size()) * 0.72f);
+        int fg = store.stripFg();
+        float inwardSign = s == LEFT ? 1f : -1f;
         for (int i = 0; i < entries.size(); i++) {
             Entry e = entries.get(i);
             float y = entryY(i);
+            // Effet loupe : les lettres proches du doigt grossissent et s'écartent du bord.
+            float z = active ? zoomAt(y) : 1f;
+            float x = x0 + inwardSign * (z - 1f) * 16 * dp;
             boolean sel = active && i == current;
             boolean empty = e.apps.isEmpty();
             if (e.group) {
                 fill.setColor(e.color);
                 fill.setAlpha(active ? 255 : 150);
-                canvas.drawCircle(x, y, size * 0.75f, fill);
+                canvas.drawCircle(x, y, size * 0.75f * z, fill);
                 if (sel) {
                     fill.setColor(Color.WHITE);
                     fill.setAlpha(255);
-                    canvas.drawCircle(x, y, size * 0.35f, fill);
+                    canvas.drawCircle(x, y, size * 0.35f * z, fill);
                 }
                 continue;
             }
             if (sel && !empty) {
                 fill.setColor(accent);
                 fill.setAlpha(255);
-                canvas.drawCircle(x, y, size * 0.95f, fill);
+                canvas.drawCircle(x, y, size * 0.95f * z, fill);
             }
-            text.setTextSize(size);
+            text.setTextSize(size * z);
             text.setShadowLayer(active ? 0 : 3 * dp, 0, dp, 0xAA000000);
-            int base = e.color != 0 ? e.color : Color.WHITE;
+            int base = e.color != 0 ? e.color : fg;
             text.setColor(sel && !empty ? 0xFF111320 : base);
             text.setAlpha(empty ? (active ? 70 : 45) : (active ? 255 : 150));
             drawCentered(canvas, e.label, x, y, text);
@@ -481,7 +516,7 @@ final class AlphaStripView extends View {
         if (store.speedFactor() == 0f) t = 1f;
 
         // La bulle de la lettre, comme dans les Contacts.
-        if (phase == PHASE_LETTERS) {
+        if (phase == PHASE_LETTERS && store.zoom() == 0) {
             float bx = side == LEFT ? stripX(LEFT) + 40 * dp : stripX(RIGHT) - 40 * dp;
             float by = entryY(current);
             fill.setColor(e.group ? e.color : accent);

@@ -12,12 +12,13 @@ réglages de l'appli).
   glisser de haut en bas ; la lettre sous le doigt s'allume et ses applis apparaissent à
   côté. Glisser vers l'intérieur jusqu'à l'appli et lâcher. Lâcher sur l'alphabet laisse
   les applis affichées pour un toucher. En haut ★ les favoris, en bas les groupes.
-  Réglages : côté(s), lettres toujours visibles, largeur de la zone tactile.
+  Effet loupe : les lettres proches du doigt grossissent.
+  Réglages : côté(s), hauteur et position de l'alphabet, loupe, couleur et opacité de la
+  zone, couleur des lettres, lettres toujours visibles, largeur de la zone tactile.
 - **Ou la roue sur les bords** (réglage « Bords de l'écran ») : poser le doigt ouvre la
   roue sous le doigt ; on glisse jusqu'à l'appli et on lâche.
 - **Glisser vers le bas** au milieu : moitié gauche → notifications, moitié droite →
   centre de contrôle (en mode roue, aussi depuis les bords).
-- **Glisser vers le haut** au milieu : la roue (comme un tiroir d'applis).
 - **Appui long sur une zone vide** : ajouter une appli, ajouter un widget, fond d'écran,
   réglages.
 - **Grille de 4 colonnes** sous l'horloge pour poser des applis et des widgets. Toucher une
@@ -25,6 +26,14 @@ réglages de l'appli).
   infos, ou taille (widgets). Les widgets reçoivent les touchers normalement ; la roue ne
   s'ouvre que depuis les zones vides des bandes.
 - Depuis la roue, appui long sur une appli > « Ajouter à l'écran d'accueil ».
+
+## Volets (notifications / centre de contrôle)
+
+L'appel direct utilisé par défaut fonctionne mal sur certains téléphones (HyperOS : volet
+à moitié vide). Dans les réglages, « Activer l'ouverture fiable des volets » active un
+service d'accessibilité qui passe par la méthode officielle d'Android. Il ne lit pas
+l'écran. Appli installée hors Play Store : autoriser d'abord les « paramètres restreints »
+dans la fiche de l'appli.
 
 ## Réglages (appui long sur une zone vide > Réglages du launcher)
 
