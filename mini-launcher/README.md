@@ -1,44 +1,50 @@
 # Mini Launcher
 
-Une seule icône sur l'écran d'accueil à la place de toutes les autres. On la touche :
-l'alphabet s'ouvre **en cercle autour de l'icône**, on choisit une lettre, et ses applis
-se déploient autour du centre. Ce n'est pas un launcher de remplacement : l'écran d'accueil
-habituel reste en place.
+Un écran d'accueil sans icônes : les applis s'ouvrent avec une roue alphabétique, depuis
+les bords de l'écran. Utilisable aussi par-dessus un autre launcher (icône, widget, bulle).
 
-## Utilisation
+## Écran d'accueil (launcher)
 
-- **Toucher une lettre** : ses applis s'affichent. Les lettres sans appli sont grisées.
-- **Glisser** sur la roue : la lettre sous le doigt s'allume (petite vibration) ; si on
-  s'y arrête un instant, les applis s'ouvrent sans lever le doigt, et on glisse jusqu'à
-  l'appli voulue puis on lâche — tout en un seul geste.
-- **Appui long sur une appli** : sa fiche dans les paramètres (désinstaller, notifications…).
-- **Centre** : ferme la roue (lettres) ou revient aux lettres (applis). Toucher à côté ou
-  Retour fonctionne aussi.
-- Beaucoup d'applis pour une lettre : une case « +n » mène à la suite.
-- Les lettres accentuées sont regroupées (É → E) ; chiffres et symboles vont dans « # ».
+Réglages > Applis par défaut > Écran d'accueil > **Mini Launcher** (ou bouton dans les
+réglages de l'appli).
 
-## Position de la roue
+- **Bandes gauche et droite** (un quart de la largeur, presque toute la hauteur) : poser
+  le doigt ouvre la roue sous le doigt ; on glisse jusqu'à l'appli et on lâche — un seul
+  geste. Un simple toucher ouvre la roue et attend le doigt suivant.
+- **Glisser vers le bas** : moitié gauche → notifications, moitié droite → centre de contrôle.
+- **Glisser vers le haut** au milieu : la roue (comme un tiroir d'applis).
+- **Appui long** au milieu : les réglages.
 
-- **Widget Mini Launcher (1×1)** : le plus fiable. Android transmet lui-même la position
-  du widget, la roue s'ouvre donc toujours autour, quel que soit le launcher.
-- **Icône** : certains launchers ne donnent pas (ou donnent mal) la position de l'icône.
-  Dans ce cas, **maintenir le ×** au centre puis glisser place la roue où l'on veut ; la
-  position est mémorisée pour les ouvertures suivantes.
-- Près d'un bord ou dans un coin, les lettres s'étalent en éventail (un ou plusieurs arcs).
+## La roue
+
+- **Centre** : la dernière appli utilisée (un toucher la rouvre).
+- **Anneau des favoris** : les applis épinglées, complétées par les plus utilisées.
+- **Anneau des lettres** A–Z, # et des **groupes** (pastilles de couleur).
+- Glisser sur une lettre ou un groupe et s'y arrêter un instant ouvre ses applis sans lever
+  le doigt. Un coup de doigt rapide vers une lettre l'ouvre aussi.
+- Une lettre qui n'a qu'une appli la lance directement.
+- **Appui long sur une appli** : épingler en favori, ajouter à un groupe (ou en créer un),
+  retirer du groupe, infos de l'appli.
+- **Appui long au centre d'un groupe ouvert** : renommer ou supprimer le groupe.
+- Près d'un bord ou dans un coin, les anneaux deviennent des éventails.
+
+## Par-dessus un autre launcher
+
+- **Icône** : si le launcher ne transmet pas la position de l'icône, maintenir le centre
+  de la roue puis glisser pour la placer (mémorisé).
+- **Widget 1×1** : la roue s'ouvre exactement autour.
+- **Bulle flottante** (réglages) : visible par-dessus toutes les applis ; poser le doigt
+  dessus ouvre la roue, glisser jusqu'à l'appli, lâcher. Maintenir la bulle sans bouger
+  pour la déplacer. Demande l'autorisation « Afficher par-dessus les autres applis ».
 
 ## Installer
 
 Chaque envoi sur GitHub construit l'APK (action « Mini Launcher (APK) ») et le publie dans
-une release `mini-launcher-vN` (N = numéro du build). Sur le téléphone : ouvrir `MiniLauncher.apk`, autoriser
-l'installation depuis le navigateur, installer. Les versions suivantes s'installent
-par-dessus (la clé de signature est fixe, dans `app/debug.keystore` : clé de test, pas
-pour le Play Store).
+une release `mini-launcher-vN`. Les versions suivantes s'installent par-dessus (clé de
+signature fixe dans `app/debug.keystore` : clé de test, pas pour le Play Store).
 
-Puis : glisser l'icône **Mini Launcher** sur l'écran d'accueil et ranger les autres icônes
-dans le tiroir d'applis.
+## Code
 
-## Construire soi-même
-
-Android Studio (ouvrir le dossier `mini-launcher`) ou, avec le SDK Android installé :
-`gradle assembleDebug`. Code en Java, sans dépendance : `RadialView` dessine la roue,
-`AppRepository` liste les applis, `RadialActivity` est l'écran transparent.
+Java sans dépendance. `RadialView` : la roue. `HomeView`/`HomeActivity` : le launcher.
+`BubbleService` : la bulle. `RadialActivity` : la roue lancée par l'icône ou le widget.
+`Store` : favoris, groupes, usage, réglages. `Menus` : appuis longs. `Shade` : volets.

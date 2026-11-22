@@ -1,19 +1,14 @@
 package fr.minilauncher;
 
 import android.app.Activity;
-import android.app.ActivityOptions;
-import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Rect;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.widget.Toast;
 
 import java.util.List;
 
@@ -56,6 +51,7 @@ public final class RadialActivity extends Activity implements RadialView.Listene
         repository = AppRepository.get(this);
         view.setApps(repository.cached());
         view.open(getIntent().getSourceBounds());
+        BubbleService.sync(this);
     }
 
     @Override
@@ -85,33 +81,23 @@ public final class RadialActivity extends Activity implements RadialView.Listene
 
     @Override
     public void onLaunch(AppRepository.AppEntry app, Rect bounds) {
-        Intent intent = new Intent(Intent.ACTION_MAIN)
-                .addCategory(Intent.CATEGORY_LAUNCHER)
-                .setComponent(app.component)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-        intent.setSourceBounds(bounds);
-        try {
-            ActivityOptions options = ActivityOptions.makeScaleUpAnimation(
-                    view, bounds.left, bounds.top, bounds.width(), bounds.height());
-            startActivity(intent, options.toBundle());
-        } catch (ActivityNotFoundException | SecurityException e) {
-            Toast.makeText(this, "Impossible d'ouvrir " + app.label, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        finishQuietly();
+        if (Launcher.launch(this, app, bounds, view)) finishQuietly();
     }
 
     @Override
-    public void onAppInfo(AppRepository.AppEntry app) {
-        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.fromParts("package", app.component.getPackageName(), null))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            startActivity(intent);
-        } catch (ActivityNotFoundException e) {
-            return;
-        }
-        finishQuietly();
+    public void onAppMenu(AppRepository.AppEntry app, String group) {
+        Menus.appMenu(this, app.component, app.label, group, view::refresh, () -> {
+        });
+    }
+
+    @Override
+    public void onGroupMenu(String group) {
+        Menus.groupMenu(this, group, view::refresh, () -> {
+        });
+    }
+
+    @Override
+    public void onMoved(float cx, float cy) {
     }
 
     @Override
