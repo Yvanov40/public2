@@ -361,3 +361,8 @@ html, body { touch-action: pan-x pan-y; }
 .pdf-page.echec .pdf-n { font-size: .9rem; color: #c55; white-space: nowrap; }
 #lecteur-pdf.nuit .pdf-page { background: #2a2a2a; }
 #lecteur-pdf.nuit .pdf-n { color: #666; }
+
+/* en lecture plein écran, la page passe sous les barres d'Android : les menus leur laissent la place */
+#lecteur .menu-haut { padding-top: calc(6px + var(--sys-haut, 0px)); }
+#lecteur .menu-bas { padding-bottom: calc(8px + var(--sys-bas, 0px)); }
+body.lecture .feuille { padding-bottom: var(--sys-bas, 0px); }

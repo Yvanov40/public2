@@ -362,10 +362,33 @@ public final class PdfActivity extends Activity {
         bas.addView(t, new LinearLayout.LayoutParams(0, -2, 1f));
     }
 
+    private boolean plein;
+    private static final int MISE_EN_PAGE = View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+    private static final int CACHE = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN
+            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+
+    /** Plein écran : le contenu passe sous les barres d'Android, qui sont cachées (sauf menus ouverts). */
     private void pleinEcran(boolean oui) {
+        plein = oui;
         View d = getWindow().getDecorView();
-        int plein = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
-        d.setSystemUiVisibility(oui ? d.getSystemUiVisibility() | plein : d.getSystemUiVisibility() & ~plein);
+        int f = d.getSystemUiVisibility();
+        f = oui ? f | MISE_EN_PAGE | CACHE : f & ~(MISE_EN_PAGE | CACHE);
+        d.setSystemUiVisibility(f);
+    }
+
+    /** Barres d'Android (heure, boutons de navigation) visibles ou cachées, sans redimensionner la page. */
+    private void barresSysteme(boolean visibles) {
+        if (!plein) return;
+        View d = getWindow().getDecorView();
+        int f = d.getSystemUiVisibility() | MISE_EN_PAGE;
+        f = visibles ? f & ~CACHE : f | CACHE;
+        d.setSystemUiVisibility(f);
+    }
+
+    private int dimSysteme(String nom) {
+        int r = getResources().getIdentifier(nom, "dimen", "android");
+        return r > 0 ? getResources().getDimensionPixelSize(r) : 0;
     }
 
     void basculerBarres() {
@@ -378,6 +401,15 @@ public final class PdfActivity extends Activity {
 
     private void montrerBarres(boolean v) {
         barres = v;
+        // en plein écran, les menus laissent la place aux barres d'Android (heure en haut, navigation en bas)
+        int hautSys = plein ? dimSysteme("status_bar_height") : 0;
+        int basSys = plein ? dimSysteme("navigation_bar_height") : 0;
+        haut.setPadding(dp(4), Math.max(dp(8), hautSys + dp(4)), dp(12), dp(8));
+        bas.setPadding(dp(6), dp(6), dp(6), basSys + dp(8));
+        FrameLayout.LayoutParams pl = (FrameLayout.LayoutParams) panneauLum.getLayoutParams();
+        pl.bottomMargin = dp(96) + basSys;
+        panneauLum.setLayoutParams(pl);
+        barresSysteme(v);
         haut.setVisibility(v ? View.VISIBLE : View.GONE);
         bas.setVisibility(v ? View.VISIBLE : View.GONE);
         if (!v && panneauLum != null) panneauLum.setVisibility(View.GONE);

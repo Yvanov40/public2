@@ -54,6 +54,10 @@ public final class MainActivity extends Activity {
 
     static final String HOTE = "appassets.androidplatform.net";
     static final String BASE = "https://" + HOTE + "/";
+    static final int MISE_EN_PAGE = View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+    static final int CACHE = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN
+            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
     private static final int REQ_IMPORT = 1, REQ_EXPORT = 2, REQ_IMAGE = 3, REQ_DOSSIER = 4, REQ_PDF = 5;
     private org.json.JSONArray exportIds;
     static final int NB_ICONES = 8;
@@ -1374,6 +1378,46 @@ public final class MainActivity extends Activity {
                     else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 }
             });
+        }
+
+        /**
+         * Mode lecture plein écran : la page passe sous les barres d'Android (taille stable),
+         * qui sont cachées ; barresSysteme(true) les fait réapparaître avec les menus.
+         */
+        @JavascriptInterface
+        public void modeLecture(final boolean oui) {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    View d = getWindow().getDecorView();
+                    int f = d.getSystemUiVisibility();
+                    int tout = MISE_EN_PAGE | CACHE;
+                    d.setSystemUiVisibility(oui ? f | tout : f & ~tout);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void barresSysteme(final boolean visibles) {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    View d = getWindow().getDecorView();
+                    int f = d.getSystemUiVisibility();
+                    if ((f & View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION) == 0) return; // pas en plein écran
+                    d.setSystemUiVisibility(visibles ? f & ~CACHE : f | CACHE);
+                }
+            });
+        }
+
+        /** Hauteur des barres d'Android, en pixels CSS. */
+        @JavascriptInterface
+        public String tailleBarres() {
+            float k = getResources().getDisplayMetrics().density;
+            int h = getResources().getIdentifier("status_bar_height", "dimen", "android");
+            int b = getResources().getIdentifier("navigation_bar_height", "dimen", "android");
+            return obj("haut", h > 0 ? getResources().getDimensionPixelSize(h) / k : 24,
+                    "bas", b > 0 ? getResources().getDimensionPixelSize(b) / k : 48).toString();
         }
 
         @JavascriptInterface

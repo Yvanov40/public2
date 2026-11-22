@@ -159,7 +159,15 @@ const lecteur = window.lecteur = (() => {
 
   function systeme(actif) {
     if (!A) { appliquerLumiere(actif); return; }
-    A.pleinEcran(actif && R.pleinEcran);
+    const plein = actif && R.pleinEcran;
+    if (A.modeLecture) {
+      A.modeLecture(plein);
+      // les menus laissent la place aux barres d'Android quand elles réapparaissent
+      let t = { haut: 0, bas: 0 };
+      try { if (plein) t = JSON.parse(A.tailleBarres()); } catch (e) { /* rien */ }
+      document.documentElement.style.setProperty('--sys-haut', (plein ? t.haut : 0) + 'px');
+      document.documentElement.style.setProperty('--sys-bas', (plein ? t.bas : 0) + 'px');
+    } else A.pleinEcran(plein);
     A.ecranAllume(actif && R.ecranAllume);
     A.volume(actif && R.volume);
     appliquerLumiere(actif);
@@ -839,6 +847,7 @@ const lecteur = window.lecteur = (() => {
   function menus(v) {
     menusOn = v;
     ecran.classList.toggle('menus', v);
+    if (A && A.barresSysteme && R.pleinEcran && livre) A.barresSysteme(v);
     if (v) majInfos();
   }
 
