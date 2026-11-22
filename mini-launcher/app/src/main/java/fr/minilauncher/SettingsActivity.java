@@ -54,11 +54,17 @@ public final class SettingsActivity extends Activity {
     private LinearLayout page;     // la colonne de toute la page
     private LinearLayout card;     // la carte en cours
     private LinearLayout footer;   // les explications sous la carte en cours
+    private LinearLayout badgeApp;
     private LinearLayout usageAccess;
 
     @Override
     protected void onResume() {
         super.onResume();
+        if (badgeApp != null) {
+            TextView t = (TextView) ((LinearLayout) badgeApp.getChildAt(0)).getChildAt(0);
+            boolean installed = Badges.companionInstalled(this);
+            t.setText(installed ? "Ouvrir l'appli Pastilles" : "Appli Pastilles : non installée");
+        }
         // Retour de l'écran d'autorisation : le libellé suit l'état réel.
         if (usageAccess != null) {
             TextView t = (TextView) ((LinearLayout) usageAccess.getChildAt(0)).getChildAt(0);
@@ -171,6 +177,31 @@ public final class SettingsActivity extends Activity {
         note("Automatique : foncé sur un fond d'écran clair, blanc sur un fond sombre. Le texte de "
                 + "l'accueil comprend l'horloge et le nom des applis. Si un bandeau clair apparaît "
                 + "derrière les touches du bas, choisis « Toujours claires » pour elles.");
+
+        // ---------------------------------------------------------- pastilles
+        section("Pastilles de notification");
+        badgeApp = row("", null, accent);
+        badgeApp.addView(chevron());
+        clickable(badgeApp, v -> {
+            Intent open = getPackageManager().getLaunchIntentForPackage(Badges.COMPANION);
+            if (open != null) {
+                startActivity(open);
+            } else {
+                Toast.makeText(this, "Installe d'abord le fichier MiniLauncher-Pastilles.apk",
+                        Toast.LENGTH_LONG).show();
+            }
+        });
+        addRow(badgeApp);
+        toggle("Afficher les pastilles", null, store.badges(), on -> store.setFlag(Store.BADGES, on));
+        choice("Style", new String[]{"Point", "Nombre"}, store.badgeStyle(), i -> store.setNum(Store.BADGE_STYLE, i));
+        int[] badgeSwatches = Badges.COLORS.clone();
+        badgeSwatches[badgeSwatches.length - 1] = accent;
+        colorChoice("Couleur", Badges.COLOR_NAMES, badgeSwatches,
+                store.badgeColor() == 0 ? accent : store.badgeColor(),
+                c -> store.setNum(Store.BADGE_COLOR, c == accent ? 0 : (0xFF000000 | c)));
+        note("Les pastilles viennent d'une petite appli séparée, « Mini Launcher – Pastilles », qui a "
+                + "l'accès aux notifications (le launcher, lui, ne l'a pas). Elle ne transmet que le "
+                + "nombre de notifications par appli.");
 
         // ---------------------------------------------------------- horloge
         section("Horloge");

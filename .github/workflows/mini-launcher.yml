@@ -34,6 +34,9 @@ jobs:
           VERSION=$(grep -oP 'versionName = "\K[^"]+' mini-launcher/app/build.gradle.kts)
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           cp mini-launcher/app/build/outputs/apk/debug/app-debug.apk "MiniLauncher-$VERSION.apk"
+          BADGES=$(grep -oP 'versionName = "\K[^"]+' mini-launcher/badges/build.gradle.kts)
+          echo "BADGES=$BADGES" >> "$GITHUB_ENV"
+          cp mini-launcher/badges/build/outputs/apk/debug/badges-debug.apk "MiniLauncher-Pastilles-$BADGES.apk"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -44,7 +47,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "mini-launcher-v${{ github.run_number }}" "MiniLauncher-$VERSION.apk" \
+          gh release create "mini-launcher-v${{ github.run_number }}" "MiniLauncher-$VERSION.apk" "MiniLauncher-Pastilles-$BADGES.apk" \
             --target "${{ github.sha }}" \
             --title "Mini Launcher $VERSION (build ${{ github.run_number }})" \
             --notes "APK construit depuis ${{ github.ref_name }} (${{ github.sha }}). Ouvrir le fichier sur le téléphone pour l'installer."

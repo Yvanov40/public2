@@ -107,6 +107,7 @@ public final class HomeActivity extends Activity
         clockBox.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> updateGridTop());
         setContentView(home);
 
+        Badges.addListener(badgeListener);
         repository = AppRepository.get(this);
         grid.setApps(repository.cached());
         strip.setApps(repository.cached());
@@ -173,8 +174,17 @@ public final class HomeActivity extends Activity
         }
     }
 
+    /** Nouveaux nombres de notifications : on redessine les pastilles. */
+    private final Runnable badgeListener = () -> {
+        if (isDestroyed()) return;
+        grid.invalidateIcons();
+        strip.invalidate();
+        folderWheel.invalidate();
+    };
+
     @Override
     protected void onDestroy() {
+        Badges.removeListener(badgeListener);
         if (colorsListener != null && Build.VERSION.SDK_INT >= 27) {
             android.app.WallpaperManager.getInstance(this).removeOnColorsChangedListener(colorsListener);
         }
@@ -250,6 +260,7 @@ public final class HomeActivity extends Activity
         }
         applyClockSettings();
         applyAppearance();
+        Badges.request(this);
         grid.reload();
         strip.refresh();
         home.invalidate();

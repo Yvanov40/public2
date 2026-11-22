@@ -8,6 +8,7 @@
 
     <!-- Nécessaire depuis Android 11 pour voir les applis installées. -->
     <queries>
+        <package android:name="fr.minilauncher.badges" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
@@ -53,6 +54,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Nombres de notifications envoyés par l'appli séparée « Pastilles ». -->
+        <receiver
+            android:name=".BadgeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="fr.minilauncher.BADGES" />
+            </intent-filter>
+        </receiver>
 
         <!-- Droit limité au verrouillage de l'écran (geste « Verrouiller »). -->
         <receiver

@@ -122,6 +122,11 @@ final class Store {
     int barIcons() { return num(BAR_ICONS, 0); }             // 0 auto, 1 claires, 2 foncées
     int homeText() { return num(HOME_TEXT, 0); }             // 0 auto, 1 blanc, 2 noir
     boolean topScrim() { return flag(TOP_SCRIM, false); }    // voile sombre en haut
+    static final String BADGES = "badges", BADGE_STYLE = "badgeStyle", BADGE_COLOR = "badgeColor";
+
+    boolean badges() { return flag(BADGES, true); }
+    int badgeStyle() { return num(BADGE_STYLE, 1); }         // 0 point, 1 nombre
+    int badgeColor() { return num(BADGE_COLOR, 0xFFFF5A5F); } // 0 = couleur d'accent
     static final String NAV_KEYS = "navKeys";
     int navKeys() { return num(NAV_KEYS, 0); }               // 0 comme la barre d'état, 1 toujours claires
 

@@ -31,6 +31,14 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
   les réglages proposent plusieurs méthodes (relance, fermer puis ouvrir, notifications puis
   centre de contrôle, ou désactivé) avec un bouton « Essayer ».
 
+## Pastilles de notification
+
+Une petite appli séparée, « Mini Launcher – Pastilles » (module `badges`, fichier
+`MiniLauncher-Pastilles-<version>.apk`), a l'« Accès aux notifications » et n'envoie au
+launcher que le nombre de notifications par appli. Le launcher lui-même n'a pas cet accès
+(il empêchait son installation). Pastilles sur les applis et dossiers de l'accueil, dans le
+cercle des dossiers et dans l'alphabet. Réglages : afficher, style, couleur.
+
 ## Gestes
 
 Réglables dans les réglages : double tap dans le vide (par défaut : verrouiller), glisser
