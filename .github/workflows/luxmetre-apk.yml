@@ -31,7 +31,7 @@ jobs:
       - name: Publier en release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: luxmetre-v1
-          name: Luxmètre
+          tag_name: luxmetre-v${{ github.run_number }}
+          name: Luxmètre (build ${{ github.run_number }})
           body: Appli Android qui affiche la luminosité ambiante en lux. Télécharger luxmetre.apk ci-dessous.
           files: luxmetre.apk

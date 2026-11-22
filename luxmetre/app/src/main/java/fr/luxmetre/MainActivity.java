@@ -29,6 +29,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 
     private float min = Float.MAX_VALUE;
     private float max = 0f;
+    private String infoCapteur = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,7 +56,7 @@ public class MainActivity extends Activity implements SensorEventListener {
         raz.setOnClickListener(v -> {
             min = Float.MAX_VALUE;
             max = 0f;
-            extremes.setText("");
+            extremes.setText(infoCapteur);
         });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -78,7 +79,10 @@ public class MainActivity extends Activity implements SensorEventListener {
             ambiance.setText("Cet appareil n'a pas de capteur de luminosité.");
             raz.setEnabled(false);
         } else {
-            extremes.setText("Capteur : " + lightSensor.getName());
+            infoCapteur = "Capteur : " + lightSensor.getName()
+                    + "\nprécision " + format(lightSensor.getResolution())
+                    + " lux · max " + format(lightSensor.getMaximumRange()) + " lux";
+            extremes.setText(infoCapteur);
         }
     }
 
@@ -105,16 +109,17 @@ public class MainActivity extends Activity implements SensorEventListener {
         max = Math.max(max, lux);
         valeur.setText(format(lux));
         ambiance.setText(decrire(lux));
-        extremes.setText("min " + format(min) + "   ·   max " + format(max));
+        extremes.setText("min " + format(min) + "   ·   max " + format(max) + "\n\n" + infoCapteur);
     }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) { }
 
     private static String decrire(float lux) {
-        if (lux < 1) return "Obscurité";
-        if (lux < 50) return "Très sombre";
-        if (lux < 200) return "Pénombre (pièce peu éclairée)";
+        if (lux < 1) return "Très faible lumière\n(nuit, on devine les formes)";
+        if (lux < 10) return "Pénombre";
+        if (lux < 50) return "Faible éclairage";
+        if (lux < 200) return "Pièce peu éclairée";
         if (lux < 500) return "Éclairage intérieur";
         if (lux < 1000) return "Bureau / salle de classe bien éclairée";
         if (lux < 10000) return "Lumière du jour à l'ombre";
@@ -123,6 +128,7 @@ public class MainActivity extends Activity implements SensorEventListener {
     }
 
     private static String format(float lux) {
+        if (lux < 1) return String.format(Locale.FRANCE, "%.2f", lux);
         return lux < 10
                 ? String.format(Locale.FRANCE, "%.1f", lux)
                 : String.format(Locale.FRANCE, "%,.0f", lux);
