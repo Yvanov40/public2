@@ -29,7 +29,7 @@ habituel reste en place.
 ## Installer
 
 Chaque envoi sur GitHub construit l'APK (action « Mini Launcher (APK) ») et le publie dans
-la release `mini-launcher-latest`. Sur le téléphone : ouvrir `MiniLauncher.apk`, autoriser
+une release `mini-launcher-vN` (N = numéro du build). Sur le téléphone : ouvrir `MiniLauncher.apk`, autoriser
 l'installation depuis le navigateur, installer. Les versions suivantes s'installent
 par-dessus (la clé de signature est fixe, dans `app/debug.keystore` : clé de test, pas
 pour le Play Store).

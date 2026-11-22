@@ -37,12 +37,11 @@ jobs:
           name: MiniLauncher-apk
           path: MiniLauncher.apk
 
-      - name: Publier en téléchargement direct (release « mini-launcher-latest »)
+      - name: Publier en téléchargement direct (une release par build)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete mini-launcher-latest --yes --cleanup-tag || true
-          gh release create mini-launcher-latest MiniLauncher.apk \
-            --target "${{ github.sha }}" --prerelease \
-            --title "Mini Launcher (dernière version)" \
+          gh release create "mini-launcher-v${{ github.run_number }}" MiniLauncher.apk \
+            --target "${{ github.sha }}" \
+            --title "Mini Launcher (build ${{ github.run_number }})" \
             --notes "APK construit depuis ${{ github.ref_name }} (${{ github.sha }}). Ouvrir le fichier sur le téléphone pour l'installer."
