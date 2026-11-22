@@ -1,7 +1,6 @@
 package fr.minilauncher;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
@@ -372,10 +371,12 @@ public final class SettingsActivity extends Activity {
         TextView val = valueText(options[Math.max(0, Math.min(options.length - 1, index))]);
         r.addView(val);
         r.addView(chevron());
-        clickable(r, v -> dialog(title).setItems(options, (d, which) -> {
+        int[] cur = {index};
+        clickable(r, v -> Menus.choose(this, title, options, cur[0], which -> {
+            cur[0] = which;
             onChange.set(which);
             val.setText(options[which]);
-        }).show());
+        }));
         addRow(r);
     }
 
@@ -395,7 +396,7 @@ public final class SettingsActivity extends Activity {
             val.setTextColor(action == Actions.NONE ? MUTED : accent);
         };
         update.run();
-        clickable(r, v -> dialog(title).setItems(Actions.NAMES, (d, which) -> {
+        clickable(r, v -> Menus.choose(this, title, Actions.NAMES, Actions.actionFor(this, key), which -> {
             if (which == Actions.OPEN_APP) {
                 Menus.pickApp(this, "Appli à ouvrir", AppRepository.get(this).cached(), app -> {
                     store.setText(key + "App", Store.key(app.component));
@@ -407,7 +408,7 @@ public final class SettingsActivity extends Activity {
                 update.run();
                 if (which == Actions.LOCK && !Actions.lockAllowed(this)) Actions.lock(this);
             }
-        }).show());
+        }));
         addRow(r);
     }
 
@@ -437,10 +438,12 @@ public final class SettingsActivity extends Activity {
         View dot = swatch(0xFF000000 | current);
         r.addView(dot);
         r.addView(chevron());
-        clickable(r, v -> dialog(title).setItems(names, (d, which) -> {
+        int[] cur = {current};
+        clickable(r, v -> Sheet.colors(this, title, names, colors, cur[0], which -> {
+            cur[0] = colors[which];
             onChange.set(colors[which]);
             ((GradientDrawable) dot.getBackground()).setColor(0xFF000000 | colors[which]);
-        }).show());
+        }));
         addRow(r);
     }
 
@@ -449,15 +452,11 @@ public final class SettingsActivity extends Activity {
         View dot = swatch(accent);
         r.addView(dot);
         r.addView(chevron());
-        clickable(r, v -> dialog("Couleur d'accent").setItems(ACCENT_NAMES, (d, which) -> {
+        clickable(r, v -> Sheet.colors(this, "Couleur d'accent", ACCENT_NAMES, ACCENTS, accent, which -> {
             store.setNum(Store.ACCENT, ACCENTS[which]);
             recreate(); // toute la page reprend la nouvelle couleur
-        }).show());
+        }));
         addRow(r);
-    }
-
-    private AlertDialog.Builder dialog(String title) {
-        return new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle(title);
     }
 
     private void versionFooter() {

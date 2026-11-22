@@ -66,4 +66,5 @@ signature fixe dans `app/debug.keystore` : clé de test, pas pour le Play Store)
 
 Java sans dépendance. `HomeActivity`/`HomeView` : le launcher et ses gestes. `HomeGrid` :
 la grille. `AlphaStripView` : l'alphabet. `FolderWheelView` : un dossier ouvert en cercle.
-`Store` : favoris, dossiers, accueil, réglages. `Menus` : appuis longs. `Shade` : volets.
+`Store` : favoris, dossiers, accueil, réglages. `Menus` : appuis longs. `Sheet` : panneaux
+qui montent du bas (listes, choix, saisie). `WidgetPicker` : galerie des widgets. `Shade` : volets.

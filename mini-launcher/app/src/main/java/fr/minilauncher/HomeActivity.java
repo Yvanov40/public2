@@ -1,14 +1,12 @@
 package fr.minilauncher;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.appwidget.AppWidgetHost;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProviderInfo;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.os.Build;
@@ -23,10 +21,8 @@ import android.widget.LinearLayout;
 import android.widget.TextClock;
 import android.widget.Toast;
 
-import java.text.Collator;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /** Le launcher : fond d'écran, horloge, grille (applis, dossiers, widgets), alphabet sur les bords. */
 public final class HomeActivity extends Activity
@@ -206,10 +202,6 @@ public final class HomeActivity extends Activity
         strip.refresh();
     }
 
-    private AlertDialog.Builder dialog() {
-        return new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
-    }
-
     // ------------------------------------------------------------ HomeView.Host
 
     @Override
@@ -221,7 +213,7 @@ public final class HomeActivity extends Activity
     public void onHomeLongPress() {
         String[] items = {"Ajouter une appli", "Créer un dossier", "Ajouter un widget", "Fond d'écran",
                 "Réglages du launcher"};
-        dialog().setItems(items, (d, which) -> {
+        Sheet.list(this, "Écran d'accueil", items, which -> {
             switch (which) {
                 case 0:
                     Menus.pickApp(this, "Ajouter à l'accueil", grid.sortedApps(), app -> {
@@ -246,7 +238,7 @@ public final class HomeActivity extends Activity
                 default:
                     startActivity(new Intent(this, SettingsActivity.class));
             }
-        }).show();
+        });
     }
 
     @Override
@@ -264,7 +256,8 @@ public final class HomeActivity extends Activity
             String[] opts = configurable
                     ? new String[]{"Taille…", "Régler le widget", "Retirer de l'accueil"}
                     : new String[]{"Taille…", "Retirer de l'accueil"};
-            dialog().setItems(opts, (d, which) -> {
+            String title = info == null ? "Widget" : info.loadLabel(getPackageManager());
+            Sheet.list(this, title, opts, which -> {
                 if (which == 0) {
                     chooseSize(item);
                 } else if (configurable && which == 1) {
@@ -276,7 +269,7 @@ public final class HomeActivity extends Activity
                 } else {
                     grid.remove(item);
                 }
-            }).show();
+            });
         } else {
             AppRepository.AppEntry app = grid.appOf(item);
             if (app != null) {
@@ -289,49 +282,28 @@ public final class HomeActivity extends Activity
 
     private void chooseSize(Store.HomeItem item) {
         List<int[]> sizes = new ArrayList<>();
-        List<String> labels = new ArrayList<>();
+        List<Sheet.Item> items = new ArrayList<>();
         for (int h = 1; h <= Math.min(4, grid.rows()); h++) {
             for (int w = 1; w <= grid.cols(); w++) {
                 sizes.add(new int[]{w, h});
-                labels.add(w + " × " + h + (w == item.w && h == item.h ? "  (actuelle)" : ""));
+                Sheet.Item it = new Sheet.Item(w + " × " + h);
+                it.subtitle = w + (w > 1 ? " colonnes, " : " colonne, ") + h + (h > 1 ? " lignes" : " ligne");
+                it.selected = w == item.w && h == item.h;
+                items.add(it);
             }
         }
-        dialog().setTitle("Taille (colonnes × lignes)")
-                .setItems(labels.toArray(new String[0]), (d, which) -> {
-                    int[] s = sizes.get(which);
-                    if (!grid.resize(item, s[0], s[1])) {
-                        Toast.makeText(this, "Pas assez de place pour cette taille", Toast.LENGTH_SHORT).show();
-                    }
-                }).show();
+        Sheet.list(this, "Taille du widget", items, which -> {
+            int[] s = sizes.get(which);
+            if (!grid.resize(item, s[0], s[1])) {
+                Toast.makeText(this, "Pas assez de place pour cette taille", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     // ------------------------------------------------------------ widgets
 
     private void pickWidget() {
-        PackageManager pm = getPackageManager();
-        List<AppWidgetProviderInfo> providers = new ArrayList<>(widgetManager.getInstalledProviders());
-        List<String> labels = new ArrayList<>();
-        Collator collator = Collator.getInstance(Locale.getDefault());
-        providers.sort((a, b) -> collator.compare(appLabel(pm, a) + a.loadLabel(pm), appLabel(pm, b) + b.loadLabel(pm)));
-        for (AppWidgetProviderInfo p : providers) {
-            int[] span = grid.spanFor(p);
-            labels.add(appLabel(pm, p) + " — " + p.loadLabel(pm) + "  (" + span[0] + "×" + span[1] + ")");
-        }
-        if (providers.isEmpty()) {
-            Toast.makeText(this, "Aucun widget disponible", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        dialog().setTitle("Ajouter un widget")
-                .setItems(labels.toArray(new String[0]), (d, which) -> bindWidget(providers.get(which)))
-                .show();
-    }
-
-    private static String appLabel(PackageManager pm, AppWidgetProviderInfo p) {
-        try {
-            return pm.getApplicationLabel(pm.getApplicationInfo(p.provider.getPackageName(), 0)).toString();
-        } catch (PackageManager.NameNotFoundException e) {
-            return p.provider.getPackageName();
-        }
+        WidgetPicker.show(this, widgetManager.getInstalledProviders(), grid::spanFor, this::bindWidget);
     }
 
     private void bindWidget(AppWidgetProviderInfo info) {
