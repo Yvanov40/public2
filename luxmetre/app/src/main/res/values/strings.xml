@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="desc_accessibilite">Permet au filtre de Luxmètre d\'assombrir tout l\'écran, y compris la barre d\'état en haut et les boutons de navigation en bas. Le service ne lit pas le contenu de l\'écran.</string>
+</resources>
