@@ -14,8 +14,6 @@ final class Shade {
     /** Renvoie false si le téléphone a refusé. */
     @SuppressLint("WrongConstant")
     static boolean open(Context context, boolean controlCenter) {
-        // Méthode officielle si le service d'accessibilité est activé.
-        if (ShadeService.open(controlCenter)) return true;
         try {
             Object service = context.getSystemService("statusbar");
             Method m = Class.forName("android.app.StatusBarManager")

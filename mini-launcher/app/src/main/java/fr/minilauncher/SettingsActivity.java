@@ -36,7 +36,6 @@ public final class SettingsActivity extends Activity {
     private static final int[] LETTER_COLORS = {0xFFFFFFFF, 0xFF111111, 0xFFBFC4CC, 0xFF8FA6FF, 0xFFFFE07A, 0xFFFF8FA3};
 
     private Store store;
-    private Button shadeButton;
     private Switch bubbleSwitch;
     private float dp;
     private LinearLayout col;
@@ -86,18 +85,6 @@ public final class SettingsActivity extends Activity {
         slider("Largeur de la zone tactile des bords", 8, 40, store.band(), "%d %%", v -> store.setNum(Store.BAND, v));
         note("Glisser vers le bas au milieu de l'écran : à gauche les notifications, à droite le "
                 + "centre de contrôle. Appui long sur une zone vide : ajouter une appli ou un widget.");
-        shadeButton = button("", v -> {
-            try {
-                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
-                Toast.makeText(this, "Active « Mini Launcher – volets »", Toast.LENGTH_LONG).show();
-            } catch (ActivityNotFoundException ignored) {
-            }
-        });
-        col.addView(shadeButton);
-        note("Si le volet s'ouvre mal (écran à moitié vide), active ce service : Android ouvre alors "
-                + "les notifications et le centre de contrôle par sa méthode officielle. S'il est grisé "
-                + "(appli installée hors Play Store) : Paramètres > Applis > Mini Launcher > ⋮ > "
-                + "« Autoriser les paramètres restreints », puis réessaie.");
 
         // ---------------------------------------------------------- horloge
         section("Horloge");
@@ -172,9 +159,6 @@ public final class SettingsActivity extends Activity {
         super.onResume();
         // Retour de l'écran d'autorisation : on démarre la bulle si c'est maintenant possible.
         if (store.bubble() && !Settings.canDrawOverlays(this)) bubbleSwitch.setChecked(false);
-        shadeButton.setText(ShadeService.isRunning()
-                ? "Ouverture des volets : méthode officielle activée ✓"
-                : "Activer l'ouverture fiable des volets (accessibilité)");
         BubbleService.sync(this);
     }
 

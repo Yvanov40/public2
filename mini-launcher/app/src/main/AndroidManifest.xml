@@ -88,20 +88,6 @@
                 android:value="Bulle flottante pour ouvrir les applis" />
         </service>
 
-        <!-- Facultatif : ouverture fiable des volets (méthode officielle). -->
-        <service
-            android:name=".ShadeService"
-            android:exported="false"
-            android:label="@string/shade_service_name"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/shade_service" />
-        </service>
-
         <receiver
             android:name=".BootReceiver"
             android:exported="false">

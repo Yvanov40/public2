@@ -29,11 +29,9 @@ réglages de l'appli).
 
 ## Volets (notifications / centre de contrôle)
 
-L'appel direct utilisé par défaut fonctionne mal sur certains téléphones (HyperOS : volet
-à moitié vide). Dans les réglages, « Activer l'ouverture fiable des volets » active un
-service d'accessibilité qui passe par la méthode officielle d'Android. Il ne lit pas
-l'écran. Appli installée hors Play Store : autoriser d'abord les « paramètres restreints »
-dans la fiche de l'appli.
+Glisser vers le bas au milieu de l'accueil les ouvre par un appel direct à Android. Sur
+HyperOS, le centre de contrôle s'affiche parfois mal par ce biais ; glisser depuis la
+barre d'état, tout en haut à droite, ouvre toujours le vrai.
 
 ## Réglages (appui long sur une zone vide > Réglages du launcher)
 

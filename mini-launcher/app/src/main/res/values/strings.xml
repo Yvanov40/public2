@@ -2,6 +2,4 @@
 <resources>
     <string name="app_name">Mini Launcher</string>
     <string name="settings_name">Réglages roue</string>
-    <string name="shade_service_name">Mini Launcher – volets</string>
-    <string name="shade_service_description">Permet à Mini Launcher d\'ouvrir les notifications et le centre de contrôle quand tu glisses vers le bas sur l\'écran d\'accueil. Ne lit pas le contenu de l\'écran.</string>
 </resources>
