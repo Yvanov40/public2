@@ -62,7 +62,10 @@ public final class HomeActivity extends Activity
         Window window = getWindow();
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         window.setStatusBarColor(Color.TRANSPARENT);
-        window.setNavigationBarColor(Color.TRANSPARENT);
+        // Presque transparent plutôt que transparent : certains systèmes (HyperOS) remplacent la
+        // transparence totale par leur propre bandeau.
+        window.setNavigationBarColor(0x01000000);
+        window.setStatusBarColor(0x01000000);
         if (Build.VERSION.SDK_INT >= 29) {
             // Pas de bandeau clair ajouté par Android derrière les barres : le fond d'écran reste visible.
             window.setNavigationBarContrastEnforced(false);
@@ -135,6 +138,7 @@ public final class HomeActivity extends Activity
         boolean withScrim = st.topScrim();
         int bar = st.barIcons();
         boolean darkIcons = bar == 2 || (bar == 0 && light && !withScrim);
+        boolean darkNav = darkIcons && st.navKeys() == 0;
         int t = st.homeText();
         boolean darkText = t == 2 || (t == 0 && light);
 
@@ -146,11 +150,13 @@ public final class HomeActivity extends Activity
             if (c != null) {
                 int mask = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
                         | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
-                c.setSystemBarsAppearance(darkIcons ? mask : 0, mask);
+                int value = (darkIcons ? android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS : 0)
+                        | (darkNav ? android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS : 0);
+                c.setSystemBarsAppearance(value, mask);
             }
         } else {
-            home.setSystemUiVisibility(layout | (darkIcons
-                    ? View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0));
+            home.setSystemUiVisibility(layout | (darkIcons ? View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR : 0)
+                    | (darkNav ? View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0));
         }
 
         float dp = getResources().getDisplayMetrics().density;

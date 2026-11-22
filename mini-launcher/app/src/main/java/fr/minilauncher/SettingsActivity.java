@@ -162,12 +162,15 @@ public final class SettingsActivity extends Activity {
         section("Lisibilité");
         choice("Icônes de la barre d'état", new String[]{"Automatique", "Claires", "Foncées"}, store.barIcons(),
                 i -> store.setNum(Store.BAR_ICONS, i));
+        choice("Touches du bas", new String[]{"Comme la barre d'état", "Toujours claires"}, store.navKeys(),
+                i -> store.setNum(Store.NAV_KEYS, i));
         choice("Texte de l'accueil", new String[]{"Automatique", "Blanc", "Noir"}, store.homeText(),
                 i -> store.setNum(Store.HOME_TEXT, i));
         toggle("Voile sombre en haut", "Garde les icônes claires lisibles sur tout fond", store.topScrim(),
                 on -> store.setFlag(Store.TOP_SCRIM, on));
         note("Automatique : foncé sur un fond d'écran clair, blanc sur un fond sombre. Le texte de "
-                + "l'accueil comprend l'horloge et le nom des applis.");
+                + "l'accueil comprend l'horloge et le nom des applis. Si un bandeau clair apparaît "
+                + "derrière les touches du bas, choisis « Toujours claires » pour elles.");
 
         // ---------------------------------------------------------- horloge
         section("Horloge");

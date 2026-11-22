@@ -122,6 +122,8 @@ final class Store {
     int barIcons() { return num(BAR_ICONS, 0); }             // 0 auto, 1 claires, 2 foncées
     int homeText() { return num(HOME_TEXT, 0); }             // 0 auto, 1 blanc, 2 noir
     boolean topScrim() { return flag(TOP_SCRIM, false); }    // voile sombre en haut
+    static final String NAV_KEYS = "navKeys";
+    int navKeys() { return num(NAV_KEYS, 0); }               // 0 comme la barre d'état, 1 toujours claires
 
     int ccMethod() { return num(CC_METHOD, 0); }             // voir Shade.METHODS
 
