@@ -35,46 +35,72 @@ public class FiltreService extends Service {
 
     static volatile boolean actif = false;
 
-    private WindowManager windowManager;
-    private View voile;
-    private WindowManager.LayoutParams params;
+    // Le voile appartient au processus, pas au service : la tuile du centre de contrôle
+    // peut ainsi l'afficher tout de suite, avant même que le service ait démarré.
+    private static WindowManager windowManager;
+    private static View voile;
+    private static WindowManager.LayoutParams params;
 
+    /** Allume le voile (ou change son niveau) et garde l'appli en vie avec une notification. */
     static void regler(Context ctx, int niveau) {
+        ctx = ctx.getApplicationContext();
+        if (!Settings.canDrawOverlays(ctx)) return;
+        Reglages.setNiveau(ctx, niveau);
+        Reglages.setActif(ctx, true);
+        actif = true;
+        afficher(ctx, niveau);
         Intent i = new Intent(ctx, FiltreService.class).setAction(ACTION_REGLER).putExtra(EXTRA_NIVEAU, niveau);
-        if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i); else ctx.startService(i);
+        try {
+            if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i); else ctx.startService(i);
+        } catch (RuntimeException e) {
+            // Démarrage refusé par Android : le voile reste affiché, sans notification.
+        }
+        majTuile(ctx);
     }
 
     static void arreter(Context ctx) {
-        ctx.startService(new Intent(ctx, FiltreService.class).setAction(ACTION_ARRETER));
+        ctx = ctx.getApplicationContext();
+        actif = false;
+        Reglages.setActif(ctx, false);
+        cacher();
+        ctx.stopService(new Intent(ctx, FiltreService.class));
+        majTuile(ctx);
+    }
+
+    private static void majTuile(Context ctx) {
+        if (Build.VERSION.SDK_INT >= 24) {
+            android.service.quicksettings.TileService.requestListeningState(ctx,
+                    new android.content.ComponentName(ctx, FiltreTuile.class));
+        }
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? null : intent.getAction();
-        if (ACTION_ARRETER.equals(action) || !Settings.canDrawOverlays(this)) {
-            arreterTout();
-            return START_NOT_STICKY;
-        }
         int niveau = intent == null
                 ? Reglages.niveau(this)
                 : intent.getIntExtra(EXTRA_NIVEAU, Reglages.niveau(this));
         demarrerPremierPlan(niveau);
-        afficher(niveau);
+        if (ACTION_ARRETER.equals(action) || !Settings.canDrawOverlays(this) || !Reglages.actif(this)) {
+            arreter(this);
+            return START_NOT_STICKY;
+        }
+        afficher(getApplicationContext(), niveau);
         actif = true;
         return START_STICKY;
     }
 
-    private void afficher(int niveau) {
+    private static void afficher(Context ctx, int niveau) {
         float alpha = Math.max(0, Math.min(NIVEAU_MAX, niveau)) / 100f;
         if (voile == null) {
-            windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
-            voile = new View(this);
+            windowManager = (WindowManager) ctx.getSystemService(WINDOW_SERVICE);
+            voile = new View(ctx);
             voile.setBackgroundColor(Color.BLACK);
             int type = Build.VERSION.SDK_INT >= 26
                     ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                     : WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY;
-            int taille = 2 * Math.max(getResources().getDisplayMetrics().widthPixels,
-                    getResources().getDisplayMetrics().heightPixels);
+            int taille = 2 * Math.max(ctx.getResources().getDisplayMetrics().widthPixels,
+                    ctx.getResources().getDisplayMetrics().heightPixels);
             params = new WindowManager.LayoutParams(taille, taille, type,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                             | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
@@ -120,25 +146,11 @@ public class FiltreService extends Service {
         }
     }
 
-    private void arreterTout() {
-        actif = false;
-        Reglages.setActif(this, false);
+    private static void cacher() {
         if (voile != null) {
             windowManager.removeView(voile);
             voile = null;
         }
-        stopForeground(true);
-        stopSelf();
-    }
-
-    @Override
-    public void onDestroy() {
-        if (voile != null) {
-            windowManager.removeView(voile);
-            voile = null;
-        }
-        actif = false;
-        super.onDestroy();
     }
 
     @Override

@@ -19,11 +19,26 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Appui long sur la tuile : ouvre l'appli -->
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+            </intent-filter>
         </activity>
         <service android:name=".FiltreService" android:exported="false"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Filtre qui assombrit l'écran en dessous de la luminosité minimale" />
+        </service>
+        <service android:name=".FiltreTuile"
+            android:label="Assombrir"
+            android:icon="@drawable/tuile"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="true" />
         </service>
     </application>
 </manifest>
