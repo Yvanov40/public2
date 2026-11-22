@@ -9,12 +9,13 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
- * Menus de l'appui long : épingler, groupes, infos.
- * {@code changed} est appelé après une modification ; {@code done} quand le menu est fini
- * (avec ou sans modification).
+ * Menus : appui long sur une appli ou un dossier, choix d'applis.
+ * {@code changed} est appelé après une modification.
  */
 final class Menus {
 
@@ -25,117 +26,163 @@ final class Menus {
         return new AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert);
     }
 
-    static void appMenu(Activity a, ComponentName cn, String label, String group,
-                        Runnable changed, Runnable done) {
-        Store store = Store.get(a);
-        String key = Store.key(cn);
-        List<String> labels = new ArrayList<>();
-        List<Runnable> actions = new ArrayList<>();
-
-        labels.add(store.isPinned(key) ? "Retirer des favoris" : "Épingler en favori");
-        actions.add(() -> {
-            store.togglePin(key);
-            changed.run();
-            done.run();
-        });
-        labels.add(store.isOnHome(key) ? "Retirer de l'écran d'accueil" : "Ajouter à l'écran d'accueil");
-        actions.add(() -> {
-            store.toggleHomeApp(key);
-            changed.run();
-            done.run();
-        });
-        labels.add("Ajouter à un groupe…");
-        actions.add(() -> chooseGroup(a, key, changed, done));
-        if (group != null) {
-            labels.add("Retirer du groupe « " + group + " »");
-            actions.add(() -> {
-                List<Store.Group> groups = store.groups();
-                Store.Group g = Store.find(groups, group);
-                if (g != null) {
-                    g.apps.remove(key);
-                    if (g.apps.isEmpty()) groups.remove(g);
-                    store.setGroups(groups);
-                }
-                changed.run();
-                done.run();
-            });
-        }
-        labels.add("Infos de l'appli");
-        actions.add(() -> {
-            Launcher.appInfo(a, cn);
-            done.run();
-        });
-
-        builder(a).setTitle(label)
-                .setItems(labels.toArray(new String[0]), (d, which) -> actions.get(which).run())
-                .setOnCancelListener(d -> done.run())
-                .show();
+    interface AppCallback {
+        void onApp(AppRepository.AppEntry app);
     }
 
-    private static void chooseGroup(Activity a, String key, Runnable changed, Runnable done) {
-        Store store = Store.get(a);
-        List<Store.Group> groups = store.groups();
-        List<String> names = new ArrayList<>();
-        for (Store.Group g : groups) names.add((g.apps.contains(key) ? "✓ " : "") + g.name);
-        names.add("＋ Nouveau groupe…");
-        builder(a).setTitle("Ajouter au groupe")
-                .setItems(names.toArray(new String[0]), (d, which) -> {
-                    if (which == groups.size()) {
-                        askName(a, "Nouveau groupe", "", name -> {
-                            List<Store.Group> gs = store.groups();
-                            Store.Group g = Store.find(gs, name);
-                            if (g == null) {
-                                g = new Store.Group(name, Store.GROUP_COLORS[gs.size() % Store.GROUP_COLORS.length]);
-                                gs.add(g);
-                            }
-                            if (!g.apps.contains(key)) g.apps.add(key);
-                            store.setGroups(gs);
-                            changed.run();
-                        }, done);
-                    } else {
-                        Store.Group g = groups.get(which);
-                        if (!g.apps.contains(key)) g.apps.add(key);
-                        store.setGroups(groups);
-                        changed.run();
-                        done.run();
-                    }
-                })
-                .setOnCancelListener(d -> done.run())
-                .show();
-    }
-
-    static void groupMenu(Activity a, String group, Runnable changed, Runnable done) {
-        Store store = Store.get(a);
-        builder(a).setTitle(group)
-                .setItems(new String[]{"Renommer", "Supprimer le groupe"}, (d, which) -> {
-                    if (which == 0) {
-                        askName(a, "Renommer le groupe", group, name -> {
-                            List<Store.Group> gs = store.groups();
-                            Store.Group g = Store.find(gs, group);
-                            if (g != null && Store.find(gs, name) == null) {
-                                g.name = name;
-                                store.setGroups(gs);
-                            }
-                            changed.run();
-                        }, done);
-                    } else {
-                        List<Store.Group> gs = store.groups();
-                        Store.Group g = Store.find(gs, group);
-                        if (g != null) gs.remove(g);
-                        store.setGroups(gs);
-                        changed.run();
-                        done.run();
-                    }
-                })
-                .setOnCancelListener(d -> done.run())
-                .show();
+    interface AppsCallback {
+        void onApps(List<String> keys);
     }
 
     interface NameCallback {
         void onName(String name);
     }
 
-    private static void askName(Activity a, String title, String initial, NameCallback ok, Runnable done) {
+    // ------------------------------------------------------------ appli
+
+    static void appMenu(Activity a, ComponentName cn, String label, String folder, Runnable changed) {
+        Store store = Store.get(a);
+        String key = Store.key(cn);
+        List<String> labels = new ArrayList<>();
+        List<Runnable> actions = new ArrayList<>();
+
+        labels.add(store.isPinned(key) ? "Retirer des favoris (★)" : "Épingler en favori (★)");
+        actions.add(() -> {
+            store.togglePin(key);
+            changed.run();
+        });
+        labels.add(store.isOnHome(key) ? "Retirer de l'écran d'accueil" : "Ajouter à l'écran d'accueil");
+        actions.add(() -> {
+            store.toggleHomeApp(key);
+            changed.run();
+        });
+        labels.add("Ajouter à un dossier…");
+        actions.add(() -> chooseFolder(a, key, changed));
+        if (folder != null) {
+            labels.add("Retirer du dossier « " + folder + " »");
+            actions.add(() -> {
+                List<Store.Group> groups = store.groups();
+                Store.Group g = Store.find(groups, folder);
+                if (g != null) {
+                    g.apps.remove(key);
+                    store.setGroups(groups);
+                }
+                changed.run();
+            });
+        }
+        labels.add("Infos de l'appli");
+        actions.add(() -> Launcher.appInfo(a, cn));
+
+        builder(a).setTitle(label)
+                .setItems(labels.toArray(new String[0]), (d, which) -> actions.get(which).run())
+                .show();
+    }
+
+    private static void chooseFolder(Activity a, String key, Runnable changed) {
+        Store store = Store.get(a);
+        List<Store.Group> groups = store.groups();
+        List<String> names = new ArrayList<>();
+        for (Store.Group g : groups) names.add((g.apps.contains(key) ? "✓ " : "") + g.name);
+        names.add("＋ Nouveau dossier…");
+        builder(a).setTitle("Ajouter au dossier")
+                .setItems(names.toArray(new String[0]), (d, which) -> {
+                    if (which == groups.size()) {
+                        askName(a, "Nouveau dossier", store.freeFolderName("Dossier"), name -> {
+                            List<String> one = new ArrayList<>();
+                            one.add(key);
+                            store.createFolder(name, one, -1, -1);
+                            changed.run();
+                        });
+                    } else {
+                        store.addToFolder(groups.get(which).name, key);
+                        changed.run();
+                    }
+                })
+                .show();
+    }
+
+    // ------------------------------------------------------------ dossier
+
+    static void folderMenu(Activity a, String folder, List<AppRepository.AppEntry> apps, Runnable changed) {
+        Store store = Store.get(a);
+        boolean onHome = store.isFolderOnHome(folder);
+        String[] items = {"Choisir les applis…", "Renommer", onHome ? "Retirer de l'écran d'accueil"
+                : "Mettre sur l'écran d'accueil", "Supprimer le dossier"};
+        builder(a).setTitle(folder).setItems(items, (d, which) -> {
+            switch (which) {
+                case 0:
+                    Store.Group g = Store.find(store.groups(), folder);
+                    pickApps(a, "Applis du dossier", apps, g == null ? new ArrayList<>() : g.apps, keys -> {
+                        store.setFolderApps(folder, keys);
+                        changed.run();
+                    });
+                    break;
+                case 1:
+                    askName(a, "Renommer le dossier", folder, name -> {
+                        store.renameFolder(folder, name);
+                        changed.run();
+                    });
+                    break;
+                case 2:
+                    store.toggleFolderOnHome(folder);
+                    changed.run();
+                    break;
+                default:
+                    builder(a).setTitle("Supprimer « " + folder + " » ?")
+                            .setMessage("Les applis ne sont pas désinstallées.")
+                            .setPositiveButton("Supprimer", (d2, w) -> {
+                                store.deleteFolder(folder);
+                                changed.run();
+                            })
+                            .setNegativeButton("Annuler", null)
+                            .show();
+            }
+        }).show();
+    }
+
+    /** Nouveau dossier : un nom, puis les applis à cocher. */
+    static void newFolder(Activity a, List<AppRepository.AppEntry> apps, Runnable changed) {
+        Store store = Store.get(a);
+        askName(a, "Nouveau dossier", store.freeFolderName("Dossier"), name ->
+                pickApps(a, "Applis de « " + name + " »", apps, new ArrayList<>(), keys -> {
+                    store.createFolder(name, keys, -1, -1);
+                    changed.run();
+                }));
+    }
+
+    // ------------------------------------------------------------ choix d'applis
+
+    static void pickApp(Activity a, String title, List<AppRepository.AppEntry> apps, AppCallback cb) {
+        String[] labels = new String[apps.size()];
+        for (int i = 0; i < apps.size(); i++) labels[i] = apps.get(i).label;
+        builder(a).setTitle(title)
+                .setItems(labels, (d, which) -> cb.onApp(apps.get(which)))
+                .show();
+    }
+
+    static void pickApps(Activity a, String title, List<AppRepository.AppEntry> apps,
+                         List<String> selected, AppsCallback cb) {
+        String[] labels = new String[apps.size()];
+        boolean[] checked = new boolean[apps.size()];
+        Set<String> sel = new HashSet<>(selected);
+        for (int i = 0; i < apps.size(); i++) {
+            labels[i] = apps.get(i).label;
+            checked[i] = sel.contains(Store.key(apps.get(i).component));
+        }
+        builder(a).setTitle(title)
+                .setMultiChoiceItems(labels, checked, (d, which, on) -> checked[which] = on)
+                .setPositiveButton("OK", (d, w) -> {
+                    List<String> keys = new ArrayList<>();
+                    for (int i = 0; i < apps.size(); i++) {
+                        if (checked[i]) keys.add(Store.key(apps.get(i).component));
+                    }
+                    cb.onApps(keys);
+                })
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
+    static void askName(Activity a, String title, String initial, NameCallback ok) {
         EditText input = new EditText(a);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         input.setSingleLine(true);
@@ -150,10 +197,8 @@ final class Menus {
                 .setPositiveButton("OK", (d, w) -> {
                     String name = input.getText().toString().trim();
                     if (!name.isEmpty()) ok.onName(name);
-                    done.run();
                 })
-                .setNegativeButton("Annuler", (d, w) -> done.run())
-                .setOnCancelListener(d -> done.run())
+                .setNegativeButton("Annuler", null)
                 .create();
         if (dialog.getWindow() != null) {
             dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);

@@ -36,7 +36,6 @@ public final class SettingsActivity extends Activity {
     private static final int[] LETTER_COLORS = {0xFFFFFFFF, 0xFF111111, 0xFFBFC4CC, 0xFF8FA6FF, 0xFFFFE07A, 0xFFFF8FA3};
 
     private Store store;
-    private Switch bubbleSwitch;
     private float dp;
     private LinearLayout col;
 
@@ -62,11 +61,9 @@ public final class SettingsActivity extends Activity {
                 startActivity(new Intent(Settings.ACTION_SETTINGS));
             }
         }));
-        choice("Bords de l'écran", new String[]{"Alphabet vertical", "Roue"}, store.edgeMode(),
-                i -> store.setNum(Store.EDGE, i));
-        note("Alphabet vertical : poser le doigt sur un bord et le glisser de haut en bas ; les "
+        note("Alphabet sur les bords : poser le doigt sur un bord et le glisser de haut en bas ; les "
                 + "applis de la lettre apparaissent à côté. Glisser vers l'intérieur jusqu'à l'appli et "
-                + "lâcher. En haut ★ les favoris, en bas les groupes. Roue : la roue s'ouvre sous le doigt.");
+                + "lâcher. En haut ★ les favoris, en bas les dossiers.");
         choice("Côté de l'alphabet", new String[]{"Les deux", "Gauche", "Droite"}, store.alphaSide(),
                 i -> store.setNum(Store.SIDE, i));
         toggle("Lettres toujours visibles sur le bord", store.alphaVisible(),
@@ -84,7 +81,8 @@ public final class SettingsActivity extends Activity {
                 c -> store.setNum(Store.STRIP_FG, c));
         slider("Largeur de la zone tactile des bords", 8, 40, store.band(), "%d %%", v -> store.setNum(Store.BAND, v));
         note("Glisser vers le bas au milieu de l'écran : à gauche les notifications, à droite le "
-                + "centre de contrôle. Appui long sur une zone vide : ajouter une appli ou un widget.");
+                + "centre de contrôle. Appui long sur une zone vide : ajouter une appli, un dossier ou "
+                + "un widget.");
 
         // ---------------------------------------------------------- horloge
         section("Horloge");
@@ -102,64 +100,26 @@ public final class SettingsActivity extends Activity {
         slider("Taille des icônes", 36, 72, store.iconSize(), "%d dp", v -> store.setNum(Store.ICON, v));
         toggle("Afficher le nom des applis", store.labels(), on -> store.setFlag(Store.LABELS, on));
 
-        // ---------------------------------------------------------- roue
-        section("Roue");
+        // ---------------------------------------------------------- favoris et dossiers
+        section("Favoris (★) et dossiers");
         toggle("Compléter les favoris avec les applis les plus utilisées",
                 store.autoFavorites(), on -> store.setFlag("autoFav", on));
         slider("Nombre de favoris", 0, 8, store.maxFav(), "%d", v -> store.setNum(Store.MAXFAV, v));
-        toggle("Le centre rouvre la dernière appli",
-                store.centerLast(), on -> store.setFlag("centerLast", on));
-        toggle("Une seule appli pour une lettre : l'ouvrir directement",
-                store.directSingle(), on -> store.setFlag("directSingle", on));
-        note("Appui long sur une appli : épingler en favori, ranger dans un groupe, poser sur "
-                + "l'accueil. Appui long au centre d'un groupe ouvert : le renommer ou le supprimer.");
+        note("Appui long sur une appli : épingler en favori, ajouter à un dossier, poser sur "
+                + "l'accueil. Sur l'accueil, lâcher une appli sur une autre crée un dossier. Poser le "
+                + "doigt sur un dossier l'ouvre en cercle : glisser jusqu'à l'appli et lâcher.");
 
         // ---------------------------------------------------------- effets
         section("Effets");
         accentChoice();
-        slider("Taille de la roue", 80, 130, store.wheelScale(), "%d %%", v -> store.setNum(Store.WHEEL, v));
         slider("Assombrissement du fond", 0, 90, store.dimPercent(), "%d %%", v -> store.setNum(Store.DIM, v));
         choice("Animations", new String[]{"Aucune", "Normales", "Rapides", "Lentes"}, store.speed(),
                 i -> store.setNum(Store.SPEED, i));
-        slider("Temps d'arrêt pour ouvrir une lettre", 150, 800, store.dwell(), "%d ms",
-                v -> store.setNum(Store.DWELL, v));
         toggle("Vibrations", store.haptic(), on -> store.setFlag(Store.HAPTIC, on));
-
-        // ---------------------------------------------------------- bulle
-        section("Bulle flottante");
-        bubbleSwitch = toggle("Afficher la bulle par-dessus les applis", store.bubble(), on -> {
-            store.setFlag("bubble", on);
-            if (on && !Settings.canDrawOverlays(this)) {
-                Toast.makeText(this, "Autorise « Afficher par-dessus les autres applis »",
-                        Toast.LENGTH_LONG).show();
-                startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:" + getPackageName())));
-            }
-            if (on && Build.VERSION.SDK_INT >= 33) {
-                requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 1);
-            }
-            BubbleService.sync(this);
-        });
-        note("Poser le doigt sur la bulle ouvre la roue : glisser jusqu'à l'appli et lâcher. "
-                + "Maintenir la bulle sans bouger permet de la déplacer.");
-
-        section("Position");
-        col.addView(button("Remettre la roue de l'icône au milieu", v -> {
-            store.clearPosition();
-            Toast.makeText(this, "Position effacée", Toast.LENGTH_SHORT).show();
-        }));
 
         ScrollView scroll = new ScrollView(this);
         scroll.addView(col);
         setContentView(scroll);
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        // Retour de l'écran d'autorisation : on démarre la bulle si c'est maintenant possible.
-        if (store.bubble() && !Settings.canDrawOverlays(this)) bubbleSwitch.setChecked(false);
-        BubbleService.sync(this);
     }
 
     // ------------------------------------------------------------ éléments
@@ -262,10 +222,10 @@ public final class SettingsActivity extends Activity {
     }
 
     private void accentChoice() {
-        Button b = button("Couleur de la roue", null);
+        Button b = button("Couleur d'accent", null);
         updateSwatch(b, store.accent());
         b.setOnClickListener(v -> new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Couleur de la roue")
+                .setTitle("Couleur d'accent")
                 .setItems(ACCENT_NAMES, (d, which) -> {
                     store.setNum(Store.ACCENT, ACCENTS[which]);
                     updateSwatch(b, ACCENTS[which]);

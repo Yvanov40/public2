@@ -14,7 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Tout ce que l'appli mémorise : favoris épinglés, groupes, usage, réglages, position. */
+/** Tout ce que l'appli mémorise : favoris épinglés, dossiers, usage, accueil, réglages. */
 final class Store {
 
     static final int[] GROUP_COLORS = {
@@ -55,17 +55,8 @@ final class Store {
         return prefs.getBoolean("autoFav", true);
     }
 
-    boolean centerLast() {
-        return prefs.getBoolean("centerLast", true);
-    }
 
-    boolean directSingle() {
-        return prefs.getBoolean("directSingle", true);
-    }
 
-    boolean bubble() {
-        return prefs.getBoolean("bubble", false);
-    }
 
     void setFlag(String name, boolean value) {
         prefs.edit().putBoolean(name, value).apply();
@@ -87,8 +78,8 @@ final class Store {
     static final String CLOCK = "clock", CLOCK_SIZE = "clockSize", CLOCK_ALIGN = "clockAlign",
             CLOCK_DATE = "clockDate", COLS = "cols", ROWS = "rows", ICON = "iconSize",
             LABELS = "labels", BAND = "band", ACCENT = "accent", DIM = "dim", SPEED = "speed",
-            DWELL = "dwell", HAPTIC = "haptic", WHEEL = "wheelScale", MAXFAV = "maxFav",
-            EDGE = "edgeMode", SIDE = "alphaSide", ALPHA_VISIBLE = "alphaVisible",
+            HAPTIC = "haptic", MAXFAV = "maxFav",
+            SIDE = "alphaSide", ALPHA_VISIBLE = "alphaVisible",
             STRIP_H = "stripHeight", STRIP_POS = "stripPos", ZOOM = "zoom",
             STRIP_BG = "stripBg", STRIP_ALPHA = "stripAlpha", STRIP_FG = "stripFg";
 
@@ -99,7 +90,6 @@ final class Store {
     int stripAlpha() { return num(STRIP_ALPHA, 88); }        // opacité de la zone, %
     int stripFg() { return num(STRIP_FG, 0xFFFFFFFF); }      // couleur des lettres
 
-    int edgeMode() { return num(EDGE, 0); }                  // 0 alphabet vertical, 1 roue
     int alphaSide() { return num(SIDE, 0); }                 // 0 les deux, 1 gauche, 2 droite
     boolean alphaVisible() { return flag(ALPHA_VISIBLE, true); }
 
@@ -115,9 +105,7 @@ final class Store {
     int accent() { return num(ACCENT, 0xFF8FA6FF); }
     int dimPercent() { return num(DIM, 65); }
     int speed() { return num(SPEED, 1); }                    // 0 aucune, 1 normale, 2 rapide, 3 lente
-    int dwell() { return num(DWELL, 380); }                  // ms
     boolean haptic() { return flag(HAPTIC, true); }
-    int wheelScale() { return num(WHEEL, 100); }             // %
     int maxFav() { return num(MAXFAV, 8); }
 
     /** Multiplicateur de durée des animations. */
@@ -128,22 +116,6 @@ final class Store {
             case 3: return 1.6f;
             default: return 1f;
         }
-    }
-
-    // ------------------------------------------------------------ position de la roue
-
-    /** {x, y} en fraction de l'écran, ou null si jamais réglée. */
-    float[] position() {
-        if (!prefs.contains("x")) return null;
-        return new float[]{prefs.getFloat("x", 0.5f), prefs.getFloat("y", 0.62f)};
-    }
-
-    void setPosition(float x, float y) {
-        prefs.edit().putFloat("x", x).putFloat("y", y).apply();
-    }
-
-    void clearPosition() {
-        prefs.edit().remove("x").remove("y").apply();
     }
 
     // ------------------------------------------------------------ favoris
@@ -237,6 +209,7 @@ final class Store {
     /** Une appli ou un widget posé sur l'écran d'accueil. col < 0 : à placer. */
     static final class HomeItem {
         boolean widget;
+        String folder;   // dossier : nom du groupe
         String key;      // appli : composant
         int widgetId;    // widget : identifiant Android
         int col = -1, row = -1, w = 1, h = 1;
@@ -250,6 +223,7 @@ final class Store {
                 JSONObject o = a.getJSONObject(i);
                 HomeItem it = new HomeItem();
                 it.widget = o.optBoolean("widget");
+                it.folder = o.has("folder") ? o.getString("folder") : null;
                 it.key = o.optString("key", null);
                 it.widgetId = o.optInt("id", -1);
                 it.col = o.optInt("col", -1);
@@ -269,6 +243,7 @@ final class Store {
             for (HomeItem it : items) {
                 JSONObject o = new JSONObject();
                 o.put("widget", it.widget);
+                if (it.folder != null) o.put("folder", it.folder);
                 if (it.key != null) o.put("key", it.key);
                 o.put("id", it.widgetId);
                 o.put("col", it.col);
@@ -283,7 +258,7 @@ final class Store {
     }
 
     boolean isOnHome(String key) {
-        for (HomeItem it : homeItems()) if (!it.widget && key.equals(it.key)) return true;
+        for (HomeItem it : homeItems()) if (!it.widget && it.folder == null && key.equals(it.key)) return true;
         return false;
     }
 
@@ -291,7 +266,7 @@ final class Store {
     void toggleHomeApp(String key) {
         List<HomeItem> items = homeItems();
         for (HomeItem it : items) {
-            if (!it.widget && key.equals(it.key)) {
+            if (!it.widget && it.folder == null && key.equals(it.key)) {
                 items.remove(it);
                 setHomeItems(items);
                 return;
@@ -299,6 +274,94 @@ final class Store {
         }
         HomeItem it = new HomeItem();
         it.key = key;
+        items.add(it);
+        setHomeItems(items);
+    }
+
+    // ------------------------------------------------------------ dossiers (= groupes)
+
+    /** Nom libre : « Dossier », « Dossier 2 », … */
+    String freeFolderName(String base) {
+        List<Group> gs = groups();
+        if (find(gs, base) == null) return base;
+        for (int i = 2; ; i++) if (find(gs, base + " " + i) == null) return base + " " + i;
+    }
+
+    /** Crée un dossier avec ces applis et le pose sur l'accueil (à la première place libre). */
+    void createFolder(String name, List<String> apps, int col, int row) {
+        List<Group> gs = groups();
+        Group g = find(gs, name);
+        if (g == null) {
+            g = new Group(name, GROUP_COLORS[gs.size() % GROUP_COLORS.length]);
+            gs.add(g);
+        }
+        for (String k : apps) if (!g.apps.contains(k)) g.apps.add(k);
+        setGroups(gs);
+        List<HomeItem> items = homeItems();
+        for (HomeItem it : items) if (name.equals(it.folder)) return;
+        HomeItem it = new HomeItem();
+        it.folder = name;
+        it.col = col;
+        it.row = row;
+        items.add(it);
+        setHomeItems(items);
+    }
+
+    void addToFolder(String name, String key) {
+        List<Group> gs = groups();
+        Group g = find(gs, name);
+        if (g != null && !g.apps.contains(key)) {
+            g.apps.add(key);
+            setGroups(gs);
+        }
+    }
+
+    void setFolderApps(String name, List<String> apps) {
+        List<Group> gs = groups();
+        Group g = find(gs, name);
+        if (g == null) return;
+        g.apps.clear();
+        g.apps.addAll(apps);
+        setGroups(gs);
+    }
+
+    void renameFolder(String from, String to) {
+        List<Group> gs = groups();
+        Group g = find(gs, from);
+        if (g == null || find(gs, to) != null) return;
+        g.name = to;
+        setGroups(gs);
+        List<HomeItem> items = homeItems();
+        for (HomeItem it : items) if (from.equals(it.folder)) it.folder = to;
+        setHomeItems(items);
+    }
+
+    void deleteFolder(String name) {
+        List<Group> gs = groups();
+        Group g = find(gs, name);
+        if (g != null) gs.remove(g);
+        setGroups(gs);
+        List<HomeItem> items = homeItems();
+        for (int i = items.size() - 1; i >= 0; i--) if (name.equals(items.get(i).folder)) items.remove(i);
+        setHomeItems(items);
+    }
+
+    boolean isFolderOnHome(String name) {
+        for (HomeItem it : homeItems()) if (name.equals(it.folder)) return true;
+        return false;
+    }
+
+    void toggleFolderOnHome(String name) {
+        List<HomeItem> items = homeItems();
+        for (HomeItem it : items) {
+            if (name.equals(it.folder)) {
+                items.remove(it);
+                setHomeItems(items);
+                return;
+            }
+        }
+        HomeItem it = new HomeItem();
+        it.folder = name;
         items.add(it);
         setHomeItems(items);
     }

@@ -27,7 +27,7 @@ import java.util.Set;
  * On pose le doigt sur un bord et on le fait glisser de haut en bas : la lettre sous le
  * doigt s'allume et ses applis apparaissent à côté, en direct. On glisse vers l'intérieur
  * jusqu'à l'appli et on lâche. Si on lâche sur l'alphabet, les applis restent affichées et
- * on peut les toucher. En haut : ★ les favoris ; en bas : les groupes.
+ * on peut les toucher. En haut : ★ les favoris ; en bas : les dossiers.
  */
 final class AlphaStripView extends View {
 
@@ -40,6 +40,9 @@ final class AlphaStripView extends View {
     }
 
     static final int LEFT = 1, RIGHT = 2;
+    private static final String[] LETTERS = {
+            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+            "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "#"};
 
     private static final int PHASE_IDLE = 0;    // rien d'ouvert
     private static final int PHASE_LETTERS = 1; // le doigt parcourt l'alphabet
@@ -169,7 +172,7 @@ final class AlphaStripView extends View {
         if (!fav.apps.isEmpty()) entries.add(fav);
 
         Map<String, Entry> letters = new HashMap<>();
-        for (String l : RadialView.LETTERS) {
+        for (String l : LETTERS) {
             Entry en = new Entry(l, 0, false);
             entries.add(en);
             letters.put(l, en);
@@ -455,7 +458,7 @@ final class AlphaStripView extends View {
         boolean active = phase != PHASE_IDLE;
         if (active) {
             canvas.drawColor(Color.argb((int) (255 * store.dimPercent() / 100f * 0.8f), 0, 0, 0));
-        } else if (!store.alphaVisible() || store.edgeMode() != 0) {
+        } else if (!store.alphaVisible()) {
             return;
         }
         int s = sides();

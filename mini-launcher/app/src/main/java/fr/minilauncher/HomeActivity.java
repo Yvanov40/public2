@@ -28,17 +28,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** Le launcher : fond d'écran, horloge, grille d'applis et de widgets, et la roue sur les bords. */
+/** Le launcher : fond d'écran, horloge, grille (applis, dossiers, widgets), alphabet sur les bords. */
 public final class HomeActivity extends Activity
-        implements RadialView.Listener, HomeView.Host, AlphaStripView.Listener {
+        implements HomeView.Host, AlphaStripView.Listener, FolderWheelView.Listener {
 
     private static final int HOST_ID = 1024;
     private static final int REQ_BIND = 1;
     private static final int REQ_CONFIGURE = 2;
 
-    private RadialView wheel;
     private HomeGrid grid;
     private AlphaStripView strip;
+    private FolderWheelView folderWheel;
     private HomeView home;
     private AppRepository repository;
     private AppWidgetHost widgetHost;
@@ -46,7 +46,6 @@ public final class HomeActivity extends Activity
     private LinearLayout clockBox;
     private TextClock clockTime, clockDate;
 
-    private boolean pickMode; // la roue sert à choisir une appli à poser sur l'accueil
     private int pendingWidgetId = -1;
     private AppWidgetProviderInfo pendingInfo;
 
@@ -54,7 +53,6 @@ public final class HomeActivity extends Activity
         @Override
         public void onAppsChanged(List<AppRepository.AppEntry> apps) {
             if (isDestroyed()) return;
-            wheel.setApps(apps);
             grid.setApps(apps);
             strip.setApps(apps);
         }
@@ -76,13 +74,12 @@ public final class HomeActivity extends Activity
         widgetHost = new AppWidgetHost(this, HOST_ID);
         widgetManager = AppWidgetManager.getInstance(this);
 
-        wheel = new RadialView(this);
-        wheel.setListener(this);
-        wheel.dismissNow();
         grid = new HomeGrid(this, widgetHost);
         strip = new AlphaStripView(this);
         strip.setListener(this);
-        home = new HomeView(this, wheel, grid, strip, this);
+        folderWheel = new FolderWheelView(this);
+        folderWheel.setListener(this);
+        home = new HomeView(this, grid, strip, folderWheel, this);
         home.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
@@ -94,12 +91,12 @@ public final class HomeActivity extends Activity
         setContentView(home);
 
         repository = AppRepository.get(this);
-        wheel.setApps(repository.cached());
         grid.setApps(repository.cached());
         strip.setApps(repository.cached());
         grid.reload();
-        BubbleService.sync(this);
     }
+
+    // ------------------------------------------------------------ horloge
 
     private void updateGridTop() {
         float dp = getResources().getDisplayMetrics().density;
@@ -157,6 +154,8 @@ public final class HomeActivity extends Activity
         return box;
     }
 
+    // ------------------------------------------------------------ cycle de vie
+
     @Override
     protected void onStart() {
         super.onStart();
@@ -166,7 +165,6 @@ public final class HomeActivity extends Activity
         }
         applyClockSettings();
         grid.reload();
-        wheel.refresh();
         strip.refresh();
         home.invalidate();
         repository.refresh(callback);
@@ -184,26 +182,28 @@ public final class HomeActivity extends Activity
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        // Bouton Accueil pendant que la roue est ouverte : on la referme.
-        closeWheel();
+        closeOverlays(); // bouton Accueil
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        closeWheel();
+        closeOverlays();
     }
 
     @Override
     public void onBackPressed() {
-        if (home.isWheelActive() && !wheel.goBack()) wheel.close();
+        closeOverlays();
     }
 
-    private void closeWheel() {
+    private void closeOverlays() {
         strip.close();
-        pickMode = false;
-        wheel.dismissNow();
-        home.wheelClosed();
+        folderWheel.close();
+    }
+
+    private void refreshAll() {
+        grid.reload();
+        strip.refresh();
     }
 
     private AlertDialog.Builder dialog() {
@@ -221,18 +221,25 @@ public final class HomeActivity extends Activity
 
     @Override
     public void onHomeLongPress() {
-        String[] items = {"Ajouter une appli", "Ajouter un widget", "Fond d'écran", "Réglages du launcher"};
+        String[] items = {"Ajouter une appli", "Créer un dossier", "Ajouter un widget", "Fond d'écran",
+                "Réglages du launcher"};
         dialog().setItems(items, (d, which) -> {
             switch (which) {
                 case 0:
-                    pickMode = true;
-                    home.openWheelCentered();
-                    Toast.makeText(this, "Choisis l'appli à poser sur l'accueil", Toast.LENGTH_SHORT).show();
+                    Menus.pickApp(this, "Ajouter à l'accueil", grid.sortedApps(), app -> {
+                        Store store = Store.get(this);
+                        String key = Store.key(app.component);
+                        if (!store.isOnHome(key)) store.toggleHomeApp(key);
+                        refreshAll();
+                    });
                     break;
                 case 1:
-                    pickWidget();
+                    Menus.newFolder(this, grid.sortedApps(), this::refreshAll);
                     break;
                 case 2:
+                    pickWidget();
+                    break;
+                case 3:
                     try {
                         startActivity(Intent.createChooser(new Intent(Intent.ACTION_SET_WALLPAPER), "Fond d'écran"));
                     } catch (ActivityNotFoundException ignored) {
@@ -251,7 +258,9 @@ public final class HomeActivity extends Activity
 
     @Override
     public void onHomeItemMenu(Store.HomeItem item) {
-        if (item.widget) {
+        if (item.folder != null) {
+            Menus.folderMenu(this, item.folder, grid.sortedApps(), this::refreshAll);
+        } else if (item.widget) {
             AppWidgetProviderInfo info = widgetManager.getAppWidgetInfo(item.widgetId);
             boolean configurable = info != null && info.configure != null;
             String[] opts = configurable
@@ -272,11 +281,11 @@ public final class HomeActivity extends Activity
             }).show();
         } else {
             AppRepository.AppEntry app = grid.appOf(item);
-            String title = app == null ? "" : app.label;
-            dialog().setTitle(title).setItems(new String[]{"Retirer de l'accueil", "Infos de l'appli"}, (d, which) -> {
-                if (which == 0) grid.remove(item);
-                else Launcher.appInfo(this, ComponentName.unflattenFromString(item.key));
-            }).show();
+            if (app != null) {
+                Menus.appMenu(this, app.component, app.label, null, this::refreshAll);
+            } else {
+                grid.remove(item);
+            }
         }
     }
 
@@ -388,49 +397,7 @@ public final class HomeActivity extends Activity
         else if (requestCode == REQ_CONFIGURE) placePendingWidget();
     }
 
-    // ------------------------------------------------------------ RadialView.Listener
-
-    @Override
-    public void onLaunch(AppRepository.AppEntry app, Rect bounds) {
-        if (pickMode) {
-            Store store = Store.get(this);
-            String key = Store.key(app.component);
-            if (!store.isOnHome(key)) store.toggleHomeApp(key);
-            closeWheel();
-            grid.reload();
-            return;
-        }
-        Launcher.launch(this, app, bounds, home);
-        closeWheel();
-    }
-
-    @Override
-    public void onAppMenu(AppRepository.AppEntry app, String group) {
-        Menus.appMenu(this, app.component, app.label, group, () -> {
-            wheel.refresh();
-            strip.refresh();
-            grid.reload();
-        }, () -> {
-        });
-    }
-
-    @Override
-    public void onGroupMenu(String group) {
-        Menus.groupMenu(this, group, wheel::refresh, () -> {
-        });
-    }
-
-    @Override
-    public void onMoved(float cx, float cy) {
-    }
-
-    @Override
-    public void onClosed() {
-        pickMode = false;
-        home.wheelClosed();
-    }
-
-    // ------------------------------------------------------------ AlphaStripView.Listener
+    // ------------------------------------------------------------ alphabet
 
     @Override
     public void onStripLaunch(AppRepository.AppEntry app, Rect bounds) {
@@ -439,11 +406,29 @@ public final class HomeActivity extends Activity
 
     @Override
     public void onStripAppMenu(AppRepository.AppEntry app, String group) {
-        onAppMenu(app, group);
+        Menus.appMenu(this, app.component, app.label, group, this::refreshAll);
     }
 
     @Override
     public void onStripClosed() {
         home.stripClosed();
+    }
+
+    // ------------------------------------------------------------ dossiers
+
+    @Override
+    public void onFolderLaunch(AppRepository.AppEntry app, Rect bounds) {
+        Launcher.launch(this, app, bounds, home);
+    }
+
+    @Override
+    public void onFolderAppMenu(AppRepository.AppEntry app, String folder) {
+        folderWheel.close();
+        Menus.appMenu(this, app.component, app.label, folder, this::refreshAll);
+    }
+
+    @Override
+    public void onFolderClosed() {
+        home.folderClosed();
     }
 }

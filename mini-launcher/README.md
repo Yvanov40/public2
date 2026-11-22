@@ -1,70 +1,45 @@
 # Mini Launcher
 
-Un écran d'accueil sans icônes : les applis s'ouvrent avec une roue alphabétique, depuis
-les bords de l'écran. Utilisable aussi par-dessus un autre launcher (icône, widget, bulle).
+Un écran d'accueil Android épuré : les applis s'ouvrent depuis un alphabet vertical sur les
+bords de l'écran, et les dossiers de l'accueil s'ouvrent en cercle.
 
-## Écran d'accueil (launcher)
+Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini Launcher**
+(ou bouton dans les réglages de l'appli).
 
-Réglages > Applis par défaut > Écran d'accueil > **Mini Launcher** (ou bouton dans les
-réglages de l'appli).
+## Alphabet sur les bords
 
-- **Alphabet vertical sur les bords** (par défaut) : poser le doigt sur un bord et le
-  glisser de haut en bas ; la lettre sous le doigt s'allume et ses applis apparaissent à
-  côté. Glisser vers l'intérieur jusqu'à l'appli et lâcher. Lâcher sur l'alphabet laisse
-  les applis affichées pour un toucher. En haut ★ les favoris, en bas les groupes.
-  Effet loupe : les lettres proches du doigt grossissent.
-  Réglages : côté(s), hauteur et position de l'alphabet, loupe, couleur et opacité de la
-  zone, couleur des lettres, lettres toujours visibles, largeur de la zone tactile.
-- **Ou la roue sur les bords** (réglage « Bords de l'écran ») : poser le doigt ouvre la
-  roue sous le doigt ; on glisse jusqu'à l'appli et on lâche.
-- **Glisser vers le bas** au milieu : moitié gauche → notifications, moitié droite →
-  centre de contrôle (en mode roue, aussi depuis les bords).
-- **Appui long sur une zone vide** : ajouter une appli, ajouter un widget, fond d'écran,
-  réglages.
-- **Grille de 4 colonnes** sous l'horloge pour poser des applis et des widgets. Toucher une
-  appli l'ouvre. Appui long puis glisser : déplacer. Appui long sans bouger : retirer,
-  infos, ou taille (widgets). Les widgets reçoivent les touchers normalement ; la roue ne
-  s'ouvre que depuis les zones vides des bandes.
-- Depuis la roue, appui long sur une appli > « Ajouter à l'écran d'accueil ».
+- Poser le doigt sur un bord et le glisser de haut en bas : la lettre sous le doigt
+  grossit (effet loupe) et ses applis apparaissent à côté, en direct.
+- Glisser vers l'intérieur jusqu'à l'appli et lâcher. Lâcher sur l'alphabet laisse les
+  applis affichées pour un toucher.
+- En haut ★ les favoris (épinglés + plus utilisés), en bas les dossiers.
+- Appui long sur une appli : épingler, ajouter à un dossier, poser sur l'accueil, infos.
 
-## Volets (notifications / centre de contrôle)
+## Accueil
 
-Glisser vers le bas au milieu de l'accueil les ouvre par un appel direct à Android. Sur
-HyperOS, le centre de contrôle s'affiche parfois mal par ce biais ; glisser depuis la
-barre d'état, tout en haut à droite, ouvre toujours le vrai.
+- Horloge (toucher = alarmes) puis une grille d'applis, de dossiers et de widgets.
+- **Appui long sur une zone vide** : ajouter une appli, créer un dossier, ajouter un widget,
+  fond d'écran, réglages.
+- **Applis** : toucher = ouvrir ; appui long puis glisser = déplacer ; appui long sans
+  bouger = menu. Lâcher une appli sur une autre crée un dossier ; sur un dossier, elle y entre.
+- **Dossiers** : poser le doigt ouvre le dossier en cercle autour de lui ; glisser jusqu'à
+  l'appli et lâcher. Un simple toucher garde le cercle ouvert. Maintenir sans bouger :
+  déplacer le dossier, ou son menu (applis, renommer, retirer, supprimer).
+- **Widgets** : reçoivent les touchers ; appui long = déplacer, taille, régler, retirer.
+- **Glisser vers le bas** au milieu : à gauche les notifications, à droite le centre de
+  contrôle. Sur HyperOS, le centre de contrôle s'affiche parfois mal par ce biais ; glisser
+  depuis la barre d'état, tout en haut à droite, ouvre toujours le vrai.
 
-## Réglages (appui long sur une zone vide > Réglages du launcher)
+## Réglages
 
-- **Horloge** : afficher/masquer, taille, position, date. La toucher ouvre les alarmes.
-- **Grille** : colonnes (3–6), lignes (automatique ou 1–9), taille des icônes, noms.
-- **Bandes latérales** : largeur.
-- **Roue** : nombre de favoris, complément automatique, centre = dernière appli,
-  ouverture directe.
-- **Effets** : couleur, taille de la roue, assombrissement du fond, vitesse des
-  animations, temps d'arrêt pour ouvrir une lettre, vibrations.
-- Widgets : appui long > « Régler le widget » pour ceux qui ont un écran de réglages.
+Appui long sur une zone vide > Réglages du launcher (ou « Mini Launcher » dans le tiroir).
 
-## La roue
-
-- **Centre** : la dernière appli utilisée (un toucher la rouvre).
-- **Anneau des favoris** : les applis épinglées, complétées par les plus utilisées.
-- **Anneau des lettres** A–Z, # et des **groupes** (pastilles de couleur).
-- Glisser sur une lettre ou un groupe et s'y arrêter un instant ouvre ses applis sans lever
-  le doigt. Un coup de doigt rapide vers une lettre l'ouvre aussi.
-- Une lettre qui n'a qu'une appli la lance directement.
-- **Appui long sur une appli** : épingler en favori, ajouter à un groupe (ou en créer un),
-  retirer du groupe, infos de l'appli.
-- **Appui long au centre d'un groupe ouvert** : renommer ou supprimer le groupe.
-- Près d'un bord ou dans un coin, les anneaux deviennent des éventails.
-
-## Par-dessus un autre launcher
-
-- **Icône** : si le launcher ne transmet pas la position de l'icône, maintenir le centre
-  de la roue puis glisser pour la placer (mémorisé).
-- **Widget 1×1** : la roue s'ouvre exactement autour.
-- **Bulle flottante** (réglages) : visible par-dessus toutes les applis ; poser le doigt
-  dessus ouvre la roue, glisser jusqu'à l'appli, lâcher. Maintenir la bulle sans bouger
-  pour la déplacer. Demande l'autorisation « Afficher par-dessus les autres applis ».
+- Alphabet : côté(s), hauteur, position, effet loupe, couleur et opacité de la zone,
+  couleur des lettres, toujours visible, largeur de la zone tactile.
+- Horloge : afficher, taille, position, date.
+- Grille : colonnes, lignes, taille des icônes, noms.
+- Favoris : nombre, complément automatique.
+- Effets : couleur d'accent, assombrissement du fond, animations, vibrations.
 
 ## Installer
 
@@ -74,6 +49,6 @@ signature fixe dans `app/debug.keystore` : clé de test, pas pour le Play Store)
 
 ## Code
 
-Java sans dépendance. `RadialView` : la roue. `HomeView`/`HomeActivity` : le launcher.
-`BubbleService` : la bulle. `RadialActivity` : la roue lancée par l'icône ou le widget.
-`Store` : favoris, groupes, usage, réglages. `Menus` : appuis longs. `Shade` : volets.
+Java sans dépendance. `HomeActivity`/`HomeView` : le launcher et ses gestes. `HomeGrid` :
+la grille. `AlphaStripView` : l'alphabet. `FolderWheelView` : un dossier ouvert en cercle.
+`Store` : favoris, dossiers, accueil, réglages. `Menus` : appuis longs. `Shade` : volets.

@@ -155,6 +155,11 @@ final class HomeGrid extends FrameLayout {
                     items.remove(i);
                     changed = true;
                 }
+            } else if (it.folder != null) {
+                if (Store.find(store.groups(), it.folder) == null) {
+                    items.remove(i);
+                    changed = true;
+                }
             } else if (appsLoaded && !apps.containsKey(it.key)) {
                 items.remove(i);
                 changed = true;
@@ -180,7 +185,7 @@ final class HomeGrid extends FrameLayout {
         Set<View> kept = new HashSet<>();
         for (Store.HomeItem it : items) {
             if (it.col < 0) continue;
-            View v = it.widget ? widgetView(it) : appView(it);
+            View v = it.widget ? widgetView(it) : it.folder != null ? folderView(it) : appView(it);
             if (v == null) continue;
             LayoutParams lp = new LayoutParams((int) (it.w * cellW), (int) (it.h * cellH));
             lp.leftMargin = (int) (left + it.col * cellW);
@@ -204,6 +209,34 @@ final class HomeGrid extends FrameLayout {
         AppRepository.AppEntry app = apps.get(it.key);
         if (app == null) return null;
         return new AppIconView(getContext(), app, store.iconSize(), store.labels());
+    }
+
+    private View folderView(Store.HomeItem it) {
+        Store.Group g = Store.find(store.groups(), it.folder);
+        if (g == null) return null;
+        return new FolderIconView(getContext(), g.name, g.color, folderApps(g.name), store.iconSize(), store.labels());
+    }
+
+    /** Les applis d'un dossier, dans l'ordre alphabétique. */
+    List<AppRepository.AppEntry> folderApps(String name) {
+        List<AppRepository.AppEntry> out = new java.util.ArrayList<>();
+        Store.Group g = Store.find(store.groups(), name);
+        if (g == null) return out;
+        Set<String> members = new HashSet<>(g.apps);
+        for (AppRepository.AppEntry e : sortedApps()) {
+            if (members.contains(Store.key(e.component))) out.add(e);
+        }
+        return out;
+    }
+
+    /** Toutes les applis, dans l'ordre alphabétique. */
+    List<AppRepository.AppEntry> sortedApps() {
+        return lastList == null ? new java.util.ArrayList<>() : lastList;
+    }
+
+    int folderColor(String name) {
+        Store.Group g = Store.find(store.groups(), name);
+        return g == null ? 0xFF8FA6FF : g.color;
     }
 
     private AppWidgetHostView widgetView(Store.HomeItem it) {
@@ -314,7 +347,10 @@ final class HomeGrid extends FrameLayout {
 
     private Store.HomeItem same(Store.HomeItem it) {
         for (Store.HomeItem o : items) {
-            if (o.widget == it.widget && (it.widget ? o.widgetId == it.widgetId : o.key.equals(it.key))) return o;
+            if (o.widget != it.widget) continue;
+            if (it.widget ? o.widgetId == it.widgetId
+                    : it.folder != null ? it.folder.equals(o.folder)
+                    : o.folder == null && it.key != null && it.key.equals(o.key)) return o;
         }
         return null;
     }
@@ -365,13 +401,58 @@ final class HomeGrid extends FrameLayout {
         dragView.setTranslationY(y - dragStartY);
     }
 
-    /** Dépose l'élément sur la case la plus proche si elle est libre. */
-    void endDrag() {
+    /**
+     * Dépose l'élément. Une appli lâchée sur une autre appli crée un dossier ; sur un dossier,
+     * elle y entre. Sinon : la case la plus proche, si elle est libre.
+     */
+    void endDrag(float fx, float fy) {
         if (dragView == null) return;
         Store.HomeItem it = dragItem;
+        Store.HomeItem target = null;
+        if (!it.widget && it.folder == null) {
+            for (Map.Entry<View, Store.HomeItem> e : viewItems.entrySet()) {
+                View v = e.getKey();
+                Store.HomeItem o = e.getValue();
+                if (o == it || o.widget) continue;
+                if (fx >= v.getLeft() && fx < v.getRight() && fy >= v.getTop() && fy < v.getBottom()) target = o;
+            }
+        }
+        if (target != null) {
+            resetDragView();
+            if (target.folder != null) {
+                store.addToFolder(target.folder, it.key);
+            } else {
+                List<String> both = new java.util.ArrayList<>();
+                both.add(target.key);
+                both.add(it.key);
+                String name = store.freeFolderName("Dossier");
+                int col = target.col, row = target.row;
+                items.remove(target);
+                store.setHomeItems(items);
+                store.createFolder(name, both, col, row);
+                items = store.homeItems();
+            }
+            // L'appli déposée quitte l'accueil : elle est dans le dossier.
+            items = store.homeItems();
+            Store.HomeItem match = same(it);
+            if (match != null) items.remove(match);
+            store.setHomeItems(items);
+            rebuild();
+            return;
+        }
         float nx = dragView.getLeft() + dragView.getTranslationX();
         float ny = dragView.getTop() + dragView.getTranslationY();
         int col = Math.round((nx - left) / cellW), row = Math.round((ny - top) / cellH);
+        resetDragView();
+        if (fits(col, row, it.w, it.h, it)) {
+            it.col = col;
+            it.row = row;
+            store.setHomeItems(items);
+        }
+        rebuild();
+    }
+
+    private void resetDragView() {
         dragView.animate().cancel();
         dragView.setScaleX(1f);
         dragView.setScaleY(1f);
@@ -380,12 +461,18 @@ final class HomeGrid extends FrameLayout {
         dragView.setTranslationY(0);
         dragView = null;
         dragItem = null;
-        if (fits(col, row, it.w, it.h, it)) {
-            it.col = col;
-            it.row = row;
-            store.setHomeItems(items);
+    }
+
+    /** Centre d'un élément, en coordonnées de la grille. */
+    float[] centerOf(Store.HomeItem it) {
+        for (Map.Entry<View, Store.HomeItem> e : viewItems.entrySet()) {
+            if (e.getValue() == it) {
+                View v = e.getKey();
+                float iconCy = v.getTop() + v.getHeight() / 2f - (store.labels() ? 10 * dp : 0);
+                return new float[]{(v.getLeft() + v.getRight()) / 2f, iconCy};
+            }
         }
-        rebuild();
+        return null;
     }
 
     boolean isDragging() {
@@ -403,6 +490,60 @@ final class HomeGrid extends FrameLayout {
             for (int c = 0; c <= cols; c++) {
                 canvas.drawCircle(left + c * cellW, top + r * cellH, 2 * dp, p);
             }
+        }
+    }
+
+    /** Icône de dossier : pastille de couleur avec les 4 premières applis, et le nom. */
+    private static final class FolderIconView extends View {
+        private final String name;
+        private final int color;
+        private final List<AppRepository.AppEntry> apps;
+        private final int iconDp;
+        private final boolean showLabel;
+        private final float dp;
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final TextPaint label = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.RectF r = new android.graphics.RectF();
+
+        FolderIconView(Context c, String name, int color, List<AppRepository.AppEntry> apps, int iconDp, boolean showLabel) {
+            super(c);
+            this.name = name;
+            this.color = color;
+            this.apps = apps;
+            this.iconDp = iconDp;
+            this.showLabel = showLabel;
+            dp = getResources().getDisplayMetrics().density;
+            label.setColor(Color.WHITE);
+            label.setTextAlign(Paint.Align.CENTER);
+            label.setTextSize(12 * getResources().getDisplayMetrics().scaledDensity);
+            label.setShadowLayer(3 * dp, 0, dp, 0xCC000000);
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            float half = iconDp * dp / 2f;
+            float block = 2 * half + (showLabel ? 22 * dp : 0);
+            float cx = getWidth() / 2f, iy = Math.max(4 * dp, (getHeight() - block) / 2f) + half;
+            paint.setColor(0xCC1B1D26);
+            r.set(cx - half, iy - half, cx + half, iy + half);
+            canvas.drawRoundRect(r, half * 0.45f, half * 0.45f, paint);
+            paint.setColor(color);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(2 * dp);
+            canvas.drawRoundRect(r, half * 0.45f, half * 0.45f, paint);
+            paint.setStyle(Paint.Style.FILL);
+            float mini = half * 0.42f, gap = half * 0.08f;
+            for (int i = 0; i < Math.min(4, apps.size()); i++) {
+                Drawable d = apps.get(i).icon;
+                if (d == null) continue;
+                float mx = cx + (i % 2 == 0 ? -1 : 1) * (mini + gap / 2);
+                float my = iy + (i < 2 ? -1 : 1) * (mini + gap / 2);
+                d.setBounds((int) (mx - mini), (int) (my - mini), (int) (mx + mini), (int) (my + mini));
+                d.draw(canvas);
+            }
+            if (!showLabel) return;
+            CharSequence s = TextUtils.ellipsize(name, label, getWidth() - 8 * dp, TextUtils.TruncateAt.END);
+            canvas.drawText(s, 0, s.length(), cx, iy + half + 18 * dp, label);
         }
     }
 
