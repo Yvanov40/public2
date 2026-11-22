@@ -57,11 +57,19 @@ public final class SettingsActivity extends Activity {
                 startActivity(new Intent(Settings.ACTION_SETTINGS));
             }
         }));
-        note("Bandes à gauche et à droite = la roue (poser le doigt puis glisser jusqu'à l'appli). "
-                + "Glisser vers le bas : à gauche les notifications, à droite le centre de contrôle. "
-                + "Glisser vers le haut au milieu : la roue. Appui long sur une zone vide : ajouter une "
-                + "appli ou un widget.");
-        slider("Largeur des bandes latérales", 10, 40, store.band(), "%d %%", v -> store.setNum(Store.BAND, v));
+        choice("Bords de l'écran", new String[]{"Alphabet vertical", "Roue"}, store.edgeMode(),
+                i -> store.setNum(Store.EDGE, i));
+        note("Alphabet vertical : poser le doigt sur un bord et le glisser de haut en bas ; les "
+                + "applis de la lettre apparaissent à côté. Glisser vers l'intérieur jusqu'à l'appli et "
+                + "lâcher. En haut ★ les favoris, en bas les groupes. Roue : la roue s'ouvre sous le doigt.");
+        choice("Côté de l'alphabet", new String[]{"Les deux", "Gauche", "Droite"}, store.alphaSide(),
+                i -> store.setNum(Store.SIDE, i));
+        toggle("Lettres toujours visibles sur le bord", store.alphaVisible(),
+                on -> store.setFlag(Store.ALPHA_VISIBLE, on));
+        slider("Largeur de la zone tactile des bords", 8, 40, store.band(), "%d %%", v -> store.setNum(Store.BAND, v));
+        note("Glisser vers le bas au milieu de l'écran : à gauche les notifications, à droite le "
+                + "centre de contrôle. Glisser vers le haut au milieu : la roue. Appui long sur une zone "
+                + "vide : ajouter une appli ou un widget.");
 
         // ---------------------------------------------------------- horloge
         section("Horloge");

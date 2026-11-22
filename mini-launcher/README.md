@@ -8,10 +8,15 @@ les bords de l'écran. Utilisable aussi par-dessus un autre launcher (icône, wi
 Réglages > Applis par défaut > Écran d'accueil > **Mini Launcher** (ou bouton dans les
 réglages de l'appli).
 
-- **Bandes gauche et droite** (un quart de la largeur, presque toute la hauteur) : poser
-  le doigt ouvre la roue sous le doigt ; on glisse jusqu'à l'appli et on lâche — un seul
-  geste. Un simple toucher ouvre la roue et attend le doigt suivant.
-- **Glisser vers le bas** : moitié gauche → notifications, moitié droite → centre de contrôle.
+- **Alphabet vertical sur les bords** (par défaut) : poser le doigt sur un bord et le
+  glisser de haut en bas ; la lettre sous le doigt s'allume et ses applis apparaissent à
+  côté. Glisser vers l'intérieur jusqu'à l'appli et lâcher. Lâcher sur l'alphabet laisse
+  les applis affichées pour un toucher. En haut ★ les favoris, en bas les groupes.
+  Réglages : côté(s), lettres toujours visibles, largeur de la zone tactile.
+- **Ou la roue sur les bords** (réglage « Bords de l'écran ») : poser le doigt ouvre la
+  roue sous le doigt ; on glisse jusqu'à l'appli et on lâche.
+- **Glisser vers le bas** au milieu : moitié gauche → notifications, moitié droite →
+  centre de contrôle (en mode roue, aussi depuis les bords).
 - **Glisser vers le haut** au milieu : la roue (comme un tiroir d'applis).
 - **Appui long sur une zone vide** : ajouter une appli, ajouter un widget, fond d'écran,
   réglages.

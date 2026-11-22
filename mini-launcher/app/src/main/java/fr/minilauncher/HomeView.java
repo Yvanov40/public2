@@ -46,6 +46,8 @@ final class HomeView extends FrameLayout {
 
     private final RadialView wheel;
     private final HomeGrid grid;
+    private final AlphaStripView strip;
+    private boolean stripForwarding; // le geste en cours est transmis à l'alphabet
     private final Host host;
     private final float dp, slop;
     private final Paint edge = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -89,16 +91,18 @@ final class HomeView extends FrameLayout {
         }
     };
 
-    HomeView(Context context, RadialView wheel, HomeGrid grid, Host host) {
+    HomeView(Context context, RadialView wheel, HomeGrid grid, AlphaStripView strip, Host host) {
         super(context);
         this.wheel = wheel;
         this.grid = grid;
+        this.strip = strip;
         this.host = host;
         dp = getResources().getDisplayMetrics().density;
         slop = ViewConfiguration.get(context).getScaledTouchSlop() * 1.5f;
         edge.setColor(0x55FFFFFF);
         setWillNotDraw(false);
         addView(grid, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        addView(strip, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         addView(wheel, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         wheel.setVisibility(View.INVISIBLE);
     }
@@ -135,6 +139,18 @@ final class HomeView extends FrameLayout {
         return getWidth() * Store.get(getContext()).band() / 100f;
     }
 
+    /** Côté de l'alphabet sous x (0 si le mode alphabet n'y est pas actif). */
+    private int alphaSide(float x) {
+        if (Store.get(getContext()).edgeMode() != 0) return 0;
+        int side = x < getWidth() / 2f ? AlphaStripView.LEFT : AlphaStripView.RIGHT;
+        return (strip.sides() & side) != 0 ? side : 0;
+    }
+
+    void stripClosed() {
+        // Le geste en cours reste confié à l'alphabet jusqu'au lever du doigt.
+        invalidate();
+    }
+
     private boolean onClock(float x, float y) {
         return clockView != null && clockView.getVisibility() == View.VISIBLE
                 && x >= clockView.getLeft() && x < clockView.getRight()
@@ -146,6 +162,7 @@ final class HomeView extends FrameLayout {
         insets.set(in.getSystemWindowInsetLeft(), in.getSystemWindowInsetTop(),
                 in.getSystemWindowInsetRight(), in.getSystemWindowInsetBottom());
         grid.setSafe(insets);
+        strip.setSafe(insets);
         return super.onApplyWindowInsets(in);
     }
 
@@ -167,8 +184,8 @@ final class HomeView extends FrameLayout {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if (wheelActive) return;
-        // Repères discrets des deux bandes.
+        if (wheelActive || Store.get(getContext()).edgeMode() == 0) return;
+        // Repères discrets des deux bandes (mode roue).
         float h = getHeight();
         bar.set(5 * dp, h * 0.3f, 9 * dp, h * 0.7f);
         canvas.drawRoundRect(bar, 2 * dp, 2 * dp, edge);
@@ -179,6 +196,12 @@ final class HomeView extends FrameLayout {
     @Override
     public boolean dispatchTouchEvent(MotionEvent e) {
         if (wheelActive && !forwarding) return wheel.dispatchTouchEvent(e);
+        if (stripForwarding || (strip.isActive() && e.getActionMasked() == MotionEvent.ACTION_DOWN)) {
+            // L'alphabet a la main : tout le geste lui revient.
+            stripForwarding = e.getActionMasked() != MotionEvent.ACTION_UP
+                    && e.getActionMasked() != MotionEvent.ACTION_CANCEL;
+            return strip.handleTouch(e);
+        }
 
         float x = e.getX(), y = e.getY();
         switch (e.getActionMasked()) {
@@ -193,6 +216,13 @@ final class HomeView extends FrameLayout {
                 toChildren = touchedItem != null && touchedItem.widget;
                 inBand = x < bandWidth() || x > getWidth() - bandWidth();
                 if (toChildren) super.dispatchTouchEvent(e);
+                if (touchedItem == null && inBand && !onClock(x, y) && alphaSide(x) != 0) {
+                    // Mode alphabet : l'index s'ouvre tout de suite sous le doigt.
+                    decided = true;
+                    stripForwarding = true;
+                    strip.begin(alphaSide(x));
+                    return strip.handleTouch(e);
+                }
                 if (touchedItem == null && inBand && !onClock(x, y)) postDelayed(holdOpen, HOLD_MS);
                 postDelayed(longPress, LONG_PRESS_MS);
                 return true;

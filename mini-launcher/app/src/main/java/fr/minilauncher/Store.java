@@ -87,7 +87,12 @@ final class Store {
     static final String CLOCK = "clock", CLOCK_SIZE = "clockSize", CLOCK_ALIGN = "clockAlign",
             CLOCK_DATE = "clockDate", COLS = "cols", ROWS = "rows", ICON = "iconSize",
             LABELS = "labels", BAND = "band", ACCENT = "accent", DIM = "dim", SPEED = "speed",
-            DWELL = "dwell", HAPTIC = "haptic", WHEEL = "wheelScale", MAXFAV = "maxFav";
+            DWELL = "dwell", HAPTIC = "haptic", WHEEL = "wheelScale", MAXFAV = "maxFav",
+            EDGE = "edgeMode", SIDE = "alphaSide", ALPHA_VISIBLE = "alphaVisible";
+
+    int edgeMode() { return num(EDGE, 0); }                  // 0 alphabet vertical, 1 roue
+    int alphaSide() { return num(SIDE, 0); }                 // 0 les deux, 1 gauche, 2 droite
+    boolean alphaVisible() { return flag(ALPHA_VISIBLE, true); }
 
     boolean clock() { return flag(CLOCK, true); }
     int clockSize() { return num(CLOCK_SIZE, 60); }          // sp
@@ -97,7 +102,7 @@ final class Store {
     int rowsSetting() { return num(ROWS, 0); }               // 0 = automatique
     int iconSize() { return num(ICON, 52); }                 // dp
     boolean labels() { return flag(LABELS, true); }
-    int band() { return num(BAND, 25); }                     // % de la largeur
+    int band() { return num(BAND, 18); }                     // % de la largeur
     int accent() { return num(ACCENT, 0xFF8FA6FF); }
     int dimPercent() { return num(DIM, 65); }
     int speed() { return num(SPEED, 1); }                    // 0 aucune, 1 normale, 2 rapide, 3 lente

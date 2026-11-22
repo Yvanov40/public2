@@ -29,7 +29,8 @@ import java.util.List;
 import java.util.Locale;
 
 /** Le launcher : fond d'écran, horloge, grille d'applis et de widgets, et la roue sur les bords. */
-public final class HomeActivity extends Activity implements RadialView.Listener, HomeView.Host {
+public final class HomeActivity extends Activity
+        implements RadialView.Listener, HomeView.Host, AlphaStripView.Listener {
 
     private static final int HOST_ID = 1024;
     private static final int REQ_BIND = 1;
@@ -37,6 +38,7 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
 
     private RadialView wheel;
     private HomeGrid grid;
+    private AlphaStripView strip;
     private HomeView home;
     private AppRepository repository;
     private AppWidgetHost widgetHost;
@@ -54,6 +56,7 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
             if (isDestroyed()) return;
             wheel.setApps(apps);
             grid.setApps(apps);
+            strip.setApps(apps);
         }
     };
 
@@ -77,7 +80,9 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
         wheel.setListener(this);
         wheel.dismissNow();
         grid = new HomeGrid(this, widgetHost);
-        home = new HomeView(this, wheel, grid, this);
+        strip = new AlphaStripView(this);
+        strip.setListener(this);
+        home = new HomeView(this, wheel, grid, strip, this);
         home.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
@@ -91,6 +96,7 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
         repository = AppRepository.get(this);
         wheel.setApps(repository.cached());
         grid.setApps(repository.cached());
+        strip.setApps(repository.cached());
         grid.reload();
         BubbleService.sync(this);
     }
@@ -161,6 +167,8 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
         applyClockSettings();
         grid.reload();
         wheel.refresh();
+        strip.refresh();
+        home.invalidate();
         repository.refresh(callback);
     }
 
@@ -192,6 +200,7 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
     }
 
     private void closeWheel() {
+        strip.close();
         pickMode = false;
         wheel.dismissNow();
         home.wheelClosed();
@@ -399,6 +408,7 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
     public void onAppMenu(AppRepository.AppEntry app, String group) {
         Menus.appMenu(this, app.component, app.label, group, () -> {
             wheel.refresh();
+            strip.refresh();
             grid.reload();
         }, () -> {
         });
@@ -418,5 +428,22 @@ public final class HomeActivity extends Activity implements RadialView.Listener,
     public void onClosed() {
         pickMode = false;
         home.wheelClosed();
+    }
+
+    // ------------------------------------------------------------ AlphaStripView.Listener
+
+    @Override
+    public void onStripLaunch(AppRepository.AppEntry app, Rect bounds) {
+        Launcher.launch(this, app, bounds, home);
+    }
+
+    @Override
+    public void onStripAppMenu(AppRepository.AppEntry app, String group) {
+        onAppMenu(app, group);
+    }
+
+    @Override
+    public void onStripClosed() {
+        home.stripClosed();
     }
 }
