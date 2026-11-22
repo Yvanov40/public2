@@ -62,8 +62,8 @@ public final class SettingsActivity extends Activity {
         super.onResume();
         if (badgeApp != null) {
             TextView t = (TextView) ((LinearLayout) badgeApp.getChildAt(0)).getChildAt(0);
-            boolean installed = Badges.companionInstalled(this);
-            t.setText(installed ? "Ouvrir l'appli Pastilles" : "Appli Pastilles : non installée");
+            t.setText(Badges.accessGranted(this) ? "Accès aux notifications : activé ✓"
+                    : "Autoriser l'accès aux notifications");
         }
         // Retour de l'écran d'autorisation : le libellé suit l'état réel.
         if (usageAccess != null) {
@@ -180,16 +180,15 @@ public final class SettingsActivity extends Activity {
 
         // ---------------------------------------------------------- pastilles
         section("Pastilles de notification");
-        badgeApp = row("", null, accent);
+        badgeApp = row("", "Pour savoir quelles applis ont des notifications", accent);
         badgeApp.addView(chevron());
         clickable(badgeApp, v -> {
-            Intent open = getPackageManager().getLaunchIntentForPackage(Badges.COMPANION);
-            if (open != null) {
-                startActivity(open);
-            } else {
-                Toast.makeText(this, "Installe d'abord le fichier MiniLauncher-Pastilles.apk",
-                        Toast.LENGTH_LONG).show();
+            try {
+                startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
+            } catch (ActivityNotFoundException e) {
+                startActivity(new Intent(Settings.ACTION_SETTINGS));
             }
+            Toast.makeText(this, "Active « Mini Launcher »", Toast.LENGTH_LONG).show();
         });
         addRow(badgeApp);
         toggle("Afficher les pastilles", null, store.badges(), on -> store.setFlag(Store.BADGES, on));
@@ -199,9 +198,10 @@ public final class SettingsActivity extends Activity {
         colorChoice("Couleur", Badges.COLOR_NAMES, badgeSwatches,
                 store.badgeColor() == 0 ? accent : store.badgeColor(),
                 c -> store.setNum(Store.BADGE_COLOR, c == accent ? 0 : (0xFF000000 | c)));
-        note("Les pastilles viennent d'une petite appli séparée, « Mini Launcher – Pastilles », qui a "
-                + "l'accès aux notifications (le launcher, lui, ne l'a pas). Elle ne transmet que le "
-                + "nombre de notifications par appli.");
+        note("L'accès aux notifications sert seulement à compter les notifications de chaque appli ; "
+                + "leur contenu n'est ni lu ni gardé. S'il est grisé : Paramètres > Applis > Mini "
+                + "Launcher > ⋮ > « Autoriser les paramètres restreints ». Avec cet accès, Play Protect "
+                + "bloque l'installation des mises à jour : couper son analyse le temps de l'installation.");
 
         // ---------------------------------------------------------- horloge
         section("Horloge");

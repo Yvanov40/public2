@@ -33,11 +33,10 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
 
 ## Pastilles de notification
 
-Une petite appli séparée, « Mini Launcher – Pastilles » (module `badges`, fichier
-`MiniLauncher-Pastilles-<version>.apk`), a l'« Accès aux notifications » et n'envoie au
-launcher que le nombre de notifications par appli. Le launcher lui-même n'a pas cet accès
-(il empêchait son installation). Pastilles sur les applis et dossiers de l'accueil, dans le
-cercle des dossiers et dans l'alphabet. Réglages : afficher, style, couleur.
+Sur les applis et dossiers de l'accueil, dans le cercle des dossiers et dans l'alphabet. Il
+faut l'« Accès aux notifications » (Réglages > Pastilles) : il sert seulement à compter.
+Attention : Google Play Protect bloque l'installation hors Play Store d'une appli qui
+déclare cet accès ; couper l'analyse Play Protect le temps d'installer chaque version.
 
 ## Gestes
 

@@ -13,7 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Pastilles de notification : nombres par appli (envoyés par l'appli « Pastilles ») et dessin. */
+/** Pastilles de notification : nombres par appli (fournis par NotifService) et dessin. */
 final class Badges {
 
     private static Map<String, Integer> counts = Collections.emptyMap();
@@ -47,24 +47,15 @@ final class Badges {
         return connected;
     }
 
-    static final String COMPANION = "fr.minilauncher.badges";
-
-    /** L'appli « Pastilles » est-elle installée ? */
-    static boolean companionInstalled(Context c) {
-        try {
-            c.getPackageManager().getPackageInfo(COMPANION, 0);
-            return true;
-        } catch (Exception e) {
-            return false;
+    /** L'utilisateur a-t-il donné l'accès aux notifications ? */
+    static boolean accessGranted(Context c) {
+        ComponentName me = new ComponentName(c, NotifService.class);
+        if (android.os.Build.VERSION.SDK_INT >= 27) {
+            android.app.NotificationManager nm = c.getSystemService(android.app.NotificationManager.class);
+            if (nm != null) return nm.isNotificationListenerAccessGranted(me);
         }
-    }
-
-    /** Demande à l'appli « Pastilles » de renvoyer les nombres actuels. */
-    static void request(Context c) {
-        try {
-            c.sendBroadcast(new android.content.Intent(COMPANION + ".REQUEST").setPackage(COMPANION));
-        } catch (RuntimeException ignored) {
-        }
+        String flat = android.provider.Settings.Secure.getString(c.getContentResolver(), "enabled_notification_listeners");
+        return flat != null && flat.contains(me.flattenToString());
     }
 
     static int count(Context c, String pkg) {

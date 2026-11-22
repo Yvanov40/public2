@@ -7,4 +7,3 @@ dependencyResolutionManagement {
 }
 rootProject.name = "MiniLauncher"
 include(":app")
-include(":badges")

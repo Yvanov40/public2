@@ -260,7 +260,6 @@ public final class HomeActivity extends Activity
         }
         applyClockSettings();
         applyAppearance();
-        Badges.request(this);
         grid.reload();
         strip.refresh();
         home.invalidate();
