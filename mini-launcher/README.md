@@ -1,6 +1,6 @@
 # Mini Launcher
 
-Un écran d'accueil Android épuré : les applis s'ouvrent depuis un alphabet vertical sur les
+Un écran d'accueil Android épuré (portrait uniquement) : les applis s'ouvrent depuis un alphabet vertical sur les
 bords de l'écran, et les dossiers de l'accueil s'ouvrent en cercle.
 
 Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini Launcher**
@@ -39,6 +39,9 @@ Appui long sur une zone vide > Réglages du launcher (ou « Mini Launcher » dan
 - Horloge : afficher, taille, position, date.
 - Grille : colonnes, lignes, taille des icônes, noms.
 - Favoris : nombre, complément automatique.
+- Dossiers : fond et opacité du cercle, taille des icônes et du cercle, noms des applis,
+  bordure et fond de l'icône. Pour un dossier précis : maintenir puis lâcher sur place >
+  Personnaliser (couleur, style d'icône — grille, première appli, initiale —, forme).
 - Effets : couleur d'accent, assombrissement du fond, animations, vibrations.
 
 ## Installer

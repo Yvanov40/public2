@@ -44,6 +44,7 @@ final class FolderWheelView extends View {
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint band = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint text = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    private final TextPaint small = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final RectF oval = new RectF();
     private final Rect safe = new Rect();
     private final List<Spot> spots = new ArrayList<>();
@@ -74,6 +75,9 @@ final class FolderWheelView extends View {
         text.setColor(Color.WHITE);
         text.setTextAlign(Paint.Align.CENTER);
         text.setTextSize(13 * getResources().getDisplayMetrics().scaledDensity);
+        small.setColor(Color.WHITE);
+        small.setTextAlign(Paint.Align.CENTER);
+        small.setTextSize(10 * getResources().getDisplayMetrics().scaledDensity);
         setHapticFeedbackEnabled(true);
     }
 
@@ -136,10 +140,14 @@ final class FolderWheelView extends View {
         arcs.clear();
         int n = apps.size();
         if (n == 0) return;
-        float spacing = 60 * dp;
+        float scale = store.folderRadius() / 100f;
+        float icon = store.folderIcon() * dp;
+        boolean labels = store.folderLabels();
+        float spacing = Math.max(icon + 14 * dp, labels ? 70 * dp : 0);
+        float step = icon + (labels ? 38 : 22) * dp;
         int placed = 0;
-        float r = 88 * dp;
-        for (int guard = 0; placed < n && guard < 10; guard++, r += 68 * dp) {
+        float r = Math.max(60 * dp, 88 * dp * scale) + (icon - 46 * dp) / 2f;
+        for (int guard = 0; placed < n && guard < 10; guard++, r += step) {
             float[] arc = visibleArc(r);
             if (arc == null) continue;
             double len = Math.toRadians(arc[1]) * r;
@@ -147,17 +155,17 @@ final class FolderWheelView extends View {
             int take = Math.min(n - placed, Math.max(0, cap));
             if (take <= 0) continue;
             boolean full = arc[1] >= 360f;
-            float step = full ? 360f / take : (take > 1 ? arc[1] / (take - 1) : 0f);
+            float da = full ? 360f / take : (take > 1 ? arc[1] / (take - 1) : 0f);
             float first = full ? -90f : (take > 1 ? arc[0] : arc[0] + arc[1] / 2f);
             for (int i = 0; i < take; i++) {
-                double a = Math.toRadians(first + i * step);
+                double a = Math.toRadians(first + i * da);
                 Spot s = new Spot();
                 s.x = cx + (float) (r * Math.cos(a));
                 s.y = cy + (float) (r * Math.sin(a));
                 s.app = apps.get(placed + i);
                 spots.add(s);
             }
-            arcs.add(full ? new float[]{r, 0f, 360f} : new float[]{r, first, step * (take - 1)});
+            arcs.add(full ? new float[]{r, 0f, 360f} : new float[]{r, first, da * (take - 1)});
             placed += take;
         }
     }
@@ -193,7 +201,7 @@ final class FolderWheelView extends View {
 
     private int spotAt(float x, float y) {
         int best = -1;
-        double bestD = 36 * dp;
+        double bestD = Math.max(36 * dp, store.folderIcon() * dp * 0.75f);
         for (int i = 0; i < spots.size(); i++) {
             double d = Math.hypot(x - spots.get(i).x, y - spots.get(i).y);
             if (d < bestD) {
@@ -282,9 +290,11 @@ final class FolderWheelView extends View {
         float ease = 1f - (1f - t) * (1f - t);
         canvas.drawColor(Color.argb((int) (255 * store.dimPercent() / 100f * ease), 0, 0, 0));
 
-        band.setColor(0xF01B1D26);
-        band.setAlpha((int) (235 * ease));
-        band.setStrokeWidth(62 * dp);
+        boolean labels = store.folderLabels();
+        float iconPx = store.folderIcon() * dp;
+        band.setColor(0xFF000000 | store.folderBg());
+        band.setAlpha((int) (255 * store.folderBgAlpha() / 100f * ease));
+        band.setStrokeWidth(iconPx + (labels ? 34 : 16) * dp);
         for (float[] arc : arcs) {
             float r = arc[0] * (0.5f + 0.5f * ease);
             if (arc[2] >= 360f) {
@@ -295,7 +305,7 @@ final class FolderWheelView extends View {
             }
         }
 
-        float half = 23 * dp;
+        float half = iconPx / 2f;
         for (int i = 0; i < spots.size(); i++) {
             Spot s = spots.get(i);
             float k = Math.max(0f, Math.min(1f, ease * 1.4f - 0.4f * i / Math.max(1, spots.size())));
@@ -314,6 +324,11 @@ final class FolderWheelView extends View {
                 icon.setAlpha((int) (255 * k));
                 icon.draw(canvas);
                 icon.setAlpha(255);
+            }
+            if (labels) {
+                small.setAlpha((int) (255 * k));
+                CharSequence nm = TextUtils.ellipsize(s.app.label, small, 64 * dp, TextUtils.TruncateAt.END);
+                canvas.drawText(nm, 0, nm.length(), x, y + hh + 12 * dp, small);
             }
         }
 

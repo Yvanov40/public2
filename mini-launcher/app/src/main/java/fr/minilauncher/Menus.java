@@ -106,7 +106,7 @@ final class Menus {
     static void folderMenu(Activity a, String folder, List<AppRepository.AppEntry> apps, Runnable changed) {
         Store store = Store.get(a);
         boolean onHome = store.isFolderOnHome(folder);
-        String[] items = {"Choisir les applis…", "Renommer", onHome ? "Retirer de l'écran d'accueil"
+        String[] items = {"Choisir les applis…", "Personnaliser…", "Renommer", onHome ? "Retirer de l'écran d'accueil"
                 : "Mettre sur l'écran d'accueil", "Supprimer le dossier"};
         builder(a).setTitle(folder).setItems(items, (d, which) -> {
             switch (which) {
@@ -118,12 +118,15 @@ final class Menus {
                     });
                     break;
                 case 1:
+                    customizeFolder(a, folder, changed);
+                    break;
+                case 2:
                     askName(a, "Renommer le dossier", folder, name -> {
                         store.renameFolder(folder, name);
                         changed.run();
                     });
                     break;
-                case 2:
+                case 3:
                     store.toggleFolderOnHome(folder);
                     changed.run();
                     break;
@@ -136,6 +139,38 @@ final class Menus {
                             })
                             .setNegativeButton("Annuler", null)
                             .show();
+            }
+        }).show();
+    }
+
+    private static final String[] COLOR_NAMES = {"Orange", "Vert", "Rose", "Violet", "Bleu ciel", "Jaune",
+            "Anis", "Corail", "Bleu", "Blanc", "Gris"};
+    private static final int[] COLORS = {0xFFFFB86B, 0xFF7EE0A1, 0xFFFF8FA3, 0xFFC9A7FF, 0xFF6FD3FF,
+            0xFFFFE07A, 0xFFB3E36B, 0xFFFF9E7A, 0xFF8FA6FF, 0xFFFFFFFF, 0xFF9AA0AA};
+
+    /** Couleur, style d'icône et forme d'un dossier. */
+    static void customizeFolder(Activity a, String folder, Runnable changed) {
+        Store store = Store.get(a);
+        String[] items = {"Couleur", "Style de l'icône", "Forme"};
+        builder(a).setTitle("Personnaliser « " + folder + " »").setItems(items, (d, which) -> {
+            if (which == 0) {
+                builder(a).setTitle("Couleur").setItems(COLOR_NAMES, (d2, i) -> {
+                    store.customizeFolder(folder, COLORS[i], -1, -1);
+                    changed.run();
+                }).show();
+            } else if (which == 1) {
+                builder(a).setTitle("Style de l'icône")
+                        .setItems(new String[]{"Grille des 4 premières applis", "Première appli + nombre",
+                                "Initiale du dossier"}, (d2, i) -> {
+                            store.customizeFolder(folder, -1, i, -1);
+                            changed.run();
+                        }).show();
+            } else {
+                builder(a).setTitle("Forme")
+                        .setItems(new String[]{"Carré arrondi", "Rond"}, (d2, i) -> {
+                            store.customizeFolder(folder, -1, -1, i);
+                            changed.run();
+                        }).show();
             }
         }).show();
     }

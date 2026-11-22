@@ -24,6 +24,8 @@ final class Store {
     static final class Group {
         String name;
         int color;
+        int style;  // icône : 0 grille de 4, 1 première appli, 2 initiale
+        int shape;  // 0 carré arrondi, 1 rond
         final List<String> apps = new ArrayList<>();
 
         Group(String name, int color) {
@@ -82,6 +84,18 @@ final class Store {
             SIDE = "alphaSide", ALPHA_VISIBLE = "alphaVisible",
             STRIP_H = "stripHeight", STRIP_POS = "stripPos", ZOOM = "zoom",
             STRIP_BG = "stripBg", STRIP_ALPHA = "stripAlpha", STRIP_FG = "stripFg";
+
+    static final String F_BG = "folderBg", F_BG_ALPHA = "folderBgAlpha", F_ICON = "folderIcon",
+            F_RADIUS = "folderRadius", F_LABELS = "folderLabels", F_BORDER = "folderBorder",
+            F_TILE_ALPHA = "folderTile";
+
+    int folderBg() { return num(F_BG, 0x1B1D26); }           // fond du cercle (RVB)
+    int folderBgAlpha() { return num(F_BG_ALPHA, 92); }      // %
+    int folderIcon() { return num(F_ICON, 46); }             // dp
+    int folderRadius() { return num(F_RADIUS, 100); }        // %
+    boolean folderLabels() { return flag(F_LABELS, false); }
+    boolean folderBorder() { return flag(F_BORDER, true); }
+    int folderTile() { return num(F_TILE_ALPHA, 80); }       // opacité du fond de l'icône, %
 
     int stripHeight() { return num(STRIP_H, 55); }           // % de la hauteur utile
     int stripPos() { return num(STRIP_POS, 55); }            // centre, % de la hauteur utile
@@ -180,6 +194,8 @@ final class Store {
             for (int i = 0; i < a.length(); i++) {
                 JSONObject o = a.getJSONObject(i);
                 Group g = new Group(o.getString("name"), o.getInt("color"));
+                g.style = o.optInt("style", 0);
+                g.shape = o.optInt("shape", 0);
                 JSONArray apps = o.getJSONArray("apps");
                 for (int j = 0; j < apps.length(); j++) g.apps.add(apps.getString(j));
                 out.add(g);
@@ -196,6 +212,8 @@ final class Store {
                 JSONObject o = new JSONObject();
                 o.put("name", g.name);
                 o.put("color", g.color);
+                o.put("style", g.style);
+                o.put("shape", g.shape);
                 o.put("apps", new JSONArray(g.apps));
                 a.put(o);
             }
@@ -305,6 +323,17 @@ final class Store {
         it.row = row;
         items.add(it);
         setHomeItems(items);
+    }
+
+    /** Personnalisation d'un dossier ; -1 = inchangé. */
+    void customizeFolder(String name, int color, int style, int shape) {
+        List<Group> gs = groups();
+        Group g = find(gs, name);
+        if (g == null) return;
+        if (color != -1) g.color = color;
+        if (style != -1) g.style = style;
+        if (shape != -1) g.shape = shape;
+        setGroups(gs);
     }
 
     void addToFolder(String name, String key) {

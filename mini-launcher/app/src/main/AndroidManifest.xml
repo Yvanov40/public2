@@ -23,6 +23,7 @@
         <activity
             android:name=".HomeActivity"
             android:exported="true"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.Home"
             android:launchMode="singleTask"
             android:stateNotNeeded="true"
@@ -40,6 +41,7 @@
         <activity
             android:name=".SettingsActivity"
             android:exported="true"
+            android:screenOrientation="portrait"
             android:label="@string/settings_name"
             android:theme="@android:style/Theme.Material.NoActionBar"
             android:taskAffinity="fr.minilauncher.reglages"

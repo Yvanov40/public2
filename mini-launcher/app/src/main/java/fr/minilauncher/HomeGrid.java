@@ -214,7 +214,7 @@ final class HomeGrid extends FrameLayout {
     private View folderView(Store.HomeItem it) {
         Store.Group g = Store.find(store.groups(), it.folder);
         if (g == null) return null;
-        return new FolderIconView(getContext(), g.name, g.color, folderApps(g.name), store.iconSize(), store.labels());
+        return new FolderIconView(getContext(), g, folderApps(g.name), store);
     }
 
     /** Les applis d'un dossier, dans l'ordre alphabétique. */
@@ -493,30 +493,38 @@ final class HomeGrid extends FrameLayout {
         }
     }
 
-    /** Icône de dossier : pastille de couleur avec les 4 premières applis, et le nom. */
+    /**
+     * Icône de dossier, selon sa personnalisation : grille des 4 premières applis, première
+     * appli avec le nombre, ou initiale ; carré arrondi ou rond ; bordure de sa couleur.
+     */
     private static final class FolderIconView extends View {
-        private final String name;
-        private final int color;
+        private final Store.Group g;
         private final List<AppRepository.AppEntry> apps;
         private final int iconDp;
-        private final boolean showLabel;
+        private final boolean showLabel, border;
+        private final int tileAlpha;
         private final float dp;
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final TextPaint label = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private final TextPaint big = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         private final android.graphics.RectF r = new android.graphics.RectF();
+        private final Rect tb = new Rect();
 
-        FolderIconView(Context c, String name, int color, List<AppRepository.AppEntry> apps, int iconDp, boolean showLabel) {
+        FolderIconView(Context c, Store.Group g, List<AppRepository.AppEntry> apps, Store store) {
             super(c);
-            this.name = name;
-            this.color = color;
+            this.g = g;
             this.apps = apps;
-            this.iconDp = iconDp;
-            this.showLabel = showLabel;
+            iconDp = store.iconSize();
+            showLabel = store.labels();
+            border = store.folderBorder();
+            tileAlpha = (int) (255 * store.folderTile() / 100f);
             dp = getResources().getDisplayMetrics().density;
             label.setColor(Color.WHITE);
             label.setTextAlign(Paint.Align.CENTER);
             label.setTextSize(12 * getResources().getDisplayMetrics().scaledDensity);
             label.setShadowLayer(3 * dp, 0, dp, 0xCC000000);
+            big.setTextAlign(Paint.Align.CENTER);
+            big.setFakeBoldText(true);
         }
 
         @Override
@@ -524,25 +532,62 @@ final class HomeGrid extends FrameLayout {
             float half = iconDp * dp / 2f;
             float block = 2 * half + (showLabel ? 22 * dp : 0);
             float cx = getWidth() / 2f, iy = Math.max(4 * dp, (getHeight() - block) / 2f) + half;
-            paint.setColor(0xCC1B1D26);
+            float corner = g.shape == 1 ? half : half * 0.45f;
             r.set(cx - half, iy - half, cx + half, iy + half);
-            canvas.drawRoundRect(r, half * 0.45f, half * 0.45f, paint);
-            paint.setColor(color);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(2 * dp);
-            canvas.drawRoundRect(r, half * 0.45f, half * 0.45f, paint);
-            paint.setStyle(Paint.Style.FILL);
-            float mini = half * 0.42f, gap = half * 0.08f;
-            for (int i = 0; i < Math.min(4, apps.size()); i++) {
-                Drawable d = apps.get(i).icon;
-                if (d == null) continue;
-                float mx = cx + (i % 2 == 0 ? -1 : 1) * (mini + gap / 2);
-                float my = iy + (i < 2 ? -1 : 1) * (mini + gap / 2);
-                d.setBounds((int) (mx - mini), (int) (my - mini), (int) (mx + mini), (int) (my + mini));
-                d.draw(canvas);
+
+            if (g.style == 2) {
+                // Initiale sur une pastille de la couleur du dossier.
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(g.color);
+                canvas.drawRoundRect(r, corner, corner, paint);
+                big.setColor(0xFF111320);
+                big.setTextSize(half * 0.95f);
+                String s = g.name.isEmpty() ? "?" : g.name.substring(0, 1).toUpperCase();
+                big.getTextBounds(s, 0, s.length(), tb);
+                canvas.drawText(s, cx, iy + tb.height() / 2f - tb.bottom, big);
+            } else {
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(0xFF1B1D26);
+                paint.setAlpha(tileAlpha);
+                canvas.drawRoundRect(r, corner, corner, paint);
+                if (border) {
+                    paint.setColor(g.color);
+                    paint.setStyle(Paint.Style.STROKE);
+                    paint.setStrokeWidth(2 * dp);
+                    canvas.drawRoundRect(r, corner, corner, paint);
+                    paint.setStyle(Paint.Style.FILL);
+                }
+                if (g.style == 1) {
+                    // Première appli en grand, nombre d'applis en pastille.
+                    if (!apps.isEmpty() && apps.get(0).icon != null) {
+                        float m = half * 0.72f;
+                        Drawable d = apps.get(0).icon;
+                        d.setBounds((int) (cx - m), (int) (iy - m), (int) (cx + m), (int) (iy + m));
+                        d.draw(canvas);
+                    }
+                    float br = half * 0.36f;
+                    float bx = cx + half - br * 0.6f, by = iy - half + br * 0.6f;
+                    paint.setColor(g.color);
+                    canvas.drawCircle(bx, by, br, paint);
+                    big.setColor(0xFF111320);
+                    big.setTextSize(br * 1.1f);
+                    String n = String.valueOf(apps.size());
+                    big.getTextBounds(n, 0, n.length(), tb);
+                    canvas.drawText(n, bx, by + tb.height() / 2f - tb.bottom, big);
+                } else {
+                    float mini = half * 0.42f, gap = half * 0.08f;
+                    for (int i = 0; i < Math.min(4, apps.size()); i++) {
+                        Drawable d = apps.get(i).icon;
+                        if (d == null) continue;
+                        float mx = cx + (i % 2 == 0 ? -1 : 1) * (mini + gap / 2);
+                        float my = iy + (i < 2 ? -1 : 1) * (mini + gap / 2);
+                        d.setBounds((int) (mx - mini), (int) (my - mini), (int) (mx + mini), (int) (my + mini));
+                        d.draw(canvas);
+                    }
+                }
             }
             if (!showLabel) return;
-            CharSequence s = TextUtils.ellipsize(name, label, getWidth() - 8 * dp, TextUtils.TruncateAt.END);
+            CharSequence s = TextUtils.ellipsize(g.name, label, getWidth() - 8 * dp, TextUtils.TruncateAt.END);
             canvas.drawText(s, 0, s.length(), cx, iy + half + 18 * dp, label);
         }
     }

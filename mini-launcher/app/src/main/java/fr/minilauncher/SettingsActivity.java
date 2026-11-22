@@ -109,6 +109,23 @@ public final class SettingsActivity extends Activity {
                 + "l'accueil. Sur l'accueil, lâcher une appli sur une autre crée un dossier. Poser le "
                 + "doigt sur un dossier l'ouvre en cercle : glisser jusqu'à l'appli et lâcher.");
 
+        // ---------------------------------------------------------- dossiers
+        section("Dossiers");
+        note("Pour un dossier en particulier (couleur, style, forme) : maintenir le dossier puis "
+                + "lâcher sur place > Personnaliser.");
+        choiceColor("Fond du cercle", ZONE_NAMES, ZONE_COLORS, store.folderBg(),
+                c -> store.setNum(Store.F_BG, c));
+        slider("Opacité du fond du cercle", 0, 100, store.folderBgAlpha(), "%d %%",
+                v -> store.setNum(Store.F_BG_ALPHA, v));
+        slider("Taille des icônes dans le cercle", 34, 64, store.folderIcon(), "%d dp",
+                v -> store.setNum(Store.F_ICON, v));
+        slider("Taille du cercle", 70, 140, store.folderRadius(), "%d %%",
+                v -> store.setNum(Store.F_RADIUS, v));
+        toggle("Noms des applis dans le cercle", store.folderLabels(), on -> store.setFlag(Store.F_LABELS, on));
+        toggle("Bordure de couleur sur l'icône", store.folderBorder(), on -> store.setFlag(Store.F_BORDER, on));
+        slider("Opacité du fond de l'icône", 0, 100, store.folderTile(), "%d %%",
+                v -> store.setNum(Store.F_TILE_ALPHA, v));
+
         // ---------------------------------------------------------- effets
         section("Effets");
         accentChoice();
