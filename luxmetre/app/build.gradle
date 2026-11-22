@@ -5,10 +5,10 @@ android {
     compileSdk 35
     defaultConfig {
         applicationId 'fr.luxmetre'
-        minSdk 21
+        minSdk 23
         targetSdk 35
-        versionCode 2
-        versionName '1.1'
+        versionCode 3
+        versionName '1.2'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

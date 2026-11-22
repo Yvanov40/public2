@@ -1,6 +1,13 @@
 package fr.luxmetre;
 
+import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
+import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.hardware.Sensor;
@@ -30,6 +37,10 @@ public class MainActivity extends Activity implements SensorEventListener {
     private float min = Float.MAX_VALUE;
     private float max = 0f;
     private String infoCapteur = "";
+
+    private TextView libelleFiltre;
+    private Button boutonFiltre;
+    private boolean activerApresPermission = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,7 +80,13 @@ public class MainActivity extends Activity implements SensorEventListener {
         racine.addView(ambiance);
         racine.addView(extremes);
         racine.addView(raz, lp);
-        setContentView(racine);
+        ajouterFiltre(racine);
+
+        ScrollView defilement = new ScrollView(this);
+        defilement.setFillViewport(true);
+        defilement.setBackgroundColor(Color.rgb(0x14, 0x18, 0x20));
+        defilement.addView(racine);
+        setContentView(defilement);
 
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         lightSensor = sensorManager == null ? null : sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
@@ -86,9 +103,86 @@ public class MainActivity extends Activity implements SensorEventListener {
         }
     }
 
+    /** Curseur et bouton du filtre qui assombrit tout l'écran. */
+    private void ajouterFiltre(LinearLayout racine) {
+        TextView titre = texte("Assombrir l'écran", 20, Color.WHITE);
+        titre.setPadding(0, dp(48), 0, dp(4));
+        TextView aide = texte("Voile noir sur tout le téléphone, pour descendre\nsous la luminosité minimale. "
+                + "Mettez d'abord la luminosité du téléphone au minimum.", 14, Color.rgb(0x80, 0x88, 0x98));
+        libelleFiltre = texte("", 18, Color.rgb(0xFF, 0xC8, 0x3D));
+        libelleFiltre.setPadding(0, dp(16), 0, 0);
+
+        SeekBar curseur = new SeekBar(this);
+        curseur.setMax(FiltreService.NIVEAU_MAX);
+        curseur.setProgress(Reglages.niveau(this));
+        curseur.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar sb, int niveau, boolean parUtilisateur) {
+                Reglages.setNiveau(MainActivity.this, niveau);
+                majFiltre();
+                if (parUtilisateur && FiltreService.actif) FiltreService.regler(MainActivity.this, niveau);
+            }
+            @Override public void onStartTrackingTouch(SeekBar sb) { }
+            @Override public void onStopTrackingTouch(SeekBar sb) { }
+        });
+        LinearLayout.LayoutParams lpCurseur = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lpCurseur.topMargin = dp(8);
+
+        boutonFiltre = new Button(this);
+        boutonFiltre.setOnClickListener(v -> {
+            if (FiltreService.actif) {
+                FiltreService.arreter(this);
+                FiltreService.actif = false;
+                majFiltre();
+            } else {
+                activerFiltre();
+            }
+        });
+        LinearLayout.LayoutParams lpBouton = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lpBouton.topMargin = dp(16);
+        lpBouton.gravity = Gravity.CENTER_HORIZONTAL;
+
+        racine.addView(titre);
+        racine.addView(aide);
+        racine.addView(libelleFiltre);
+        racine.addView(curseur, lpCurseur);
+        racine.addView(boutonFiltre, lpBouton);
+        majFiltre();
+    }
+
+    private void activerFiltre() {
+        if (!Settings.canDrawOverlays(this)) {
+            activerApresPermission = true;
+            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName())));
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
+        }
+        FiltreService.regler(this, Reglages.niveau(this));
+        FiltreService.actif = true;
+        Reglages.setActif(this, true);
+        majFiltre();
+    }
+
+    private void majFiltre() {
+        if (libelleFiltre == null) return;
+        libelleFiltre.setText("Filtre : " + Reglages.niveau(this) + " %");
+        boutonFiltre.setText(FiltreService.actif ? "Désactiver le filtre" : "Activer le filtre");
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        if (activerApresPermission) {
+            activerApresPermission = false;
+            if (Settings.canDrawOverlays(this)) activerFiltre();
+        }
+        majFiltre();
         if (lightSensor != null) {
             sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_UI);
         }
