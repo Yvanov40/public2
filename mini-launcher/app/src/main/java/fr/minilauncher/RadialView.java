@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.text.TextPaint;
 import android.text.TextUtils;
@@ -64,13 +65,18 @@ final class RadialView extends View {
     private final TextPaint label = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Rect safe = new Rect();
     private final Rect tmp = new Rect();
+    private final RectF oval = new RectF();
 
     private Listener listener;
     private final Map<String, List<AppRepository.AppEntry>> byLetter = new HashMap<>();
 
     private Rect anchor;
     private int mode = MODE_LETTERS;
-    private float cx, cy, ringR;
+    private float cx, cy;
+    // Position de chaque lettre (rayon et angle en degrés), et arcs de fond à dessiner.
+    private final float[] letterRad = new float[LETTERS.length];
+    private final float[] letterAng = new float[LETTERS.length];
+    private final List<float[]> arcs = new ArrayList<>(); // {rayon, début, balayage}
     private int hoverLetter = HIT_NONE;
     private String letter;
     private int page;
@@ -212,10 +218,6 @@ final class RadialView extends View {
     private void layoutCenter() {
         int w = getWidth(), h = getHeight();
         if (w == 0 || h == 0) return;
-        float m = 8 * dp, letterR = 16 * dp;
-        float left = safe.left + m, top = safe.top + m;
-        float right = w - safe.right - m, bottom = h - safe.bottom - m;
-        ringR = Math.max(60 * dp, Math.min(135 * dp, Math.min(right - left, bottom - top) / 2f - letterR));
         float ax = w / 2f, ay = h * 0.62f;
         if (anchor != null) {
             int[] loc = new int[2];
@@ -223,12 +225,98 @@ final class RadialView extends View {
             ax = anchor.exactCenterX() - loc[0];
             ay = anchor.exactCenterY() - loc[1];
         }
-        float ext = ringR + letterR;
-        cx = clamp(ax, left + ext, right - ext);
-        cy = clamp(ay, top + ext, bottom - ext);
+        // Le centre reste sur l'icône (juste assez à l'intérieur pour que le rond central se voie).
+        float in = 30 * dp;
+        cx = clamp(ax, safe.left + in, w - safe.right - in);
+        cy = clamp(ay, safe.top + in, h - safe.bottom - in);
+        layoutLetters();
         band.setStrokeWidth(40 * dp);
         if (mode == MODE_APPS) buildCells();
         invalidate();
+    }
+
+    /**
+     * Répartit les lettres autour de l'icône. Au milieu de l'écran : un cercle complet.
+     * Près d'un bord : un éventail sur la partie visible du cercle. Dans un coin, si un arc
+     * ne suffit pas : plusieurs arcs concentriques.
+     */
+    private void layoutLetters() {
+        arcs.clear();
+        float spacing = 31 * dp;
+        int n = LETTERS.length;
+
+        // D'abord : un seul anneau, le plus petit possible qui contient les 27 lettres.
+        for (float r = 105 * dp; r <= 150 * dp; r += 3 * dp) {
+            float[] arc = visibleArc(r);
+            if (arc != null && capacity(r, arc[1], spacing) >= n) {
+                placeOnArc(0, n, r, arc);
+                return;
+            }
+        }
+        // Sinon : plusieurs anneaux, du plus proche au plus éloigné.
+        int placed = 0;
+        float r = 90 * dp;
+        for (int guard = 0; placed < n && guard < 12; guard++, r += 42 * dp) {
+            float[] arc = visibleArc(r);
+            if (arc == null) continue;
+            int take = Math.min(n - placed, capacity(r, arc[1], spacing));
+            if (take <= 0) continue;
+            placeOnArc(placed, take, r, arc);
+            placed += take;
+        }
+        // Filet de sécurité (écran minuscule) : le reste sur le dernier cercle.
+        for (int i = placed; i < n; i++) {
+            letterRad[i] = r;
+            letterAng[i] = -90 + 360f * i / n;
+        }
+    }
+
+    private int capacity(float r, float sweep, float spacing) {
+        double len = Math.toRadians(sweep) * r;
+        return sweep >= 360f ? (int) (len / spacing) : (int) (len / spacing) + 1;
+    }
+
+    private void placeOnArc(int from, int count, float r, float[] arc) {
+        float start = arc[0], sweep = arc[1];
+        boolean full = sweep >= 360f;
+        float step = full ? 360f / count : (count > 1 ? sweep / (count - 1) : 0f);
+        float first = full ? -90f : (count > 1 ? start : start + sweep / 2f);
+        for (int i = 0; i < count; i++) {
+            letterRad[from + i] = r;
+            letterAng[from + i] = first + i * step;
+        }
+        if (full) arcs.add(new float[]{r, 0f, 360f});
+        else arcs.add(new float[]{r, first, step * (count - 1)});
+    }
+
+    /** Plus grande portion du cercle de rayon r qui tient dans l'écran : {début, balayage} en degrés. */
+    private float[] visibleArc(float r) {
+        float m = 20 * dp;
+        float left = safe.left + m, top = safe.top + m;
+        float right = getWidth() - safe.right - m, bottom = getHeight() - safe.bottom - m;
+        boolean[] ok = new boolean[360];
+        int count = 0;
+        for (int a = 0; a < 360; a++) {
+            double t = Math.toRadians(a);
+            float x = cx + (float) (r * Math.cos(t)), y = cy + (float) (r * Math.sin(t));
+            ok[a] = x >= left && x <= right && y >= top && y <= bottom;
+            if (ok[a]) count++;
+        }
+        if (count == 360) return new float[]{-90f, 360f};
+        if (count == 0) return null;
+        int bestStart = 0, bestLen = 0;
+        for (int a = 0; a < 360; a++) {
+            if (!ok[a] || ok[(a + 359) % 360]) continue; // début d'une plage visible
+            int len = 0;
+            while (len < 360 && ok[(a + len) % 360]) len++;
+            if (len > bestLen) {
+                bestLen = len;
+                bestStart = a;
+            }
+        }
+        // Une petite marge à chaque bout de l'arc.
+        if (bestLen > 4) return new float[]{bestStart + 1, bestLen - 3};
+        return new float[]{bestStart, Math.max(0, bestLen - 1)};
     }
 
     /** Place les applis en nid d'abeille autour du centre, en restant dans l'écran. */
@@ -317,17 +405,23 @@ final class RadialView extends View {
 
     private void drawLetters(Canvas canvas) {
         float p = progress;
-        float r = ringR * (0.55f + 0.45f * p);
+        float grow = 0.55f + 0.45f * p;
         int alpha = (int) (255 * clamp(p, 0f, 1f));
 
         band.setAlpha((int) (Color.alpha(COLOR_PANEL) * clamp(p, 0f, 1f)));
-        canvas.drawCircle(cx, cy, r, band);
+        for (float[] arc : arcs) {
+            float r = arc[0] * grow;
+            if (arc[2] >= 360f) {
+                canvas.drawCircle(cx, cy, r, band);
+            } else {
+                oval.set(cx - r, cy - r, cx + r, cy + r);
+                canvas.drawArc(oval, arc[1], arc[2], false, band);
+            }
+        }
 
         float letterSize = 15 * dp;
         for (int i = 0; i < LETTERS.length; i++) {
-            double a = Math.toRadians(-90 + i * 360.0 / LETTERS.length);
-            float x = cx + (float) (r * Math.cos(a));
-            float y = cy + (float) (r * Math.sin(a));
+            float x = letterX(i, grow), y = letterY(i, grow);
             boolean available = byLetter.containsKey(LETTERS[i]);
             boolean hover = i == hoverLetter;
             if (hover) {
@@ -424,15 +518,26 @@ final class RadialView extends View {
 
     // ---------------------------------------------------------------- toucher
 
+    private float letterX(int i, float grow) {
+        return cx + (float) (letterRad[i] * grow * Math.cos(Math.toRadians(letterAng[i])));
+    }
+
+    private float letterY(int i, float grow) {
+        return cy + (float) (letterRad[i] * grow * Math.sin(Math.toRadians(letterAng[i])));
+    }
+
     private int letterAt(float x, float y) {
-        float dx = x - cx, dy = y - cy;
-        double d = Math.hypot(dx, dy);
-        if (d < 34 * dp) return HIT_CENTER;
-        if (d > ringR + 60 * dp) return HIT_NONE;
-        double ang = Math.toDegrees(Math.atan2(dy, dx)) + 90;
-        if (ang < 0) ang += 360;
-        double step = 360.0 / LETTERS.length;
-        return (int) Math.round(ang / step) % LETTERS.length;
+        if (Math.hypot(x - cx, y - cy) < 34 * dp) return HIT_CENTER;
+        int best = HIT_NONE;
+        double bestD = 34 * dp;
+        for (int i = 0; i < LETTERS.length; i++) {
+            double d = Math.hypot(x - letterX(i, 1f), y - letterY(i, 1f));
+            if (d < bestD) {
+                bestD = d;
+                best = i;
+            }
+        }
+        return best;
     }
 
     private int cellAt(float x, float y) {
