@@ -173,6 +173,77 @@ final class Store {
         prefs.edit().putString("groups", a.toString()).apply();
     }
 
+    // ------------------------------------------------------------ écran d'accueil
+
+    /** Une appli ou un widget posé sur l'écran d'accueil. col < 0 : à placer. */
+    static final class HomeItem {
+        boolean widget;
+        String key;      // appli : composant
+        int widgetId;    // widget : identifiant Android
+        int col = -1, row = -1, w = 1, h = 1;
+    }
+
+    List<HomeItem> homeItems() {
+        List<HomeItem> out = new ArrayList<>();
+        try {
+            JSONArray a = new JSONArray(prefs.getString("home", "[]"));
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject o = a.getJSONObject(i);
+                HomeItem it = new HomeItem();
+                it.widget = o.optBoolean("widget");
+                it.key = o.optString("key", null);
+                it.widgetId = o.optInt("id", -1);
+                it.col = o.optInt("col", -1);
+                it.row = o.optInt("row", -1);
+                it.w = o.optInt("w", 1);
+                it.h = o.optInt("h", 1);
+                out.add(it);
+            }
+        } catch (JSONException ignored) {
+        }
+        return out;
+    }
+
+    void setHomeItems(List<HomeItem> items) {
+        JSONArray a = new JSONArray();
+        try {
+            for (HomeItem it : items) {
+                JSONObject o = new JSONObject();
+                o.put("widget", it.widget);
+                if (it.key != null) o.put("key", it.key);
+                o.put("id", it.widgetId);
+                o.put("col", it.col);
+                o.put("row", it.row);
+                o.put("w", it.w);
+                o.put("h", it.h);
+                a.put(o);
+            }
+        } catch (JSONException ignored) {
+        }
+        prefs.edit().putString("home", a.toString()).apply();
+    }
+
+    boolean isOnHome(String key) {
+        for (HomeItem it : homeItems()) if (!it.widget && key.equals(it.key)) return true;
+        return false;
+    }
+
+    /** Ajoute une appli à l'accueil (placée à la première case libre) ou l'en retire. */
+    void toggleHomeApp(String key) {
+        List<HomeItem> items = homeItems();
+        for (HomeItem it : items) {
+            if (!it.widget && key.equals(it.key)) {
+                items.remove(it);
+                setHomeItems(items);
+                return;
+            }
+        }
+        HomeItem it = new HomeItem();
+        it.key = key;
+        items.add(it);
+        setHomeItems(items);
+    }
+
     static Group find(List<Group> groups, String name) {
         for (Group g : groups) if (g.name.equals(name)) return g;
         return null;

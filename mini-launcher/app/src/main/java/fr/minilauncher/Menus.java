@@ -38,6 +38,12 @@ final class Menus {
             changed.run();
             done.run();
         });
+        labels.add(store.isOnHome(key) ? "Retirer de l'écran d'accueil" : "Ajouter à l'écran d'accueil");
+        actions.add(() -> {
+            store.toggleHomeApp(key);
+            changed.run();
+            done.run();
+        });
         labels.add("Ajouter à un groupe…");
         actions.add(() -> chooseGroup(a, key, changed, done));
         if (group != null) {

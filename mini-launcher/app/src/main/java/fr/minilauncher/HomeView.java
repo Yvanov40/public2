@@ -7,8 +7,11 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Build;
 import android.os.SystemClock;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
+import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.WindowInsets;
 import android.widget.FrameLayout;
 
 import java.util.ArrayList;
@@ -19,10 +22,12 @@ import java.util.List;
  *
  * - Glisser vers le bas : moitié gauche → notifications, moitié droite → centre de contrôle.
  * - Bandes latérales (un quart de la largeur de chaque côté, presque toute la hauteur) :
- *   poser le doigt ouvre la roue dessous, et le même geste continue jusqu'à l'appli.
- *   Glisser vers l'intérieur l'ouvre tout de suite.
+ *   poser le doigt sur une zone vide ouvre la roue dessous, et le même geste continue
+ *   jusqu'à l'appli. Glisser vers l'intérieur l'ouvre tout de suite.
  * - Glisser vers le haut au milieu : la roue, comme un tiroir d'applis.
- * - Appui long au milieu : les réglages.
+ * - Appui long sur une zone vide : le menu de l'accueil (ajouter appli/widget…).
+ * - Applis posées : toucher = ouvrir ; appui long = déplacer (ou menu si on ne bouge pas).
+ * - Widgets : reçoivent les touchers normalement ; appui long = déplacer ou menu.
  */
 final class HomeView extends FrameLayout {
 
@@ -30,51 +35,82 @@ final class HomeView extends FrameLayout {
         void onShade(boolean controlCenter);
 
         void onHomeLongPress();
+
+        void onLaunchHomeApp(AppRepository.AppEntry app, Rect bounds);
+
+        void onHomeItemMenu(Store.HomeItem item);
     }
 
     private static final long HOLD_MS = 130;
-    private static final long LONG_PRESS_MS = 600;
+    private static final long LONG_PRESS_MS = 500;
 
     private final RadialView wheel;
+    private final HomeGrid grid;
     private final Host host;
     private final float dp, slop;
     private final Paint edge = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF bar = new RectF();
+    private final Rect insets = new Rect();
 
     private boolean wheelActive;  // la roue est affichée
     private boolean forwarding;   // le geste en cours est transmis à la roue
     private boolean decided;      // le geste en cours a déjà été interprété
     private boolean inBand;
+    private boolean toChildren;   // le geste va au widget touché
+    private boolean draggingItem; // un élément de l'accueil est en cours de déplacement
+    private boolean dragMoved;
+    private Store.HomeItem touchedItem;
     private float downX, downY;
     private long downTime;
 
     private final Runnable holdOpen = () -> {
-        if (decided || !inBand) return;
+        if (decided || !inBand || touchedItem != null) return;
         decided = true;
         activateWheel(downX, downY, true);
     };
 
     private final Runnable longPress = () -> {
-        if (decided || inBand) return;
+        if (decided) return;
         decided = true;
-        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
-        HomeView.this.host.onHomeLongPress();
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        if (touchedItem != null) {
+            if (toChildren) {
+                MotionEvent cancel = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(),
+                        MotionEvent.ACTION_CANCEL, downX, downY, 0);
+                super.dispatchTouchEvent(cancel);
+                cancel.recycle();
+                toChildren = false;
+            }
+            draggingItem = true;
+            dragMoved = false;
+            HomeView.this.grid.startDrag(touchedItem, downX, downY);
+        } else if (!inBand) {
+            hostRef().onHomeLongPress();
+        }
     };
 
-    HomeView(Context context, RadialView wheel, Host host) {
+    HomeView(Context context, RadialView wheel, HomeGrid grid, Host host) {
         super(context);
         this.wheel = wheel;
+        this.grid = grid;
         this.host = host;
         dp = getResources().getDisplayMetrics().density;
         slop = ViewConfiguration.get(context).getScaledTouchSlop() * 1.5f;
         edge.setColor(0x55FFFFFF);
         setWillNotDraw(false);
+        addView(grid, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         addView(wheel, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        wheel.setVisibility(View.INVISIBLE);
+    }
+
+    private Host hostRef() {
+        return host;
     }
 
     void wheelClosed() {
         wheelActive = false;
         forwarding = false;
+        wheel.setVisibility(View.INVISIBLE);
         invalidate();
     }
 
@@ -82,8 +118,21 @@ final class HomeView extends FrameLayout {
         return wheelActive;
     }
 
+    /** Ouvre la roue au milieu de l'écran (menu « Ajouter une appli », par exemple). */
+    void openWheelCentered() {
+        activateWheel(getWidth() / 2f, getHeight() * 0.55f, false);
+    }
+
     private float bandWidth() {
         return getWidth() * 0.25f;
+    }
+
+    @Override
+    public WindowInsets onApplyWindowInsets(WindowInsets in) {
+        insets.set(in.getSystemWindowInsetLeft(), in.getSystemWindowInsetTop(),
+                in.getSystemWindowInsetRight(), in.getSystemWindowInsetBottom());
+        grid.setSafe(insets);
+        return super.onApplyWindowInsets(in);
     }
 
     @Override
@@ -125,16 +174,29 @@ final class HomeView extends FrameLayout {
                 downTime = e.getDownTime();
                 decided = false;
                 forwarding = false;
+                draggingItem = false;
+                touchedItem = grid.itemAt(x - grid.getLeft(), y - grid.getTop());
+                toChildren = touchedItem != null && touchedItem.widget;
                 inBand = x < bandWidth() || x > getWidth() - bandWidth();
-                if (inBand) postDelayed(holdOpen, HOLD_MS);
-                else postDelayed(longPress, LONG_PRESS_MS);
+                if (toChildren) super.dispatchTouchEvent(e);
+                if (touchedItem == null && inBand) postDelayed(holdOpen, HOLD_MS);
+                postDelayed(longPress, LONG_PRESS_MS);
                 return true;
 
-            case MotionEvent.ACTION_MOVE:
-                if (forwarding) return wheel.dispatchTouchEvent(e);
-                if (decided) return true;
+            case MotionEvent.ACTION_MOVE: {
                 float dx = x - downX, dy = y - downY;
-                if (Math.hypot(dx, dy) < slop) return true;
+                boolean far = Math.hypot(dx, dy) >= slop;
+                if (draggingItem) {
+                    if (far) dragMoved = true;
+                    grid.moveDrag(x, y);
+                    return true;
+                }
+                if (toChildren) {
+                    if (far) removeCallbacks(longPress);
+                    return super.dispatchTouchEvent(e);
+                }
+                if (forwarding) return wheel.dispatchTouchEvent(e);
+                if (decided || !far) return true;
                 decided = true;
                 removeCallbacks(holdOpen);
                 removeCallbacks(longPress);
@@ -147,17 +209,37 @@ final class HomeView extends FrameLayout {
                     activateWheel(getWidth() / 2f, getHeight() * 0.62f, false);
                 }
                 return true;
+            }
 
             case MotionEvent.ACTION_UP:
                 removeCallbacks(holdOpen);
                 removeCallbacks(longPress);
+                if (draggingItem) {
+                    draggingItem = false;
+                    if (dragMoved) {
+                        grid.endDrag();
+                    } else {
+                        grid.endDrag();
+                        host.onHomeItemMenu(touchedItem);
+                    }
+                    return true;
+                }
+                if (toChildren) {
+                    toChildren = false;
+                    return super.dispatchTouchEvent(e);
+                }
                 if (forwarding) {
                     forwarding = false;
                     return wheel.dispatchTouchEvent(e);
                 }
-                if (!decided && inBand) {
-                    // Simple toucher sur un bord : la roue s'ouvre et attend le doigt suivant.
-                    activateWheel(downX, downY, false);
+                if (!decided) {
+                    if (touchedItem != null) {
+                        AppRepository.AppEntry app = grid.appOf(touchedItem);
+                        if (app != null) host.onLaunchHomeApp(app, grid.screenBoundsOf(touchedItem));
+                    } else if (inBand) {
+                        // Simple toucher sur un bord : la roue s'ouvre et attend le doigt suivant.
+                        activateWheel(downX, downY, false);
+                    }
                 }
                 decided = true;
                 return true;
@@ -165,6 +247,14 @@ final class HomeView extends FrameLayout {
             case MotionEvent.ACTION_CANCEL:
                 removeCallbacks(holdOpen);
                 removeCallbacks(longPress);
+                if (draggingItem) {
+                    draggingItem = false;
+                    grid.endDrag();
+                }
+                if (toChildren) {
+                    toChildren = false;
+                    return super.dispatchTouchEvent(e);
+                }
                 if (forwarding) {
                     forwarding = false;
                     return wheel.dispatchTouchEvent(e);
@@ -172,11 +262,13 @@ final class HomeView extends FrameLayout {
                 decided = true;
                 return true;
         }
+        if (toChildren) return super.dispatchTouchEvent(e);
         return true;
     }
 
     private void activateWheel(float x, float y, boolean continueGesture) {
         wheelActive = true;
+        wheel.setVisibility(View.VISIBLE);
         wheel.openAt(x, y, continueGesture);
         invalidate();
         if (continueGesture) {

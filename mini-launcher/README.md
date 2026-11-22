@@ -13,7 +13,13 @@ réglages de l'appli).
   geste. Un simple toucher ouvre la roue et attend le doigt suivant.
 - **Glisser vers le bas** : moitié gauche → notifications, moitié droite → centre de contrôle.
 - **Glisser vers le haut** au milieu : la roue (comme un tiroir d'applis).
-- **Appui long** au milieu : les réglages.
+- **Appui long sur une zone vide** : ajouter une appli, ajouter un widget, fond d'écran,
+  réglages.
+- **Grille de 4 colonnes** sous l'horloge pour poser des applis et des widgets. Toucher une
+  appli l'ouvre. Appui long puis glisser : déplacer. Appui long sans bouger : retirer,
+  infos, ou taille (widgets). Les widgets reçoivent les touchers normalement ; la roue ne
+  s'ouvre que depuis les zones vides des bandes.
+- Depuis la roue, appui long sur une appli > « Ajouter à l'écran d'accueil ».
 
 ## La roue
 
