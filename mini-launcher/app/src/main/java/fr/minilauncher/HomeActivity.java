@@ -63,6 +63,11 @@ public final class HomeActivity extends Activity
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         window.setStatusBarColor(Color.TRANSPARENT);
         window.setNavigationBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= 29) {
+            // Pas de bandeau clair ajouté par Android derrière les barres : le fond d'écran reste visible.
+            window.setNavigationBarContrastEnforced(false);
+            window.setStatusBarContrastEnforced(false);
+        }
         if (Build.VERSION.SDK_INT >= 28) {
             WindowManager.LayoutParams lp = window.getAttributes();
             lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
