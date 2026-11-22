@@ -25,16 +25,5 @@
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Filtre qui assombrit l'écran en dessous de la luminosité minimale" />
         </service>
-        <service android:name=".FiltreAccessibilite"
-            android:label="Luxmètre : filtre d'écran complet"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data android:name="android.accessibilityservice"
-                android:resource="@xml/accessibilite" />
-        </service>
-        <receiver android:name=".ArretReceiver" android:exported="false" />
     </application>
 </manifest>

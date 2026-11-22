@@ -40,9 +40,6 @@ public class MainActivity extends Activity implements SensorEventListener {
 
     private TextView libelleFiltre;
     private Button boutonFiltre;
-    private Button boutonComplet;
-    private TextView aideComplet;
-    private SeekBar curseur;
     private boolean activerApresPermission = false;
 
     @Override
@@ -106,7 +103,7 @@ public class MainActivity extends Activity implements SensorEventListener {
         }
     }
 
-    /** Curseur et boutons du filtre qui assombrit tout l'écran. */
+    /** Curseur et bouton du filtre qui assombrit tout l'écran. */
     private void ajouterFiltre(LinearLayout racine) {
         TextView titre = texte("Assombrir l'écran", 20, Color.WHITE);
         titre.setPadding(0, dp(48), 0, dp(4));
@@ -115,14 +112,15 @@ public class MainActivity extends Activity implements SensorEventListener {
         libelleFiltre = texte("", 18, Color.rgb(0xFF, 0xC8, 0x3D));
         libelleFiltre.setPadding(0, dp(16), 0, 0);
 
-        curseur = new SeekBar(this);
+        SeekBar curseur = new SeekBar(this);
+        curseur.setMax(FiltreService.NIVEAU_MAX);
+        curseur.setProgress(Reglages.niveau(this));
         curseur.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar sb, int niveau, boolean parUtilisateur) {
-                if (!parUtilisateur) return;
                 Reglages.setNiveau(MainActivity.this, niveau);
-                Filtre.appliquer(MainActivity.this);
                 majFiltre();
+                if (parUtilisateur && FiltreService.actif) FiltreService.regler(MainActivity.this, niveau);
             }
             @Override public void onStartTrackingTouch(SeekBar sb) { }
             @Override public void onStopTrackingTouch(SeekBar sb) { }
@@ -133,42 +131,29 @@ public class MainActivity extends Activity implements SensorEventListener {
 
         boutonFiltre = new Button(this);
         boutonFiltre.setOnClickListener(v -> {
-            if (Reglages.actif(this)) Filtre.arreter(this); else activerFiltre();
-            majFiltre();
+            if (FiltreService.actif) {
+                FiltreService.arreter(this);
+                FiltreService.actif = false;
+                majFiltre();
+            } else {
+                activerFiltre();
+            }
         });
-
-        aideComplet = texte("Le filtre ne couvre pas encore la barre du haut ni les boutons du bas, "
-                + "et il est limité à 80 %. Pour tout couvrir (jusqu'à 95 %), activez "
-                + "« Luxmètre : filtre d'écran complet » dans les réglages d'accessibilité.\n"
-                + "Si Android l'affiche grisé (« paramètre restreint ») : Infos sur l'appli Luxmètre → "
-                + "menu ⋮ → Autoriser les paramètres restreints, puis recommencez.",
-                14, Color.rgb(0x80, 0x88, 0x98));
-        aideComplet.setPadding(0, dp(24), 0, 0);
-        boutonComplet = new Button(this);
-        boutonComplet.setText("Couvrir aussi le haut et les boutons");
-        boutonComplet.setOnClickListener(v ->
-                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        LinearLayout.LayoutParams lpBouton = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lpBouton.topMargin = dp(16);
+        lpBouton.gravity = Gravity.CENTER_HORIZONTAL;
 
         racine.addView(titre);
         racine.addView(aide);
         racine.addView(libelleFiltre);
         racine.addView(curseur, lpCurseur);
-        racine.addView(boutonFiltre, centre(16));
-        racine.addView(aideComplet);
-        racine.addView(boutonComplet, centre(8));
+        racine.addView(boutonFiltre, lpBouton);
         majFiltre();
     }
 
-    private LinearLayout.LayoutParams centre(int margeHaut) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = dp(margeHaut);
-        lp.gravity = Gravity.CENTER_HORIZONTAL;
-        return lp;
-    }
-
     private void activerFiltre() {
-        if (!Filtre.complet() && !Settings.canDrawOverlays(this)) {
+        if (!Settings.canDrawOverlays(this)) {
             activerApresPermission = true;
             startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:" + getPackageName())));
@@ -178,20 +163,16 @@ public class MainActivity extends Activity implements SensorEventListener {
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
         }
-        Filtre.activer(this);
+        FiltreService.regler(this, Reglages.niveau(this));
+        FiltreService.actif = true;
+        Reglages.setActif(this, true);
+        majFiltre();
     }
 
     private void majFiltre() {
         if (libelleFiltre == null) return;
-        int max = Filtre.max();
-        int niveau = Math.min(Reglages.niveau(this), max);
-        curseur.setMax(max);
-        curseur.setProgress(niveau);
-        libelleFiltre.setText("Filtre : " + niveau + " %" + (Filtre.complet() ? "  (écran complet)" : ""));
-        boutonFiltre.setText(Reglages.actif(this) ? "Désactiver le filtre" : "Activer le filtre");
-        int visible = Filtre.complet() ? android.view.View.GONE : android.view.View.VISIBLE;
-        aideComplet.setVisibility(visible);
-        boutonComplet.setVisibility(visible);
+        libelleFiltre.setText("Filtre : " + Reglages.niveau(this) + " %");
+        boutonFiltre.setText(FiltreService.actif ? "Désactiver le filtre" : "Activer le filtre");
     }
 
     @Override
@@ -201,7 +182,6 @@ public class MainActivity extends Activity implements SensorEventListener {
             activerApresPermission = false;
             if (Settings.canDrawOverlays(this)) activerFiltre();
         }
-        Filtre.appliquer(this);
         majFiltre();
         if (lightSensor != null) {
             sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_UI);
