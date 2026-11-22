@@ -43,7 +43,12 @@ déclare cet accès ; couper l'analyse Play Protect le temps d'installer chaque 
 Réglables dans les réglages : double tap dans le vide (par défaut : verrouiller), glisser
 vers le haut (par défaut : applis récentes), vers le bas à gauche (notifications) et à droite (centre de contrôle), vers
 la gauche, vers la droite. Actions : rien, verrouiller, notifications, centre de contrôle,
-ouvrir une appli, lampe torche, appareil photo, recherche, réglages, applis récentes.
+ouvrir une appli, lampe torche, appareil photo, recherche web, réglages, applis récentes,
+recherche d'applis.
+
+Recherche d'applis (par défaut : glisser vers la gauche) : clavier déjà sorti, résultats à
+chaque lettre (début du nom, début d'un mot, initiales « gm » → Google Maps, puis contenu ;
+les plus utilisées d'abord), Entrée ouvre la première ; sinon, recherche sur le web.
 
 Applis récentes : glisser vers le haut les ouvre en roue autour du doigt ; continuer jusqu'à
 l'appli et lâcher (un toucher garde la roue ouverte). Avec l'« Accès aux données
