@@ -91,6 +91,16 @@ une autre liseuse, une Kobo…), **partage**, **reconversion** d'un livre avec d
 Réglages de conversion (roue dentée de la bibliothèque) : chapitre à chaque Titre 1 / 1 et 2 / 1 à 3,
 repérage des chapitres sans style, sauts de page, allègement des grandes images, image de couverture.
 
+## Deux éditions
+
+- **Édition complète** (ce dépôt, `./construire.sh`) : toutes les fonctions débloquées, identifiant `fr.liseuse`.
+- **Édition Play Store** (gratuite + achat unique « Liseuse Pro ») : construite par Gradle sur GitHub
+  Actions (`.github/workflows/liseuse-android.yml`), identifiant `fr.liseuse.lecteur`. Les fichiers `.aab`
+  et `.apk` se téléchargent dans l'onglet *Actions* de GitHub. Tout le nécessaire pour la publication
+  (textes, formulaires, politique de confidentialité, bannière, captures) est dans [`play-store/`](play-store/FICHE.md).
+
+Fonctions Pro : PDF, dossiers, sélection multiple, personnalisation (couleur, icône, raccourci, thème sur mesure).
+
 ## Construire l'APK
 
 Sans Android Studio ni Gradle, sur Debian / Ubuntu :
