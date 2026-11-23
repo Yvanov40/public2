@@ -449,10 +449,10 @@ final class AlphaStripView extends View {
                         if (h != hoverCell) {
                             hoverCell = h;
                             if (h >= 0) haptic(HapticFeedbackConstants.CLOCK_TICK);
-                            holdOn(x, y); // doigt arrêté sur une appli : elle se soulève
-                        } else if (hoverCell >= 0 && Math.hypot(x - holdX, y - holdY) > 12 * dp) {
-                            holdOn(x, y);
                         }
+                        // Un doigt qui glisse ne soulève jamais d'appli : seul l'appui long
+                        // commencé directement sur l'appli (panneau resté ouvert) le fait.
+                        if (Math.hypot(x - holdX, y - holdY) > 12 * dp) removeCallbacks(longPress);
                     }
                     invalidate();
                 }

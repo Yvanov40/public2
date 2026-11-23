@@ -259,6 +259,7 @@ public final class HomeActivity extends Activity
             widgetHost.startListening();
         } catch (RuntimeException ignored) {
         }
+        Store.get(this).pruneFolders();
         applyClockSettings();
         applyAppearance();
         KeepAliveService.sync(this);

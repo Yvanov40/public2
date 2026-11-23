@@ -3,6 +3,8 @@
 
     <!-- Ouvrir le volet des notifications et le centre de contrôle. -->
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
+    <!-- Bouton « Désinstaller » du menu d'une appli. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <!-- Facultatif : « Garder le launcher actif » (service de premier plan). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />

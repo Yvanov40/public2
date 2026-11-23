@@ -268,18 +268,11 @@ final class FolderWheelView extends View {
                 if (h != hover) {
                     hover = h;
                     if (h >= 0) haptic(HapticFeedbackConstants.CLOCK_TICK);
-                    // Doigt arrêté sur une appli : elle se soulève (glisser-déposer).
-                    removeCallbacks(longPress);
-                    holdX = x;
-                    holdY = y;
-                    if (h >= 0) postDelayed(longPress, LONG_PRESS_MS);
                     invalidate();
-                } else if (hover >= 0 && Math.hypot(x - holdX, y - holdY) > 12 * dp) {
-                    removeCallbacks(longPress);
-                    holdX = x;
-                    holdY = y;
-                    postDelayed(longPress, LONG_PRESS_MS);
                 }
+                // Un doigt qui glisse ne soulève jamais d'appli : seul l'appui long commencé
+                // directement sur l'appli (cercle resté ouvert) le fait. Au lâcher, l'appli s'ouvre.
+                if (Math.hypot(x - holdX, y - holdY) > 12 * dp) removeCallbacks(longPress);
                 return true;
 
             case MotionEvent.ACTION_UP:

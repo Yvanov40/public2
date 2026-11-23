@@ -467,6 +467,15 @@ final class Store {
         setHomeItems(items);
     }
 
+    /** Les dossiers n'existent que sur l'accueil : ceux qui n'y sont pas sont supprimés. */
+    void pruneFolders() {
+        java.util.Set<String> onHome = new java.util.HashSet<>();
+        for (HomeItem it : homeItems()) if (it.folder != null) onHome.add(it.folder);
+        List<Group> gs = groups();
+        boolean changed = gs.removeIf(g -> !onHome.contains(g.name));
+        if (changed) setGroups(gs);
+    }
+
     boolean isFolderOnHome(String name) {
         for (HomeItem it : homeItems()) if (name.equals(it.folder)) return true;
         return false;

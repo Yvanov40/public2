@@ -49,21 +49,51 @@ final class Menus {
 
     // ------------------------------------------------------------ appli
 
+    /**
+     * Menu d'une appli : en-tête (icône, nom), puis de grosses tuiles — favori, retirer (de
+     * l'accueil ou du dossier, selon le cas), infos, désinstaller. Poser sur l'accueil ou dans
+     * un dossier se fait par glisser-déposer.
+     */
     static void appMenu(Activity a, ComponentName cn, String label, String folder, Runnable changed) {
         Store store = Store.get(a);
         String key = Store.key(cn);
-        Builder b = new Builder();
-        b.add(store.isPinned(key) ? "Retirer des favoris" : "Épingler en favori ★", () -> {
+        Sheet s = new Sheet(a, null);
+
+        // En-tête : icône et nom
+        android.widget.LinearLayout head = new android.widget.LinearLayout(a);
+        head.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        head.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        head.setPadding(s.px(22), s.px(2), s.px(22), s.px(14));
+        android.widget.ImageView icon = new android.widget.ImageView(a);
+        icon.setImageDrawable(iconOf(a, cn));
+        android.widget.LinearLayout.LayoutParams il = new android.widget.LinearLayout.LayoutParams(s.px(52), s.px(52));
+        il.rightMargin = s.px(16);
+        head.addView(icon, il);
+        android.widget.LinearLayout texts = new android.widget.LinearLayout(a);
+        texts.setOrientation(android.widget.LinearLayout.VERTICAL);
+        android.widget.TextView name = s.text(label, 19, Sheet.TEXT);
+        name.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        texts.addView(name);
+        int n = store.usageOf(key);
+        String where = folder != null ? "Dans « " + folder + " »" : store.isOnHome(key) ? "Sur l'accueil" : null;
+        String sub = (n > 0 ? "Ouverte " + n + " fois" : "Pas encore ouverte d'ici")
+                + (where != null ? " · " + where : "") + (store.isPinned(key) ? " · ★" : "");
+        texts.addView(s.text(sub, 13, Sheet.MUTED));
+        head.addView(texts, new android.widget.LinearLayout.LayoutParams(0,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        s.content.addView(head);
+
+        // Tuiles d'action
+        List<Object[]> acts = new ArrayList<>();
+        boolean pinned = store.isPinned(key);
+        acts.add(new Object[]{pinned ? "★" : "☆", pinned ? "Retirer des favoris" : "Favori", false, (Runnable) () -> {
             store.togglePin(key);
             changed.run();
-        });
-        b.add(store.isOnHome(key) ? "Retirer de l'écran d'accueil" : "Ajouter à l'écran d'accueil", () -> {
-            store.toggleHomeApp(key);
-            changed.run();
-        });
-        b.add("Ajouter à un dossier…", () -> chooseFolder(a, key, changed));
+        }});
         if (folder != null) {
-            b.add("Retirer du dossier « " + folder + " »", () -> {
+            acts.add(new Object[]{"↩", "Retirer du dossier", false, (Runnable) () -> {
                 List<Store.Group> groups = store.groups();
                 Store.Group g = Store.find(groups, folder);
                 if (g != null) {
@@ -71,10 +101,72 @@ final class Menus {
                     store.setGroups(groups);
                 }
                 changed.run();
-            });
+            }});
+        } else if (store.isOnHome(key)) {
+            acts.add(new Object[]{"↩", "Retirer de l'accueil", false, (Runnable) () -> {
+                store.toggleHomeApp(key);
+                changed.run();
+            }});
         }
-        b.add("Infos de l'appli", () -> Launcher.appInfo(a, cn));
-        b.show(a, label);
+        acts.add(new Object[]{"i", "Infos", false, (Runnable) () -> Launcher.appInfo(a, cn)});
+        acts.add(new Object[]{"✕", "Désinstaller", true, (Runnable) () -> {
+            try {
+                a.startActivity(new android.content.Intent(android.content.Intent.ACTION_DELETE,
+                        android.net.Uri.parse("package:" + cn.getPackageName())));
+            } catch (RuntimeException ignored) {
+            }
+        }});
+
+        int cols = acts.size() <= 4 ? acts.size() : 3;
+        android.widget.LinearLayout row = null;
+        for (int i = 0; i < acts.size(); i++) {
+            if (i % cols == 0) {
+                row = new android.widget.LinearLayout(a);
+                row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+                row.setPadding(s.px(16), 0, s.px(16), s.px(8));
+                s.content.addView(row);
+            }
+            Object[] act = acts.get(i);
+            row.addView(tile(s, a, (String) act[0], (String) act[1], (Boolean) act[2], (Runnable) act[3]));
+        }
+        s.show();
+    }
+
+    private static android.view.View tile(Sheet s, Activity a, String glyph, String label, boolean danger, Runnable action) {
+        int color = danger ? Sheet.DANGER : s.accent;
+        android.widget.LinearLayout t = new android.widget.LinearLayout(a);
+        t.setOrientation(android.widget.LinearLayout.VERTICAL);
+        t.setGravity(android.view.Gravity.CENTER);
+        t.setPadding(s.px(6), s.px(10), s.px(6), s.px(10));
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(Sheet.FIELD);
+        bg.setCornerRadius(s.px(18));
+        android.graphics.drawable.GradientDrawable mask = new android.graphics.drawable.GradientDrawable();
+        mask.setColor(0xFFFFFFFF);
+        mask.setCornerRadius(s.px(18));
+        t.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(Sheet.RIPPLE), bg, mask));
+        android.widget.TextView g = s.text(glyph, 18, color);
+        g.setGravity(android.view.Gravity.CENTER);
+        g.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD));
+        android.graphics.drawable.GradientDrawable gb = new android.graphics.drawable.GradientDrawable();
+        gb.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        gb.setColor((color & 0x00FFFFFF) | 0x26000000);
+        g.setBackground(gb);
+        t.addView(g, new android.widget.LinearLayout.LayoutParams(s.px(38), s.px(38)));
+        android.widget.TextView l = s.text(label, 13, danger ? Sheet.DANGER : Sheet.TEXT);
+        l.setGravity(android.view.Gravity.CENTER);
+        l.setMaxLines(2);
+        l.setPadding(0, s.px(6), 0, 0);
+        t.addView(l);
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, s.px(96), 1f);
+        lp.setMargins(s.px(4), 0, s.px(4), 0);
+        t.setLayoutParams(lp);
+        t.setOnClickListener(v -> {
+            s.dialog.dismiss();
+            action.run();
+        });
+        return t;
     }
 
     static Drawable iconOf(Activity a, ComponentName cn) {
@@ -83,27 +175,6 @@ final class Menus {
         } catch (PackageManager.NameNotFoundException e) {
             return null;
         }
-    }
-
-    private static void chooseFolder(Activity a, String key, Runnable changed) {
-        Store store = Store.get(a);
-        List<Store.Group> groups = store.groups();
-        Builder b = new Builder();
-        for (Store.Group g : groups) {
-            Sheet.Item it = b.add(g.name, () -> {
-                store.addToFolder(g.name, key);
-                changed.run();
-            });
-            it.swatch = g.color;
-            it.selected = g.apps.contains(key);
-        }
-        b.add("＋  Nouveau dossier…", () -> askName(a, "Nouveau dossier", store.freeFolderName("Dossier"), name -> {
-            List<String> one = new ArrayList<>();
-            one.add(key);
-            store.createFolder(name, one, -1, -1);
-            changed.run();
-        }));
-        b.show(a, "Ajouter au dossier");
     }
 
     // ------------------------------------------------------------ dossier
@@ -123,10 +194,6 @@ final class Menus {
             store.renameFolder(folder, name);
             changed.run();
         }));
-        b.add(store.isFolderOnHome(folder) ? "Retirer de l'écran d'accueil" : "Mettre sur l'écran d'accueil", () -> {
-            store.toggleFolderOnHome(folder);
-            changed.run();
-        });
         b.add("Supprimer le dossier", () -> {
             Builder c = new Builder();
             c.add("Supprimer", () -> {

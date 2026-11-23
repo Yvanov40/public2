@@ -13,7 +13,8 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
 - Glisser vers l'intérieur jusqu'à l'appli et lâcher. Lâcher sur l'alphabet laisse les
   applis affichées pour un toucher.
 - En haut ★ les favoris (épinglés + plus utilisés).
-- Appui long sur une appli : épingler, ajouter à un dossier, poser sur l'accueil, infos.
+- Appui long sur une appli (sans bouger) : la soulever pour la poser sur l'accueil ; la
+  lâcher sur place ouvre son menu (favori, retirer, infos, désinstaller).
 
 ## Accueil
 
