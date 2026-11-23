@@ -382,6 +382,7 @@ final class HomeView extends FrameLayout {
                     // Dossier : il s'ouvre en cercle tout de suite, sous le doigt.
                     float[] c = grid.centerOf(touchedItem);
                     if (c != null) {
+                        folderWheel.setIconFactor(grid.folderIconFactor(touchedItem.folder));
                         folderWheel.open(touchedItem.folder, grid.folderColor(touchedItem.folder),
                                 grid.folderApps(touchedItem.folder), c[0] + grid.getLeft(), c[1] + grid.getTop());
                         folderForwarding = true;
@@ -474,7 +475,8 @@ final class HomeView extends FrameLayout {
                         } else {
                             float[] c = grid.centerOf(touchedItem);
                             if (c != null) {
-                                folderWheel.open(touchedItem.folder, grid.folderColor(touchedItem.folder),
+                                folderWheel.setIconFactor(grid.folderIconFactor(touchedItem.folder));
+                        folderWheel.open(touchedItem.folder, grid.folderColor(touchedItem.folder),
                                         grid.folderApps(touchedItem.folder), c[0] + grid.getLeft(), c[1] + grid.getTop());
                                 MotionEvent down = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN,
                                         c[0] + grid.getLeft(), c[1] + grid.getTop(), 0);

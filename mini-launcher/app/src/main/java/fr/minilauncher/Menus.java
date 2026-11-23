@@ -314,7 +314,7 @@ final class Menus {
         b.add("Taille des icônes", () -> choose(a, "Taille des icônes dans le dossier", sizes, g.iconSize, i -> {
             store.setFolderIconSize(folder, i);
             changed.run();
-        })).subtitle = sizes[Math.max(0, Math.min(4, g.iconSize))] + " (dossier agrandi ou icônes directes)";
+        })).subtitle = sizes[Math.max(0, Math.min(4, g.iconSize))] + " (cercle, dossier agrandi, icônes directes)";
         String[] modes = {"Ouvre le cercle", "Icônes directes (toucher une mini-icône l'ouvre)"};
         b.add("Toucher le dossier", () -> choose(a, "Toucher le dossier", modes, g.direct ? 1 : 0, i -> {
             store.setFolderDirect(folder, i == 1);

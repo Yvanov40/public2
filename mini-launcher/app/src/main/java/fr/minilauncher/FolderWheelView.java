@@ -53,6 +53,17 @@ final class FolderWheelView extends View {
     private Listener listener;
     private String folder;
     private boolean realFolder = true;
+    private float iconFactor = 1f; // taille des icônes propre au dossier (Personnaliser)
+
+    /** Taille des icônes du cercle : réglage général × réglage du dossier. */
+    private float iconPxBase() {
+        return store.folderIcon() * dp * iconFactor;
+    }
+
+    /** Facteur de taille d'icônes du dossier qui va s'ouvrir (1 = normal). */
+    void setIconFactor(float f) {
+        iconFactor = f;
+    }
     private int color;
     private float cx, cy;
     private boolean open, sticky, moved, tracking;
@@ -131,6 +142,7 @@ final class FolderWheelView extends View {
 
     /** {@code realFolder} = false pour les applis récentes (pas de « Retirer du dossier »). */
     void open(String folder, int color, List<AppRepository.AppEntry> apps, float x, float y, boolean realFolder) {
+        if (!realFolder) iconFactor = 1f;
         this.realFolder = realFolder;
         this.folder = folder;
         this.color = color;
@@ -167,7 +179,7 @@ final class FolderWheelView extends View {
         int n = apps.size();
         if (n == 0) return;
         float scale = store.folderRadius() / 100f;
-        float icon = store.folderIcon() * dp;
+        float icon = iconPxBase();
         boolean labels = store.folderLabels();
         float spacing = Math.max(icon + 14 * dp, labels ? 70 * dp : 0);
         float step = icon + (labels ? 38 : 22) * dp;
@@ -227,7 +239,7 @@ final class FolderWheelView extends View {
 
     private int spotAt(float x, float y) {
         int best = -1;
-        double bestD = Math.max(36 * dp, store.folderIcon() * dp * 0.75f);
+        double bestD = Math.max(26 * dp, iconPxBase() * 0.75f);
         for (int i = 0; i < spots.size(); i++) {
             double d = Math.hypot(x - spots.get(i).x, y - spots.get(i).y);
             if (d < bestD) {
@@ -321,7 +333,7 @@ final class FolderWheelView extends View {
         canvas.drawColor(Color.argb((int) (255 * store.dimPercent() / 100f * ease), 0, 0, 0));
 
         boolean labels = store.folderLabels();
-        float iconPx = store.folderIcon() * dp;
+        float iconPx = iconPxBase();
         band.setColor(0xFF000000 | store.folderBg());
         band.setAlpha((int) (255 * store.folderBgAlpha() / 100f * ease));
         band.setStrokeWidth(iconPx + (labels ? 34 : 16) * dp);

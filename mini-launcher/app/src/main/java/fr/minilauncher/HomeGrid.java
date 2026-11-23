@@ -260,6 +260,13 @@ final class HomeGrid extends FrameLayout {
         return null;
     }
 
+    /** Facteur de taille des icônes d'un dossier (Personnaliser > Taille des icônes). */
+    float folderIconFactor(String name) {
+        Store.Group g = Store.find(store.groups(), name);
+        float[] factors = {0.55f, 0.75f, 1f, 1.3f, 1.6f};
+        return g == null ? 1f : factors[Math.max(0, Math.min(4, g.iconSize))];
+    }
+
     int folderColor(String name) {
         Store.Group g = Store.find(store.groups(), name);
         return g == null ? 0xFF8FA6FF : g.color;
