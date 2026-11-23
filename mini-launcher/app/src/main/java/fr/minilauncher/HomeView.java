@@ -125,6 +125,7 @@ final class HomeView extends FrameLayout {
         ghostY = ghostStartY = y;
         ghostMoved = false;
         folderForwarding = false;
+        stripForwarding = false;
         grid.setExternalDrag(true);
         invalidate();
     }
@@ -201,6 +202,7 @@ final class HomeView extends FrameLayout {
         addView(strip, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         addView(folderWheel, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         folderWheel.setLiftListener(this::onLift);
+        strip.setLiftListener(this::onLift);
         ink.setStyle(android.graphics.Paint.Style.STROKE);
         ink.setStrokeCap(android.graphics.Paint.Cap.ROUND);
         ink.setStrokeJoin(android.graphics.Paint.Join.ROUND);

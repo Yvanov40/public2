@@ -103,14 +103,38 @@ final class AlphaStripView extends View {
     private int accent;
     private boolean haptics;
 
+    private FolderWheelView.LiftListener liftListener;
+    private float holdX, holdY, lastX, lastY;
+    /** Appui long déclenché : le reste du geste est ignoré jusqu'au lever du doigt. */
+    private boolean consumed;
+
+    void setLiftListener(FolderWheelView.LiftListener l) {
+        liftListener = l;
+    }
+
     private final Runnable longPress = () -> {
-        if (moved || hoverCell < 0 || listener == null) return;
+        if (hoverCell < 0 || hoverCell >= cells.size() || listener == null) return;
         Cell c = cells.get(hoverCell);
         if (c.app == null) return;
         haptic(HapticFeedbackConstants.LONG_PRESS);
-        Entry e = current >= 0 ? entries.get(current) : null;
-        listener.onStripAppMenu(c.app, e != null && e.group ? e.label : null);
+        AppRepository.AppEntry app = c.app;
+        if (liftListener != null) {
+            // L'appli se soulève : l'accueil prend le relais (dépôt, ou menu si on lâche sur place).
+            close();
+            liftListener.onLift(app, null, lastX, lastY);
+        } else {
+            consumed = true;
+            Entry e = current >= 0 ? entries.get(current) : null;
+            listener.onStripAppMenu(app, e != null && e.group ? e.label : null);
+        }
     };
+
+    private void holdOn(float x, float y) {
+        removeCallbacks(longPress);
+        holdX = x;
+        holdY = y;
+        if (hoverCell >= 0) postDelayed(longPress, LONG_PRESS_MS);
+    }
 
     AlphaStripView(Context context) {
         super(context);
@@ -367,6 +391,14 @@ final class AlphaStripView extends View {
     /** Appelé par l'écran d'accueil pour chaque événement du geste qu'il confie à l'alphabet. */
     boolean handleTouch(MotionEvent e) {
         float x = e.getX(), y = e.getY();
+        lastX = x;
+        lastY = y;
+        if (consumed) {
+            // Après un appui long (menu ou appli soulevée), plus rien ne se passe derrière.
+            int a = e.getActionMasked();
+            if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) consumed = false;
+            return true;
+        }
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 downX = x;
@@ -376,7 +408,7 @@ final class AlphaStripView extends View {
                     int hit = cellAt(x, y);
                     if (hit >= 0) {
                         hoverCell = hit;
-                        postDelayed(longPress, LONG_PRESS_MS);
+                        holdOn(x, y);
                         invalidate();
                         return true;
                     }
@@ -393,7 +425,7 @@ final class AlphaStripView extends View {
             case MotionEvent.ACTION_MOVE:
                 if (!moved && Math.hypot(x - downX, y - downY) > 8 * dp) {
                     moved = true;
-                    removeCallbacks(longPress);
+                    if (Math.hypot(x - holdX, y - holdY) > 12 * dp) removeCallbacks(longPress);
                 }
                 if (phase == PHASE_LETTERS) {
                     fingerY = y;
@@ -417,6 +449,9 @@ final class AlphaStripView extends View {
                         if (h != hoverCell) {
                             hoverCell = h;
                             if (h >= 0) haptic(HapticFeedbackConstants.CLOCK_TICK);
+                            holdOn(x, y); // doigt arrêté sur une appli : elle se soulève
+                        } else if (hoverCell >= 0 && Math.hypot(x - holdX, y - holdY) > 12 * dp) {
+                            holdOn(x, y);
                         }
                     }
                     invalidate();

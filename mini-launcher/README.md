@@ -25,6 +25,8 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
 - **Dossiers** : poser le doigt ouvre le dossier en cercle autour de lui ; glisser jusqu'à
   l'appli et lâcher. Un simple toucher garde le cercle ouvert. Maintenir sans bouger :
   déplacer le dossier, ou son menu (applis, renommer, retirer, supprimer).
+- **Poser une appli depuis l'alphabet** : à côté de l'alphabet, garder le doigt sur une appli
+  (vibration), elle suit le doigt ; la lâcher sur l'accueil, un dossier ou une appli.
 - **Sortir une appli d'un dossier** : dans le cercle, garder le doigt sur une appli (vibration),
   elle suit le doigt ; lâcher sur une case vide (posée sur l'accueil), sur un autre dossier
   (elle y passe) ou sur une appli (nouveau dossier). Lâcher sans bouger : son menu.
