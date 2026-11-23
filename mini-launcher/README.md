@@ -103,7 +103,8 @@ L'écran principal est une grille de tuiles ; chaque tuile ouvre sa page :
   Invisible : la case paraît vide mais reste un dossier (contour en pointillés pendant un
   déplacement).
 - Panneaux et recherche : thème (sombre, noir, anthracite, bleu nuit, clair), opacité,
-  arrondi ; recherche en haut ou en bas, en liste ou en grille d'icônes.
+  arrondi ; recherche au milieu (carte flottante), en haut ou en bas, en liste ou en grille
+  d'icônes ; une seule appli trouvée = ouverte.
 - Effets : couleur d'accent, assombrissement du fond, animations, vibrations.
 
 ## Installer

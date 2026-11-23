@@ -135,6 +135,10 @@ final class Store {
     int panelAlpha() { return num(PANEL_ALPHA, 100); }       // %
     int panelRadius() { return num(PANEL_RADIUS, 26); }      // dp
     boolean searchTop() { return flag(SEARCH_TOP, true); }
+    static final String SEARCH_POS = "searchPos";
+    int searchPos() { return num(SEARCH_POS, Sheet.CENTER); }  // Sheet.BOTTOM / TOP / CENTER
+    static final String SEARCH_AUTO = "searchAuto";
+    boolean searchAutoOpen() { return flag(SEARCH_AUTO, true); } // une seule appli trouvée : ouverte
     boolean searchGrid() { return flag(SEARCH_GRID, true); }
     static final String ALPHA_LEARN = "alphaLearn";
     static final String DRAW_ON = "drawOn", ALPHA_ON = "alphaOn";

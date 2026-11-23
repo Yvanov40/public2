@@ -461,8 +461,10 @@ public final class SettingsActivity extends Activity {
         choice("Thème des panneaux", Sheet.THEMES, store.panelTheme(), i -> store.setNum(Store.PANEL_THEME, i));
         slider("Opacité", 50, 100, store.panelAlpha(), "%d %%", v -> store.setNum(Store.PANEL_ALPHA, v));
         slider("Arrondi des coins", 8, 36, store.panelRadius(), "%d dp", v -> store.setNum(Store.PANEL_RADIUS, v));
-        choice("Recherche : position", new String[]{"En bas", "En haut"}, store.searchTop() ? 1 : 0,
-                i -> store.setFlag(Store.SEARCH_TOP, i == 1));
+        choice("Recherche : position", new String[]{"En bas", "En haut", "Au milieu"}, store.searchPos(),
+                i -> store.setNum(Store.SEARCH_POS, i));
+        toggle("Une seule appli trouvée : l'ouvrir", "Après une courte pause dans la frappe",
+                store.searchAutoOpen(), on -> store.setFlag(Store.SEARCH_AUTO, on));
         choice("Recherche : affichage", new String[]{"Liste", "Grille d'icônes"}, store.searchGrid() ? 1 : 0,
                 i -> store.setFlag(Store.SEARCH_GRID, i == 1));
         note("Les panneaux : recherche, menus d'appui long, choix d'applis, de couleurs, de widgets. "

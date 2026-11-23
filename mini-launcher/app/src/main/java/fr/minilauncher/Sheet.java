@@ -127,15 +127,33 @@ final class Sheet {
         }
     }
 
-    final boolean top; // panneau en haut de l'écran (recherche) au lieu d'en bas
+    static final int BOTTOM = 0, TOP = 1, CENTER = 2;
+    final boolean top;    // panneau en haut de l'écran au lieu d'en bas
+    final boolean center; // carte flottante au milieu (recherche)
+
+    /** Copie d'une icône : chaque vue a la sienne (une icône partagée se fait redimensionner). */
+    static Drawable copy(Drawable d) {
+        if (d == null) return null;
+        Drawable.ConstantState cs = d.getConstantState();
+        return cs != null ? cs.newDrawable().mutate() : d;
+    }
+
+    Sheet(Activity a, String title, int position) {
+        this(a, title, position == TOP, position == CENTER);
+    }
 
     Sheet(Activity a, String title) {
         this(a, title, false);
     }
 
     Sheet(Activity a, String title, boolean top) {
+        this(a, title, top, false);
+    }
+
+    private Sheet(Activity a, String title, boolean top, boolean center) {
         activity = a;
         this.top = top;
+        this.center = center;
         dp = a.getResources().getDisplayMetrics().density;
         Store st = Store.get(a);
         applyTheme(st);
@@ -148,12 +166,13 @@ final class Sheet {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(CARD);
         float r = st.panelRadius() * dp;
-        bg.setCornerRadii(top ? new float[]{0, 0, 0, 0, r, r, r, r} : new float[]{r, r, r, r, 0, 0, 0, 0});
+        bg.setCornerRadii(center ? new float[]{r, r, r, r, r, r, r, r}
+                : top ? new float[]{0, 0, 0, 0, r, r, r, r} : new float[]{r, r, r, r, 0, 0, 0, 0});
         panel.setBackground(bg);
         panel.setClipToOutline(true);
-        panel.setPadding(0, top ? px(44) : px(10), 0, px(16));
+        panel.setPadding(0, top ? px(44) : center ? px(14) : px(10), 0, px(center ? 10 : 16));
 
-        if (!top) {
+        if (!top && !center) {
             // Poignée
             View handle = new View(a);
             GradientDrawable hb = new GradientDrawable();
@@ -234,7 +253,7 @@ final class Sheet {
         r.setPadding(px(22), px(8), px(20), px(8));
         if (it.icon != null) {
             ImageView iv = new ImageView(activity);
-            iv.setImageDrawable(it.icon);
+            iv.setImageDrawable(copy(it.icon));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(px(36), px(36));
             lp.rightMargin = px(16);
             r.addView(iv, lp);
@@ -337,15 +356,20 @@ final class Sheet {
 
     void show() {
         FrameLayout root = new FrameLayout(activity);
-        root.addView(panel, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT, top ? Gravity.TOP : Gravity.BOTTOM));
+        int screenW = activity.getResources().getDisplayMetrics().widthPixels;
+        int cardW = Math.min(screenW - px(32), px(420));
+        FrameLayout.LayoutParams pl = new FrameLayout.LayoutParams(
+                center ? cardW : FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                center ? Gravity.CENTER : top ? Gravity.TOP : Gravity.BOTTOM);
+        root.addView(panel, pl);
+        if (center) panel.setElevation(px(12));
         dialog.setContentView(root);
         Window w = dialog.getWindow();
         if (w != null) {
             w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            w.setGravity(top ? Gravity.TOP : Gravity.BOTTOM);
-            w.setWindowAnimations(top ? android.R.style.Animation_Dialog : android.R.style.Animation_InputMethod);
+            w.setGravity(center ? Gravity.CENTER : top ? Gravity.TOP : Gravity.BOTTOM);
+            w.setWindowAnimations(top || center ? android.R.style.Animation_Dialog : android.R.style.Animation_InputMethod);
             if (top) {
                 w.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
                 w.setStatusBarColor(Color.TRANSPARENT);

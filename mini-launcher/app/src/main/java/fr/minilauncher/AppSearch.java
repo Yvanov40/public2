@@ -34,9 +34,12 @@ final class AppSearch {
         for (Map.Entry<String, Integer> u : store.usage()) usage.put(u.getKey(), u.getValue());
 
         boolean grid = store.searchGrid();
-        Sheet s = new Sheet(a, null, store.searchTop());
-        EditText q = s.addSearch("Rechercher une appli");
-        int max = grid ? 12 : MAX;
+        int pos = store.searchPos();
+        Sheet s = new Sheet(a, null, pos);
+        EditText q = s.addSearch("⌕   Rechercher une appli");
+        int max = grid ? (pos == Sheet.CENTER ? 8 : 12) : MAX;
+        // Une seule appli trouvée : elle s'ouvre après une courte pause dans la frappe.
+        Runnable[] autoOpen = {null};
         q.setImeOptions(EditorInfo.IME_ACTION_GO);
         List<AppRepository.AppEntry> shown = new ArrayList<>();
 
@@ -52,6 +55,15 @@ final class AppSearch {
             } else {
                 List<AppRepository.AppEntry> found = rank(apps, query, usage);
                 shown.addAll(found.subList(0, Math.min(max, found.size())));
+                if (autoOpen[0] != null) q.removeCallbacks(autoOpen[0]);
+                if (found.size() == 1 && store.searchAutoOpen()) {
+                    AppRepository.AppEntry only = found.get(0);
+                    String typed = q.getText().toString();
+                    autoOpen[0] = () -> {
+                        if (s.dialog.isShowing() && q.getText().toString().equals(typed)) open(a, s, only);
+                    };
+                    q.postDelayed(autoOpen[0], 450);
+                }
             }
             if (grid) {
                 grid(a, s, shown, !query.isEmpty());
@@ -179,7 +191,7 @@ final class AppSearch {
             android.widget.LinearLayout cell = new android.widget.LinearLayout(a);
             cell.setOrientation(android.widget.LinearLayout.VERTICAL);
             cell.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-            cell.setPadding(s.px(4), s.px(10), s.px(4), s.px(10));
+            cell.setPadding(s.px(2), s.px(8), s.px(2), s.px(8));
             android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
             bg.setCornerRadius(s.px(18));
             bg.setColor(i == 0 && highlightFirst ? ((s.accent & 0x00FFFFFF) | 0x33000000) : 0);
@@ -189,9 +201,9 @@ final class AppSearch {
             cell.setBackground(new android.graphics.drawable.RippleDrawable(
                     android.content.res.ColorStateList.valueOf(Sheet.RIPPLE), bg, mask));
             android.widget.ImageView icon = new android.widget.ImageView(a);
-            icon.setImageDrawable(app.icon);
-            cell.addView(icon, new android.widget.LinearLayout.LayoutParams(s.px(50), s.px(50)));
-            android.widget.TextView name = s.text(app.label, 12, Sheet.TEXT);
+            icon.setImageDrawable(Sheet.copy(app.icon));
+            cell.addView(icon, new android.widget.LinearLayout.LayoutParams(s.px(40), s.px(40)));
+            android.widget.TextView name = s.text(app.label, 11, Sheet.TEXT);
             name.setSingleLine(true);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             name.setGravity(android.view.Gravity.CENTER);

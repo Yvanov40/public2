@@ -175,7 +175,7 @@ final class Recents {
         c.setLayoutParams(cl);
 
         ImageView icon = new ImageView(a);
-        icon.setImageDrawable(app.icon);
+        icon.setImageDrawable(Sheet.copy(app.icon));
         c.addView(icon, new LinearLayout.LayoutParams(s.px(60), s.px(60)));
 
         TextView name = s.text(app.label, 14, Sheet.TEXT);
