@@ -150,6 +150,9 @@ final class Store {
         for (Map.Entry<String, Integer> u : usage()) if (u.getKey().equals(key)) return u.getValue();
         return 0;
     }
+    static final String ICON_ALPHA = "iconAlpha", WIDGET_ALPHA = "widgetAlpha";
+    int iconAlpha() { return num(ICON_ALPHA, 100); }         // % : applis et dossiers de l'accueil
+    int widgetAlpha() { return num(WIDGET_ALPHA, 100); }     // % : widgets de l'accueil
     static final String KEEP_ALIVE = "keepAlive";
     boolean keepAlive() { return flag(KEEP_ALIVE, true); }
     static final String NAV_KEYS = "navKeys";

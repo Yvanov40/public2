@@ -200,6 +200,8 @@ final class HomeGrid extends FrameLayout {
             }
             kept.add(v);
             viewItems.put(v, it);
+            // Transparence réglable (Réglages > Accueil > Grille).
+            v.setAlpha((it.widget ? store.widgetAlpha() : store.iconAlpha()) / 100f);
             if (it.widget) sizeWidget((AppWidgetHostView) v, it);
         }
         for (int i = getChildCount() - 1; i >= 0; i--) {

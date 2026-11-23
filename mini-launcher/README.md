@@ -88,7 +88,7 @@ L'écran principal est une grille de tuiles ; chaque tuile ouvre sa page :
 - Lisibilité : icônes de la barre d'état et texte de l'accueil (horloge, noms) automatiques
   selon la clarté du fond d'écran, ou forcés clair/foncé ; voile sombre en haut.
 - Horloge : afficher, taille, position, date.
-- Grille : colonnes, lignes, taille des icônes, noms.
+- Grille : colonnes, lignes, taille des icônes, noms, opacité des icônes et des widgets.
 - Favoris : nombre, complément automatique.
 - Dossiers : fond et opacité du cercle, taille des icônes et du cercle, noms des applis,
   bordure et fond de l'icône. Pour un dossier précis : maintenir puis lâcher sur place >

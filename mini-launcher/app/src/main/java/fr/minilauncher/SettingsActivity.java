@@ -310,6 +310,8 @@ public final class SettingsActivity extends Activity {
         slider("Lignes", 0, 9, store.rowsSetting(), "%d", v -> store.setNum(Store.ROWS, v));
         slider("Taille des icônes", 36, 72, store.iconSize(), "%d dp", v -> store.setNum(Store.ICON, v));
         toggle("Nom des applis", null, store.labels(), on -> store.setFlag(Store.LABELS, on));
+        slider("Opacité des icônes", 10, 100, store.iconAlpha(), "%d %%", v -> store.setNum(Store.ICON_ALPHA, v));
+        slider("Opacité des widgets", 10, 100, store.widgetAlpha(), "%d %%", v -> store.setNum(Store.WIDGET_ALPHA, v));
         note("Lignes à 0 : automatique, selon la taille de l'écran.");
     }
 
