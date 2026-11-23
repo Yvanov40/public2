@@ -76,6 +76,8 @@ final class AlphaStripView extends View {
     private final float dp;
     private final Store store;
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Map<String, Integer> usageCounts = new HashMap<>();
     private final TextPaint text = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint label = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Rect tmp = new Rect();
@@ -116,11 +118,29 @@ final class AlphaStripView extends View {
         store = Store.get(context);
         text.setTextAlign(Paint.Align.CENTER);
         text.setFakeBoldText(true);
+        ring.setStyle(Paint.Style.STROKE);
+        ring.setStrokeWidth(2.5f * dp);
         label.setColor(Color.WHITE);
         label.setTextAlign(Paint.Align.CENTER);
         label.setTextSize(11 * getResources().getDisplayMetrics().scaledDensity);
         label.setShadowLayer(3 * dp, 0, dp, 0xCC000000);
         setHapticFeedbackEnabled(true);
+    }
+
+    /** L'appli la plus utilisée de l'entrée (lettre ou ★), ou null s'il n'y a pas d'historique. */
+    private AppRepository.AppEntry preferred(int index) {
+        if (index < 0 || index >= entries.size()) return null;
+        AppRepository.AppEntry best = null;
+        int bestCount = 0;
+        for (AppRepository.AppEntry e : entries.get(index).apps) {
+            Integer n0 = usageCounts.get(Store.key(e.component));
+            int n = n0 == null ? 0 : n0;
+            if (n > bestCount) {
+                bestCount = n;
+                best = e;
+            }
+        }
+        return best;
     }
 
     void setListener(Listener l) {
@@ -150,6 +170,8 @@ final class AlphaStripView extends View {
     /** Relit les applis, favoris, groupes et réglages. */
     void refresh() {
         accent = store.accent();
+        usageCounts.clear();
+        for (Map.Entry<String, Integer> u : store.usage()) usageCounts.put(u.getKey(), u.getValue());
         haptics = store.haptic();
         String currentLabel = current >= 0 && current < entries.size() ? entries.get(current).label : null;
         entries.clear();
@@ -278,7 +300,12 @@ final class AlphaStripView extends View {
         cells.clear();
         hoverCell = -1;
         if (current < 0) return;
-        List<AppRepository.AppEntry> apps = entries.get(current).apps;
+        List<AppRepository.AppEntry> apps = new ArrayList<>(entries.get(current).apps);
+        AppRepository.AppEntry pref = preferred(current);
+        if (pref != null) {
+            apps.remove(pref);
+            apps.add(0, pref); // l'appli préférée en premier, à côté de la lettre
+        }
         int n = apps.size();
         if (n == 0) return;
         float cellW = 74 * dp, cellH = 80 * dp;
@@ -408,7 +435,13 @@ final class AlphaStripView extends View {
                     if (phase == PHASE_IDLE) close();
                     invalidate();
                 } else if (phase == PHASE_LETTERS) {
-                    // Doigt levé sur l'alphabet : les applis restent pour un toucher.
+                    // Doigt levé sur la lettre : son appli préférée s'ouvre (si elle en a une) ;
+                    // sinon les applis restent pour un toucher.
+                    AppRepository.AppEntry pref = store.alphaLearn() && current >= 0 ? preferred(current) : null;
+                    if (pref != null && !cells.isEmpty()) {
+                        launch(cells.get(0));
+                        return true;
+                    }
                     if (cells.isEmpty()) close();
                     else phase = PHASE_STICKY;
                     invalidate();
@@ -542,6 +575,11 @@ final class AlphaStripView extends View {
                 fill.setColor(accent);
                 fill.setAlpha(90);
                 canvas.drawCircle(c.x, iy, 33 * dp, fill);
+            } else if (i == 0 && phase == PHASE_LETTERS && store.alphaLearn() && preferred(current) != null) {
+                // Anneau : c'est elle qui s'ouvre si on lâche le doigt sur la lettre.
+                ring.setColor(accent);
+                ring.setAlpha(alpha);
+                canvas.drawCircle(c.x, iy, hh + 6 * dp, ring);
             }
             Drawable icon = c.app.icon;
             if (icon != null) {

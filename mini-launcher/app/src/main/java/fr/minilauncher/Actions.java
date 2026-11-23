@@ -19,19 +19,19 @@ import android.widget.Toast;
 final class Actions {
 
     static final int NONE = 0, LOCK = 1, NOTIFICATIONS = 2, CONTROL_CENTER = 3, OPEN_APP = 4,
-            TORCH = 5, CAMERA = 6, SEARCH = 7, SETTINGS = 8, RECENTS = 9, APP_SEARCH = 10;
+            TORCH = 5, CAMERA = 6, SEARCH = 7, SETTINGS = 8, RECENTS = 9, APP_SEARCH = 10, PREVIOUS = 11;
 
     static final String[] NAMES = {
             "Rien", "Verrouiller l'écran", "Notifications", "Centre de contrôle", "Ouvrir une appli…",
             "Lampe torche", "Appareil photo", "Recherche web", "Réglages du launcher", "Applis récentes",
-            "Recherche d'applis (clavier)"};
+            "Recherche d'applis (clavier)", "Appli d'avant (bascule)"};
 
     /** Gestes réglables : clé d'enregistrement, nom affiché, action par défaut. */
     static final String[] GESTURES = {"gDouble", "gUp", "gDownLeft", "gDownRight", "gLeft", "gRight"};
     static final String[] GESTURE_NAMES = {
             "Double tap dans le vide", "Glisser vers le haut", "Glisser vers le bas (moitié gauche)",
             "Glisser vers le bas (moitié droite)", "Glisser vers la gauche", "Glisser vers la droite"};
-    static final int[] DEFAULTS = {LOCK, RECENTS, NOTIFICATIONS, CONTROL_CENTER, APP_SEARCH, NONE};
+    static final int[] DEFAULTS = {LOCK, RECENTS, NOTIFICATIONS, CONTROL_CENTER, APP_SEARCH, PREVIOUS};
 
     private static boolean torchOn;
     private static boolean torchListening;
@@ -87,9 +87,26 @@ final class Actions {
             case APP_SEARCH:
                 AppSearch.show(a, AppRepository.get(a).cached());
                 break;
+            case PREVIOUS:
+                previous(a);
+                break;
             default:
                 break;
         }
+    }
+
+    /**
+     * Bascule : rouvre l'avant-dernière appli utilisée (la dernière est celle qu'on vient de
+     * quitter), comme Alt+Tab. Deux glissés suffisent pour aller et venir entre deux applis.
+     */
+    private static void previous(Activity a) {
+        java.util.List<Object[]> recent = Recents.load(a, AppRepository.get(a).cached());
+        if (recent.size() < 2) {
+            if (recent.size() == 1) Launcher.launch(a, (AppRepository.AppEntry) recent.get(0)[0], null, null);
+            else toast(a, "Pas encore d'appli d'avant");
+            return;
+        }
+        Launcher.launch(a, (AppRepository.AppEntry) recent.get(1)[0], null, null);
     }
 
     // ------------------------------------------------------------ verrouillage

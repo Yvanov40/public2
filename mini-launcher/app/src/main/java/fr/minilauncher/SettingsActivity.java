@@ -304,6 +304,8 @@ public final class SettingsActivity extends Activity {
         colorChoice("Couleur des lettres", LETTER_NAMES, LETTER_COLORS, store.stripFg(),
                 c -> store.setNum(Store.STRIP_FG, c));
         slider("Zone tactile", 8, 40, store.band(), "%d %%", v -> store.setNum(Store.BAND, v));
+        toggle("Lâcher sur une lettre", "Ouvre l'appli la plus utilisée de la lettre", store.alphaLearn(),
+                on -> store.setFlag(Store.ALPHA_LEARN, on));
         note("Poser le doigt sur un bord et le glisser de haut en bas : les applis de la lettre "
                 + "apparaissent à côté. Glisser vers l'intérieur jusqu'à l'appli et lâcher. "
                 + "En haut ★ les favoris.");
@@ -328,6 +330,18 @@ public final class SettingsActivity extends Activity {
         addRow(usageAccess);
         note("Les gestes marchent dans les zones vides du milieu de l'écran. Glisser vers le haut "
                 + "ouvre les applis récentes en roue : continuer jusqu'à l'appli et lâcher.");
+
+        section("Étoile");
+        for (int d = 0; d < 8; d++) starRow(d);
+        note("Appuyer sans bouger dans le vide (petite vibration), puis un coup de doigt dans une "
+                + "direction et lâcher : l'appli s'ouvre. En hésitant, l'étoile s'affiche. Une branche "
+                + "vide propose de choisir son appli.");
+
+        section("Lettres dessinées");
+        drawingRows();
+        note("Dessiner une lettre (ou n'importe quel tracé) dans le vide de l'accueil ouvre l'appli "
+                + "associée. Un tracé inconnu demande à quelle appli l'associer ; le refaire 2 ou 3 "
+                + "fois améliore la reconnaissance. Les lignes droites restent des gestes.");
 
         section("Centre de contrôle");
         choice("Méthode d'ouverture", Shade.METHODS, store.ccMethod(), i -> store.setNum(Store.CC_METHOD, i));
@@ -661,6 +675,59 @@ public final class SettingsActivity extends Activity {
             }
         }));
         addRow(r);
+    }
+
+    private void starRow(int d) {
+        LinearLayout r = row(StarView.DIRECTIONS[d], null, TEXT);
+        TextView val = valueText(starLabel(d));
+        val.setTextColor(store.starApp(d) == null ? MUTED : accent);
+        r.addView(val);
+        r.addView(chevron());
+        clickable(r, v -> Sheet.list(this, "Étoile, branche " + StarView.DIRECTIONS[d].toLowerCase(),
+                new String[]{"Choisir une appli…", "Vider la branche"}, which -> {
+                    if (which == 0) {
+                        Menus.pickApp(this, "Appli de la branche", AppRepository.get(this).cached(), app -> {
+                            store.setStarApp(d, Store.key(app.component));
+                            val.setText(app.label);
+                            val.setTextColor(accent);
+                        });
+                    } else {
+                        store.setStarApp(d, null);
+                        val.setText("—");
+                        val.setTextColor(MUTED);
+                    }
+                }));
+        addRow(r);
+    }
+
+    private String starLabel(int d) {
+        String key = store.starApp(d);
+        return key == null ? "—" : appName(key);
+    }
+
+    private void drawingRows() {
+        java.util.List<Object[]> list = Drawings.entries(this);
+        if (list.isEmpty()) {
+            LinearLayout r = row("Aucun tracé appris", "Dessine sur l'accueil pour en ajouter", MUTED);
+            addRow(r);
+            return;
+        }
+        for (Object[] e : list) {
+            String key = (String) e[0];
+            int n = (Integer) e[1];
+            LinearLayout r = row(appName(key), n + (n > 1 ? " tracés appris" : " tracé appris"), TEXT);
+            if (e[2] != null) {
+                android.widget.ImageView preview = new android.widget.ImageView(this);
+                int size = px(40);
+                preview.setImageBitmap(((android.gesture.Gesture) e[2]).toBitmap(size, size, px(4), accent));
+                r.addView(preview, new LinearLayout.LayoutParams(size, size));
+            }
+            clickable(r, v -> Sheet.list(this, appName(key), new String[]{"Oublier ses tracés"}, which -> {
+                Drawings.forget(this, key);
+                showPage(currentPage);
+            }));
+            addRow(r);
+        }
     }
 
     private String appName(String key) {

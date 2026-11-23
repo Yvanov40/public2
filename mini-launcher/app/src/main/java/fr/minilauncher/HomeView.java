@@ -41,6 +41,15 @@ final class HomeView extends FrameLayout {
 
         /** Applis récentes, de la plus récente à la plus ancienne. */
         List<AppRepository.AppEntry> recentApps();
+
+        /** Les 8 applis de l'étoile (null = branche vide). */
+        AppRepository.AppEntry[] starApps();
+
+        /** Branche {@code dir} de l'étoile choisie (vide : proposer d'y mettre une appli). */
+        void onStar(int dir);
+
+        /** Un tracé (lettre dessinée) : {x, y, temps} par point. */
+        void onDrawing(List<float[]> points);
     }
 
     private static final long LONG_PRESS_MS = 500;
@@ -61,6 +70,44 @@ final class HomeView extends FrameLayout {
     private Store.HomeItem touchedItem;
     private float downX, downY;
     private long downTime;
+    private static final long STAR_ARM_MS = 220;   // appui sans bouger avant l'étoile
+    private static final long STAR_SHOW_MS = 380;  // hésitation avant de la montrer
+    private static final long HOME_MENU_MS = 750;  // appui long dans le vide : menu de l'accueil
+
+    private StarView star;
+    private boolean starArmed;
+    private int starDir = -1;
+    private boolean pendingSwipe;                  // geste en cours, interprété au lever du doigt
+    private final List<float[]> trail = new ArrayList<>();
+    private final android.graphics.Paint ink = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+    private final android.graphics.Path inkPath = new android.graphics.Path();
+
+    private final Runnable armStar = () -> {
+        if (decided || touchedItem != null) return;
+        starArmed = true;
+        if (Store.get(getContext()).haptic()) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        star.arm(downX, downY, host().starApps());
+        postDelayed(this::revealStar, STAR_SHOW_MS);
+    };
+
+    private void revealStar() {
+        if (starArmed) star.reveal();
+    }
+
+    private final Runnable homeMenu = () -> {
+        if (!starArmed || starDir >= 0) return;
+        starArmed = false;
+        star.hide();
+        decided = true;
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        host().onHomeLongPress();
+    };
+
+    void setStar(StarView s) {
+        star = s;
+        addView(s, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+    }
+
     private long lastTapTime;
     private float lastTapX, lastTapY;
     private View clockView;
@@ -103,6 +150,23 @@ final class HomeView extends FrameLayout {
         addView(grid, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         addView(strip, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         addView(folderWheel, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        ink.setStyle(android.graphics.Paint.Style.STROKE);
+        ink.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+        ink.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+        ink.setStrokeWidth(6 * dp);
+        setWillNotDraw(false);
+    }
+
+    /** Le tracé du doigt, par-dessus tout (retour visuel des lettres dessinées). */
+    @Override
+    protected void dispatchDraw(android.graphics.Canvas canvas) {
+        super.dispatchDraw(canvas);
+        if (!pendingSwipe || trail.size() < 2) return;
+        inkPath.reset();
+        inkPath.moveTo(trail.get(0)[0], trail.get(0)[1]);
+        for (int i = 1; i < trail.size(); i++) inkPath.lineTo(trail.get(i)[0], trail.get(i)[1]);
+        ink.setColor((Store.get(getContext()).accent() & 0x00FFFFFF) | 0xCC000000);
+        canvas.drawPath(inkPath, ink);
     }
 
     private HomeGrid grid() {
@@ -224,7 +288,18 @@ final class HomeView extends FrameLayout {
                     return strip.handleTouch(e);
                 }
                 if (toChildren) super.dispatchTouchEvent(e);
-                postDelayed(longPress, LONG_PRESS_MS);
+                starArmed = false;
+                starDir = -1;
+                pendingSwipe = false;
+                trail.clear();
+                trail.add(new float[]{x, y, e.getEventTime()});
+                if (touchedItem == null && !onClock(x, y)) {
+                    // Vide : appuyer-glisser = étoile ; appui long = menu de l'accueil.
+                    postDelayed(armStar, STAR_ARM_MS);
+                    postDelayed(homeMenu, HOME_MENU_MS);
+                } else {
+                    postDelayed(longPress, LONG_PRESS_MS);
+                }
                 return true;
             }
 
@@ -235,28 +310,68 @@ final class HomeView extends FrameLayout {
                     if (far) removeCallbacks(longPress);
                     return super.dispatchTouchEvent(e);
                 }
+                if (starArmed) {
+                    // Étoile : la direction du doigt choisit la branche.
+                    double dist = Math.hypot(dx, dy);
+                    if (dist > slop) removeCallbacks(homeMenu);
+                    int dir = -1;
+                    if (dist > 36 * dp) {
+                        double a = Math.toDegrees(Math.atan2(dx, -dy));
+                        if (a < 0) a += 360;
+                        dir = (int) Math.round(a / 45) % 8;
+                    }
+                    if (dir != starDir) {
+                        starDir = dir;
+                        star.select(dir);
+                        if (dir >= 0 && Store.get(getContext()).haptic()) {
+                            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                        }
+                    }
+                    return true;
+                }
+                if (pendingSwipe) {
+                    trail.add(new float[]{x, y, e.getEventTime()});
+                    invalidate();
+                    return true;
+                }
                 if (decided || !far) return true;
                 decided = true;
                 removeCallbacks(longPress);
+                removeCallbacks(armStar);
+                removeCallbacks(homeMenu);
                 lastTapTime = 0;
-                if (dy > 0 && dy > 1.3f * Math.abs(dx)) {
-                    host.onGesture(downX > getWidth() / 2f ? "gDownRight" : "gDownLeft");
-                } else if (dy < 0 && -dy > 1.3f * Math.abs(dx)) {
-                    if (Actions.actionFor(getContext(), "gUp") == Actions.RECENTS) {
-                        // Un seul geste : la roue des récentes s'ouvre là où le doigt est parti,
-                        // on continue jusqu'à l'appli et on lâche.
-                        openRecents(downX, downY, e);
-                    } else {
-                        host.onGesture("gUp");
-                    }
-                } else if (Math.abs(dx) > 1.3f * Math.abs(dy)) {
-                    host.onGesture(dx < 0 ? "gLeft" : "gRight");
+                if (touchedItem == null && dy < 0 && -dy > 1.3f * Math.abs(dx)
+                        && Actions.actionFor(getContext(), "gUp") == Actions.RECENTS) {
+                    // Un seul geste : la roue des récentes s'ouvre là où le doigt est parti,
+                    // on continue jusqu'à l'appli et on lâche.
+                    openRecents(downX, downY, e);
+                    return true;
                 }
+                // Ligne droite (geste) ou tracé (lettre dessinée) : on le saura au lever du doigt.
+                pendingSwipe = true;
+                trail.add(new float[]{x, y, e.getEventTime()});
+                invalidate();
                 return true;
             }
 
             case MotionEvent.ACTION_UP:
                 removeCallbacks(longPress);
+                removeCallbacks(armStar);
+                removeCallbacks(homeMenu);
+                if (starArmed) {
+                    starArmed = false;
+                    int dir = starDir;
+                    star.hide();
+                    if (dir >= 0) host.onStar(dir);
+                    decided = true;
+                    return true;
+                }
+                if (pendingSwipe) {
+                    trail.add(new float[]{x, y, e.getEventTime()});
+                    finishSwipe();
+                    decided = true;
+                    return true;
+                }
                 if (toChildren) {
                     toChildren = false;
                     return super.dispatchTouchEvent(e);
@@ -285,6 +400,13 @@ final class HomeView extends FrameLayout {
 
             case MotionEvent.ACTION_CANCEL:
                 removeCallbacks(longPress);
+                removeCallbacks(armStar);
+                removeCallbacks(homeMenu);
+                starArmed = false;
+                pendingSwipe = false;
+                trail.clear();
+                star.hide();
+                invalidate();
                 if (toChildren) {
                     toChildren = false;
                     return super.dispatchTouchEvent(e);
@@ -294,6 +416,36 @@ final class HomeView extends FrameLayout {
         }
         if (toChildren) return super.dispatchTouchEvent(e);
         return true;
+    }
+
+    /**
+     * Fin d'un glissé : une ligne à peu près droite déclenche le geste de sa direction ; un
+     * tracé sinueux est une lettre dessinée.
+     */
+    private void finishSwipe() {
+        pendingSwipe = false;
+        List<float[]> pts = new ArrayList<>(trail);
+        trail.clear();
+        invalidate();
+        if (pts.size() < 2) return;
+        float[] a = pts.get(0), b = pts.get(pts.size() - 1);
+        float dx = b[0] - a[0], dy = b[1] - a[1];
+        double chord = Math.hypot(dx, dy), length = 0;
+        for (int i = 1; i < pts.size(); i++) {
+            length += Math.hypot(pts.get(i)[0] - pts.get(i - 1)[0], pts.get(i)[1] - pts.get(i - 1)[1]);
+        }
+        boolean drawing = length > 90 * dp && length > 1.3 * chord;
+        if (drawing && touchedItem == null) {
+            host.onDrawing(pts);
+            return;
+        }
+        if (dy > 0 && dy > 1.3f * Math.abs(dx)) {
+            host.onGesture(a[0] > getWidth() / 2f ? "gDownRight" : "gDownLeft");
+        } else if (dy < 0 && -dy > 1.3f * Math.abs(dx)) {
+            host.onGesture("gUp");
+        } else if (Math.abs(dx) > 1.3f * Math.abs(dy)) {
+            host.onGesture(dx < 0 ? "gLeft" : "gRight");
+        }
     }
 
     /**

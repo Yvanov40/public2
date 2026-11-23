@@ -31,6 +31,19 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
   les réglages proposent plusieurs méthodes (relance, fermer puis ouvrir, notifications puis
   centre de contrôle, ou désactivé) avec un bouton « Essayer ».
 
+## Aller vite sans chercher
+
+- **Étoile** : appuyer sans bouger dans le vide (petite vibration), puis un coup de doigt
+  dans une des 8 directions et lâcher. En hésitant, l'étoile s'affiche ; une branche vide
+  propose de choisir son appli. Appui long sans bouger : menu de l'accueil.
+- **Lettres qui apprennent** : lâcher le doigt sur une lettre de l'alphabet ouvre l'appli la
+  plus utilisée de cette lettre (entourée dans la liste).
+- **Appli d'avant** (par défaut : glisser vers la droite) : rouvre l'avant-dernière appli,
+  comme Alt+Tab.
+- **Lettres dessinées** : dessiner un tracé dans le vide ouvre l'appli associée ; un tracé
+  inconnu demande à quelle appli l'associer. Les lignes droites restent des gestes (ils se
+  déclenchent au lever du doigt).
+
 ## Pastilles de notification
 
 Sur les applis et dossiers de l'accueil, dans le cercle des dossiers et dans l'alphabet. Il

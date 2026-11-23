@@ -134,6 +134,18 @@ final class Store {
     int panelRadius() { return num(PANEL_RADIUS, 26); }      // dp
     boolean searchTop() { return flag(SEARCH_TOP, true); }
     boolean searchGrid() { return flag(SEARCH_GRID, true); }
+    static final String ALPHA_LEARN = "alphaLearn", STAR = "star";
+    boolean alphaLearn() { return flag(ALPHA_LEARN, true); }  // lâcher sur une lettre = appli préférée
+    /** Appli de la branche {@code dir} de l'étoile (0 = haut, puis sens des aiguilles), ou null. */
+    String starApp(int dir) { return text(STAR + dir); }
+    void setStarApp(int dir, String key) {
+        if (key == null) prefs.edit().remove(STAR + dir).apply();
+        else setText(STAR + dir, key);
+    }
+    int usageOf(String key) {
+        for (Map.Entry<String, Integer> u : usage()) if (u.getKey().equals(key)) return u.getValue();
+        return 0;
+    }
     static final String KEEP_ALIVE = "keepAlive";
     boolean keepAlive() { return flag(KEEP_ALIVE, true); }
     static final String NAV_KEYS = "navKeys";
