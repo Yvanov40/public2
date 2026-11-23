@@ -294,7 +294,14 @@ public final class HomeActivity extends Activity
         closeOverlays();
     }
 
+    /** Cadre à poignées autour de l'élément : on l'étire pour changer sa taille. */
+    private void startResize(Store.HomeItem item) {
+        grid.startResize(item);
+        Toast.makeText(this, "Étire les poignées ; touche à côté pour terminer", Toast.LENGTH_SHORT).show();
+    }
+
     private void closeOverlays() {
+        grid.endResize();
         Sheet.dismissAll();
         strip.close();
         folderWheel.close();
@@ -415,7 +422,7 @@ public final class HomeActivity extends Activity
     public void onHomeItemMenu(Store.HomeItem item) {
         if (item.folder != null) {
             Menus.folderMenu(this, item.folder, grid.sortedApps(), this::refreshAll,
-                    Store.get(this).homeLocked() ? null : () -> chooseSize(item));
+                    Store.get(this).homeLocked() ? null : () -> startResize(item));
         } else if (item.widget) {
             AppWidgetProviderInfo info = widgetManager.getAppWidgetInfo(item.widgetId);
             boolean configurable = info != null && info.configure != null;
@@ -425,7 +432,11 @@ public final class HomeActivity extends Activity
             String title = info == null ? "Widget" : info.loadLabel(getPackageManager());
             Sheet.list(this, title, opts, which -> {
                 if (which == 0) {
-                    chooseSize(item);
+                    if (Store.get(this).homeLocked()) {
+                        Toast.makeText(this, "Accueil verrouillé", Toast.LENGTH_SHORT).show();
+                    } else {
+                        startResize(item);
+                    }
                 } else if (configurable && which == 1) {
                     try {
                         widgetHost.startAppWidgetConfigureActivityForResult(this, item.widgetId, 0, 99, null);

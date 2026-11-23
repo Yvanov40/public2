@@ -95,7 +95,9 @@ L'écran principal est une grille de tuiles ; chaque tuile ouvre sa page :
 - Dossiers : fond et opacité du cercle, taille des icônes et du cercle, noms des applis,
   bordure et fond de l'icône. Pour un dossier précis : maintenir puis lâcher sur place >
   Personnaliser (couleur, style d'icône — grille, première appli, initiale, invisible —, forme).
-  Taille sur l'accueil (1×1 à 4×4) : un grand dossier montre la grille de ses applis.
+  Taille sur l'accueil : tuile Taille, puis étirer les poignées du cadre (bord droit, bas,
+  coin) ; un grand dossier montre la grille de ses applis. Taille des icônes dans le
+  dossier : de très petites à très grandes. Même cadre pour les widgets.
   « Toucher le dossier » : ouvre le cercle, ou icônes directes (toucher une mini-icône ouvre
   son appli ; ailleurs ou « +n », le cercle).
   Invisible : la case paraît vide mais reste un dossier (contour en pointillés pendant un

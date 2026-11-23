@@ -27,6 +27,7 @@ final class Store {
         int style;  // icône : 0 grille de 4, 1 première appli, 2 initiale
         int shape;  // 0 carré arrondi, 1 rond
         boolean direct; // icônes directes : toucher une mini-icône ouvre son appli
+        int iconSize = 2; // taille des icônes dans le dossier : 0 très petites … 4 très grandes
         final List<String> apps = new ArrayList<>();
 
         Group(String name, int color) {
@@ -285,6 +286,7 @@ final class Store {
                 g.style = o.optInt("style", 0);
                 g.shape = o.optInt("shape", 0);
                 g.direct = o.optBoolean("direct", false);
+                g.iconSize = o.optInt("iconSize", 2);
                 JSONArray apps = o.getJSONArray("apps");
                 for (int j = 0; j < apps.length(); j++) g.apps.add(apps.getString(j));
                 out.add(g);
@@ -304,6 +306,7 @@ final class Store {
                 o.put("style", g.style);
                 o.put("shape", g.shape);
                 o.put("direct", g.direct);
+                o.put("iconSize", g.iconSize);
                 o.put("apps", new JSONArray(g.apps));
                 a.put(o);
             }
@@ -416,6 +419,14 @@ final class Store {
     }
 
     /** Personnalisation d'un dossier ; -1 = inchangé. */
+    void setFolderIconSize(String name, int size) {
+        List<Group> gs = groups();
+        Group g = find(gs, name);
+        if (g == null) return;
+        g.iconSize = size;
+        setGroups(gs);
+    }
+
     void setFolderDirect(String name, boolean direct) {
         List<Group> gs = groups();
         Group g = find(gs, name);

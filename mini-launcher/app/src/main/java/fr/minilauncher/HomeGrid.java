@@ -516,6 +516,123 @@ final class HomeGrid extends FrameLayout {
 
     private boolean externalDrag;
 
+    // ------------------------------------------------------------ redimensionner en étirant
+
+    private Store.HomeItem resizeItem;
+    private int resizeW, resizeH;
+    private boolean resizeOk = true;
+
+    /** Affiche le cadre et ses poignées autour de l'élément. */
+    void startResize(Store.HomeItem it) {
+        items = store.homeItems();
+        resizeItem = same(it);
+        if (resizeItem == null) return;
+        resizeW = resizeItem.w;
+        resizeH = resizeItem.h;
+        resizeOk = true;
+        invalidate();
+    }
+
+    boolean isResizing() {
+        return resizeItem != null;
+    }
+
+    void endResize() {
+        if (resizeItem == null) return;
+        resizeItem = null;
+        rebuild();
+        invalidate();
+    }
+
+    private float[] frame() {
+        float l = left + resizeItem.col * cellW, t = top + resizeItem.row * cellH;
+        return new float[]{l, t, l + resizeW * cellW, t + resizeH * cellH};
+    }
+
+    /** Poignée sous (x, y) : 0 bord droit, 1 bord bas, 2 coin ; -1 aucune. */
+    int handleAt(float x, float y) {
+        if (resizeItem == null) return -1;
+        float[] f = frame();
+        float[][] hs = {{f[2], (f[1] + f[3]) / 2}, {(f[0] + f[2]) / 2, f[3]}, {f[2], f[3]}};
+        int best = -1;
+        double bestD = 34 * dp;
+        for (int i = 0; i < 3; i++) {
+            double d = Math.hypot(x - hs[i][0], y - hs[i][1]);
+            if (d < bestD) {
+                bestD = d;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    void dragHandle(int h, float x, float y) {
+        if (resizeItem == null) return;
+        float l = left + resizeItem.col * cellW, t = top + resizeItem.row * cellH;
+        if (h == 0 || h == 2) {
+            resizeW = Math.max(1, Math.min(cols - resizeItem.col, Math.round((x - l) / cellW)));
+        }
+        if (h == 1 || h == 2) {
+            resizeH = Math.max(1, Math.min(rows - resizeItem.row, Math.round((y - t) / cellH)));
+        }
+        resizeOk = fits(resizeItem.col, resizeItem.row, resizeW, resizeH, resizeItem);
+        invalidate();
+    }
+
+    /** Applique la taille visée si elle tient ; le cadre reste affiché pour d'autres réglages. */
+    void applyResize() {
+        if (resizeItem == null) return;
+        if (resizeOk && (resizeW != resizeItem.w || resizeH != resizeItem.h)) {
+            resizeItem.w = resizeW;
+            resizeItem.h = resizeH;
+            store.setHomeItems(items);
+            Store.HomeItem keep = resizeItem;
+            resizeItem = null;
+            rebuild();
+            items = store.homeItems();
+            resizeItem = same(keep);
+        } else {
+            resizeW = resizeItem.w;
+            resizeH = resizeItem.h;
+            resizeOk = true;
+        }
+        invalidate();
+    }
+
+    private void drawResize(Canvas canvas) {
+        float[] f = frame();
+        int accent = store.accent();
+        int color = resizeOk ? accent : 0xFFFF6B6B;
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        android.graphics.RectF r = new android.graphics.RectF(f[0] + 3 * dp, f[1] + 3 * dp, f[2] - 3 * dp, f[3] - 3 * dp);
+        p.setColor((color & 0x00FFFFFF) | 0x22000000);
+        canvas.drawRoundRect(r, 18 * dp, 18 * dp, p);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(2.5f * dp);
+        p.setColor(color);
+        canvas.drawRoundRect(r, 18 * dp, 18 * dp, p);
+        float[][] hs = {{f[2] - 3 * dp, (f[1] + f[3]) / 2}, {(f[0] + f[2]) / 2, f[3] - 3 * dp}, {f[2] - 3 * dp, f[3] - 3 * dp}};
+        for (float[] h : hs) {
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(Color.WHITE);
+            canvas.drawCircle(h[0], h[1], 11 * dp, p);
+            p.setStyle(Paint.Style.STROKE);
+            p.setColor(color);
+            canvas.drawCircle(h[0], h[1], 11 * dp, p);
+        }
+        String s = resizeW + " × " + resizeH;
+        Paint tp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        tp.setTextAlign(Paint.Align.CENTER);
+        tp.setTextSize(16 * dp);
+        tp.setFakeBoldText(true);
+        float cx = (f[0] + f[2]) / 2, cy = (f[1] + f[3]) / 2;
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(0xE01B1D26);
+        canvas.drawRoundRect(cx - 34 * dp, cy - 16 * dp, cx + 34 * dp, cy + 16 * dp, 16 * dp, 16 * dp, p);
+        tp.setColor(color);
+        canvas.drawText(s, cx, cy + 6 * dp, tp);
+    }
+
     /** Une appli sortie d'un dossier est en cours de glisser : on montre la grille. */
     void setExternalDrag(boolean on) {
         externalDrag = on;
@@ -582,7 +699,8 @@ final class HomeGrid extends FrameLayout {
     @Override
     protected void dispatchDraw(Canvas canvas) {
         super.dispatchDraw(canvas);
-        if (dragView == null && !externalDrag) return;
+        if (resizeItem != null) drawResize(canvas);
+        if (dragView == null && !externalDrag && resizeItem == null) return;
         // Pendant un déplacement : la grille en pointillés discrets.
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setColor(0x33FFFFFF);
@@ -737,7 +855,9 @@ final class HomeGrid extends FrameLayout {
             }
             float inner = 8 * dp, gap = 6 * dp;
             float bw = box.width() - 2 * inner, bh = box.height() - 2 * inner;
-            float t = Math.max(20 * dp, Math.min(48 * dp, Math.min(bw, bh) / 2.3f));
+            float[] factors = {0.55f, 0.75f, 1f, 1.3f, 1.6f};
+            float factor = factors[Math.max(0, Math.min(4, g.iconSize))];
+            float t = Math.max(14 * dp, Math.min(Math.min(bw, bh), 40 * dp * factor));
             int cols = Math.max(1, (int) ((bw + gap) / (t + gap)));
             int rows = Math.max(1, (int) ((bh + gap) / (t + gap)));
             int cap = cols * rows;

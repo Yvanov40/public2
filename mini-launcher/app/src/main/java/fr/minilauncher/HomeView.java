@@ -176,6 +176,33 @@ final class HomeView extends FrameLayout {
         }
     };
 
+    // Redimensionnement : poignée tenue, ou toucher à côté qui termine (et ne fait rien d'autre).
+    private int resizeHandle = -1;
+    private boolean resizeConsume;
+
+    private boolean resizeTouch(MotionEvent e) {
+        float x = e.getX() - grid.getLeft(), y = e.getY() - grid.getTop();
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                resizeHandle = grid.handleAt(x, y);
+                if (resizeHandle < 0) {
+                    grid.endResize();
+                    resizeConsume = true;
+                }
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                if (resizeHandle >= 0) grid.dragHandle(resizeHandle, x, y);
+                return true;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (resizeHandle >= 0) grid.applyResize();
+                resizeHandle = -1;
+                resizeConsume = false;
+                return true;
+        }
+        return true;
+    }
+
     /** Appui long sur un élément de l'accueil, menu ouvert : on attend un glissé éventuel. */
     private boolean pendingItemDrag;
 
@@ -319,6 +346,7 @@ final class HomeView extends FrameLayout {
     public boolean dispatchTouchEvent(MotionEvent e) {
         int action = e.getActionMasked();
         if (ghostApp != null) return ghostTouch(e);
+        if (grid.isResizing() || resizeConsume) return resizeTouch(e);
         if (pendingItemDrag) return pendingTouch(e);
 
         // Un dossier ouvert ou l'alphabet affiché garde la main sur les gestes suivants.
