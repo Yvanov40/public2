@@ -10,8 +10,8 @@ android {
         applicationId = "fr.minilauncher"
         minSdk = 26
         targetSdk = 35
-        versionCode = 32
-        versionName = "4.2"
+        versionCode = 33
+        versionName = "4.3"
     }
 
     // Clé fixe versionnée : chaque nouvel APK s'installe par-dessus le précédent.

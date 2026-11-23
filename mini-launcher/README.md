@@ -25,6 +25,9 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
 - **Dossiers** : poser le doigt ouvre le dossier en cercle autour de lui ; glisser jusqu'à
   l'appli et lâcher. Un simple toucher garde le cercle ouvert. Maintenir sans bouger :
   déplacer le dossier, ou son menu (applis, renommer, retirer, supprimer).
+- **Sortir une appli d'un dossier** : dans le cercle, garder le doigt sur une appli (vibration),
+  elle suit le doigt ; lâcher sur une case vide (posée sur l'accueil), sur un autre dossier
+  (elle y passe) ou sur une appli (nouveau dossier). Lâcher sans bouger : son menu.
 - **Widgets** : reçoivent les touchers ; appui long = déplacer, taille, régler, retirer.
 - **Glisser vers le bas** au milieu : à gauche les notifications, à droite le centre de
   contrôle. Sur HyperOS, le centre de contrôle s'ouvre parfois à moitié par l'appel direct :

@@ -487,13 +487,78 @@ final class HomeGrid extends FrameLayout {
     }
 
     boolean isDragging() {
-        return dragView != null;
+        return dragView != null || externalDrag;
+    }
+
+    private boolean externalDrag;
+
+    /** Une appli sortie d'un dossier est en cours de glisser : on montre la grille. */
+    void setExternalDrag(boolean on) {
+        externalDrag = on;
+        invalidateIcons();
+        invalidate();
+    }
+
+    /**
+     * Dépose une appli venue d'un dossier au point (x, y) de la grille :
+     * sur un dossier → elle y passe ; sur une appli → nouveau dossier avec les deux ;
+     * sur une case vide → posée sur l'accueil. Elle quitte son dossier d'origine.
+     * Renvoie un message à afficher, ou null si tout s'est bien passé.
+     */
+    String dropApp(String key, String fromFolder, float x, float y) {
+        items = store.homeItems();
+        computeGrid();
+        Store.HomeItem target = null;
+        for (Map.Entry<View, Store.HomeItem> e : viewItems.entrySet()) {
+            View v = e.getKey();
+            if (x >= v.getLeft() && x < v.getRight() && y >= v.getTop() && y < v.getBottom()) target = e.getValue();
+        }
+        if (target != null) {
+            Store.HomeItem t = same(target);
+            if (t == null || t.widget) return "Impossible de déposer sur un widget";
+            if (t.folder != null) {
+                if (t.folder.equals(fromFolder)) return null; // même dossier : rien à faire
+                store.addToFolder(t.folder, key);
+            } else {
+                if (key.equals(t.key)) return null;
+                int col = t.col, row = t.row;
+                items.remove(t);
+                store.setHomeItems(items);
+                List<String> both = new java.util.ArrayList<>();
+                both.add(t.key);
+                both.add(key);
+                store.createFolder(store.freeFolderName("Dossier"), both, col, row);
+            }
+        } else {
+            int col = (int) Math.floor((x - left) / cellW), row = (int) Math.floor((y - top) / cellH);
+            // Si l'appli est déjà sur l'accueil, elle déménage dans la case visée.
+            Store.HomeItem existing = null;
+            for (Store.HomeItem o : items) if (!o.widget && o.folder == null && key.equals(o.key)) existing = o;
+            if (!fits(col, row, 1, 1, existing)) return "Pas de place à cet endroit";
+            if (existing == null) {
+                existing = new Store.HomeItem();
+                existing.key = key;
+                items.add(existing);
+            }
+            existing.col = col;
+            existing.row = row;
+            existing.w = 1;
+            existing.h = 1;
+            store.setHomeItems(items);
+        }
+        // Elle quitte son dossier d'origine.
+        List<Store.Group> gs = store.groups();
+        Store.Group from = Store.find(gs, fromFolder);
+        if (from != null && from.apps.remove(key)) store.setGroups(gs);
+        items = store.homeItems();
+        rebuild();
+        return null;
     }
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
         super.dispatchDraw(canvas);
-        if (dragView == null) return;
+        if (dragView == null && !externalDrag) return;
         // Pendant un déplacement : la grille en pointillés discrets.
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setColor(0x33FFFFFF);

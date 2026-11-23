@@ -60,11 +60,30 @@ final class FolderWheelView extends View {
     private float downX, downY;
     private long openedAt;
 
+    /** Appli soulevée (maintenue) dans un vrai dossier : l'accueil prend le relais du glisser. */
+    interface LiftListener {
+        void onLift(AppRepository.AppEntry app, String folder, float x, float y);
+    }
+
+    private LiftListener liftListener;
+    private float holdX, holdY, lastX, lastY;
+
+    void setLiftListener(LiftListener l) {
+        liftListener = l;
+    }
+
     private final Runnable longPress = () -> {
-        if (moved || hover < 0 || listener == null) return;
+        if (hover < 0 || listener == null || !tracking) return;
         tracking = false;
         haptic(HapticFeedbackConstants.LONG_PRESS);
-        listener.onFolderAppMenu(spots.get(hover).app, realFolder ? folder : null);
+        AppRepository.AppEntry app = spots.get(hover).app;
+        if (realFolder && liftListener != null) {
+            String f = folder;
+            close();
+            liftListener.onLift(app, f, lastX, lastY);
+        } else {
+            listener.onFolderAppMenu(app, realFolder ? folder : null);
+        }
     };
 
     FolderWheelView(Context context) {
@@ -224,6 +243,8 @@ final class FolderWheelView extends View {
     boolean handleTouch(MotionEvent e) {
         if (!open) return true;
         float x = e.getX(), y = e.getY();
+        lastX = x;
+        lastY = y;
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 tracking = true;
@@ -232,6 +253,8 @@ final class FolderWheelView extends View {
                 moved = false;
                 if (sticky) {
                     hover = spotAt(x, y);
+                    holdX = x;
+                    holdY = y;
                     if (hover >= 0) postDelayed(longPress, LONG_PRESS_MS);
                     else if (Math.hypot(x - cx, y - cy) > 34 * dp) close();
                     invalidate();
@@ -240,15 +263,22 @@ final class FolderWheelView extends View {
 
             case MotionEvent.ACTION_MOVE:
                 if (!tracking) return true;
-                if (!moved && Math.hypot(x - downX, y - downY) > 10 * dp) {
-                    moved = true;
-                    removeCallbacks(longPress);
-                }
+                if (!moved && Math.hypot(x - downX, y - downY) > 10 * dp) moved = true;
                 int h = spotAt(x, y);
                 if (h != hover) {
                     hover = h;
                     if (h >= 0) haptic(HapticFeedbackConstants.CLOCK_TICK);
+                    // Doigt arrêté sur une appli : elle se soulève (glisser-déposer).
+                    removeCallbacks(longPress);
+                    holdX = x;
+                    holdY = y;
+                    if (h >= 0) postDelayed(longPress, LONG_PRESS_MS);
                     invalidate();
+                } else if (hover >= 0 && Math.hypot(x - holdX, y - holdY) > 12 * dp) {
+                    removeCallbacks(longPress);
+                    holdX = x;
+                    holdY = y;
+                    postDelayed(longPress, LONG_PRESS_MS);
                 }
                 return true;
 

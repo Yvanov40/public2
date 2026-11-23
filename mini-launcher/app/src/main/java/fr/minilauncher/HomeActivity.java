@@ -347,6 +347,18 @@ public final class HomeActivity extends Activity
     }
 
     @Override
+    public void onFolderAppDrop(AppRepository.AppEntry app, String folder, float x, float y, boolean moved) {
+        if (!moved) {
+            // Maintenue puis lâchée sur place : le menu de l'appli, comme avant.
+            Menus.appMenu(this, app.component, app.label, folder, this::refreshAll);
+            return;
+        }
+        String message = grid.dropApp(Store.key(app.component), folder, x, y);
+        if (message != null) Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        refreshAll();
+    }
+
+    @Override
     public void onDrawing(List<float[]> points) {
         android.gesture.Gesture g = Drawings.fromPoints(points);
         AppRepository.AppEntry app = appByKey(Drawings.recognize(this, g));

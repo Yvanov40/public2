@@ -50,6 +50,12 @@ final class HomeView extends FrameLayout {
 
         /** Un tracé (lettre dessinée) : {x, y, temps} par point. */
         void onDrawing(List<float[]> points);
+
+        /**
+         * Appli sortie d'un dossier et lâchée en (x, y) de la grille. {@code moved} = faux si le
+         * doigt n'a pas bougé (menu de l'appli au lieu d'un dépôt).
+         */
+        void onFolderAppDrop(AppRepository.AppEntry app, String folder, float x, float y, boolean moved);
     }
 
     private static final long LONG_PRESS_MS = 500;
@@ -106,6 +112,52 @@ final class HomeView extends FrameLayout {
         addView(s, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
     }
 
+    // Appli soulevée d'un dossier, qui suit le doigt.
+    private AppRepository.AppEntry ghostApp;
+    private String ghostFolder;
+    private float ghostX, ghostY, ghostStartX, ghostStartY;
+    private boolean ghostMoved;
+
+    private void onLift(AppRepository.AppEntry app, String folder, float x, float y) {
+        ghostApp = app;
+        ghostFolder = folder;
+        ghostX = ghostStartX = x;
+        ghostY = ghostStartY = y;
+        ghostMoved = false;
+        folderForwarding = false;
+        grid.setExternalDrag(true);
+        invalidate();
+    }
+
+    private boolean ghostTouch(MotionEvent e) {
+        float x = e.getX(), y = e.getY();
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                ghostX = x;
+                ghostY = y;
+                if (Math.hypot(x - ghostStartX, y - ghostStartY) > slop) ghostMoved = true;
+                invalidate();
+                return true;
+            case MotionEvent.ACTION_UP: {
+                AppRepository.AppEntry app = ghostApp;
+                String folder = ghostFolder;
+                boolean moved = ghostMoved;
+                ghostApp = null;
+                grid.setExternalDrag(false);
+                invalidate();
+                // On vise avec l'icône, dessinée au-dessus du doigt.
+                host.onFolderAppDrop(app, folder, x - grid.getLeft(), y - 46 * dp - grid.getTop(), moved);
+                return true;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                ghostApp = null;
+                grid.setExternalDrag(false);
+                invalidate();
+                return true;
+        }
+        return true;
+    }
+
     private long lastTapTime;
     private float lastTapX, lastTapY;
     private View clockView;
@@ -148,6 +200,7 @@ final class HomeView extends FrameLayout {
         addView(grid, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         addView(strip, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         addView(folderWheel, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        folderWheel.setLiftListener(this::onLift);
         ink.setStyle(android.graphics.Paint.Style.STROKE);
         ink.setStrokeCap(android.graphics.Paint.Cap.ROUND);
         ink.setStrokeJoin(android.graphics.Paint.Join.ROUND);
@@ -159,6 +212,16 @@ final class HomeView extends FrameLayout {
     @Override
     protected void dispatchDraw(android.graphics.Canvas canvas) {
         super.dispatchDraw(canvas);
+        if (ghostApp != null && ghostApp.icon != null) {
+            // L'appli soulevée, un peu au-dessus du doigt pour rester visible.
+            float half = 30 * dp, gx = ghostX, gy = ghostY - 46 * dp;
+            ink.setStyle(android.graphics.Paint.Style.FILL);
+            ink.setColor(0x55000000);
+            canvas.drawCircle(gx, gy + 4 * dp, half + 4 * dp, ink);
+            ink.setStyle(android.graphics.Paint.Style.STROKE);
+            ghostApp.icon.setBounds((int) (gx - half), (int) (gy - half), (int) (gx + half), (int) (gy + half));
+            ghostApp.icon.draw(canvas);
+        }
         if (!pendingSwipe || trail.size() < 2) return;
         inkPath.reset();
         inkPath.moveTo(trail.get(0)[0], trail.get(0)[1]);
@@ -237,6 +300,7 @@ final class HomeView extends FrameLayout {
     @Override
     public boolean dispatchTouchEvent(MotionEvent e) {
         int action = e.getActionMasked();
+        if (ghostApp != null) return ghostTouch(e);
 
         // Un dossier ouvert ou l'alphabet affiché garde la main sur les gestes suivants.
         if (folderForwarding || (folderWheel.isOpen() && action == MotionEvent.ACTION_DOWN)) {
