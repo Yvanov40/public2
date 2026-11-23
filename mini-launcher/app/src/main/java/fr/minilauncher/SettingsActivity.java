@@ -115,6 +115,7 @@ public final class SettingsActivity extends Activity {
 
     private Tile[] tiles() {
         return new Tile[]{
+                new Tile("◫", "Modules", "Activer ou couper chaque fonction", this::pageModules),
                 new Tile("⌂", "Accueil", "Grille, horloge, garder actif", this::pageAccueil),
                 new Tile("A", "Alphabet", "Bords, loupe, couleurs", this::pageAlphabet),
                 new Tile("☝", "Gestes", "Double tap, glissés, volets", this::pageGestes),
@@ -245,6 +246,31 @@ public final class SettingsActivity extends Activity {
 
     // ------------------------------------------------------------ pages
 
+    private void pageModules() {
+        section("Pour aller vite");
+        toggle("Étoile", "Appuyer sans bouger puis glisser : 8 applis autour du doigt", store.starOn(),
+                on -> store.setFlag(Store.STAR_ON, on));
+        toggle("Lettres dessinées", "Dessiner une lettre dans le vide ouvre son appli", store.drawOn(),
+                on -> store.setFlag(Store.DRAW_ON, on));
+        toggle("Lettres qui apprennent", "Lâcher sur une lettre de l'alphabet ouvre son appli préférée",
+                store.alphaLearn(), on -> store.setFlag(Store.ALPHA_LEARN, on));
+        toggle("Alphabet sur les bords", "L'index A–Z des deux côtés de l'écran", store.alphaOn(),
+                on -> store.setFlag(Store.ALPHA_ON, on));
+        note("Étoile coupée : l'appui long dans le vide ouvre directement le menu de l'accueil. "
+                + "Lettres dessinées coupées : les glissés partent tout de suite, sans attendre le lever "
+                + "du doigt. Avec l'étoile, lâcher au centre sans choisir de direction ouvre le menu de "
+                + "l'accueil.");
+        section("Autres");
+        toggle("Pastilles de notification", "Réglages dans la tuile Pastilles", store.badges(),
+                on -> store.setFlag(Store.BADGES, on));
+        toggle("Garder le launcher actif", "Évite le redémarrage après « tout fermer »", store.keepAlive(), on -> {
+            store.setFlag(Store.KEEP_ALIVE, on);
+            KeepAliveService.sync(this);
+        });
+        note("Les gestes (double tap, glissés) se règlent un par un dans la tuile Gestes ; « Rien » "
+                + "désactive un geste.");
+    }
+
     private void pageAccueil() {
         // ---------------------------------------------------------- accueil
         section("Écran d'accueil");
@@ -304,8 +330,6 @@ public final class SettingsActivity extends Activity {
         colorChoice("Couleur des lettres", LETTER_NAMES, LETTER_COLORS, store.stripFg(),
                 c -> store.setNum(Store.STRIP_FG, c));
         slider("Zone tactile", 8, 40, store.band(), "%d %%", v -> store.setNum(Store.BAND, v));
-        toggle("Lâcher sur une lettre", "Ouvre l'appli la plus utilisée de la lettre", store.alphaLearn(),
-                on -> store.setFlag(Store.ALPHA_LEARN, on));
         note("Poser le doigt sur un bord et le glisser de haut en bas : les applis de la lettre "
                 + "apparaissent à côté. Glisser vers l'intérieur jusqu'à l'appli et lâcher. "
                 + "En haut ★ les favoris.");
@@ -334,8 +358,9 @@ public final class SettingsActivity extends Activity {
         section("Étoile");
         for (int d = 0; d < 8; d++) starRow(d);
         note("Appuyer sans bouger dans le vide (petite vibration), puis un coup de doigt dans une "
-                + "direction et lâcher : l'appli s'ouvre. En hésitant, l'étoile s'affiche. Une branche "
-                + "vide propose de choisir son appli.");
+                + "direction et lâcher : l'appli s'ouvre. En hésitant, l'étoile s'affiche (elle reste "
+                + "tant que le doigt est posé). Une branche vide propose de choisir son appli. Lâcher "
+                + "au centre : menu de l'accueil.");
 
         section("Lettres dessinées");
         drawingRows();

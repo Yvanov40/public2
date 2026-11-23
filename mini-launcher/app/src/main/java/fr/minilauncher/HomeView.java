@@ -72,7 +72,6 @@ final class HomeView extends FrameLayout {
     private long downTime;
     private static final long STAR_ARM_MS = 220;   // appui sans bouger avant l'étoile
     private static final long STAR_SHOW_MS = 380;  // hésitation avant de la montrer
-    private static final long HOME_MENU_MS = 750;  // appui long dans le vide : menu de l'accueil
 
     private StarView star;
     private boolean starArmed;
@@ -95,9 +94,8 @@ final class HomeView extends FrameLayout {
     }
 
     private final Runnable homeMenu = () -> {
-        if (!starArmed || starDir >= 0) return;
-        starArmed = false;
-        star.hide();
+        // Sans le module Étoile : appui long dans le vide = menu de l'accueil.
+        if (decided || touchedItem != null) return;
         decided = true;
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
         host().onHomeLongPress();
@@ -294,9 +292,10 @@ final class HomeView extends FrameLayout {
                 trail.clear();
                 trail.add(new float[]{x, y, e.getEventTime()});
                 if (touchedItem == null && !onClock(x, y)) {
-                    // Vide : appuyer-glisser = étoile ; appui long = menu de l'accueil.
-                    postDelayed(armStar, STAR_ARM_MS);
-                    postDelayed(homeMenu, HOME_MENU_MS);
+                    // Vide : appuyer puis glisser = étoile (lâcher au centre = menu de l'accueil) ;
+                    // sans étoile, appui long = menu de l'accueil.
+                    if (Store.get(getContext()).starOn()) postDelayed(armStar, STAR_ARM_MS);
+                    else postDelayed(homeMenu, LONG_PRESS_MS);
                 } else {
                     postDelayed(longPress, LONG_PRESS_MS);
                 }
@@ -347,6 +346,15 @@ final class HomeView extends FrameLayout {
                     openRecents(downX, downY, e);
                     return true;
                 }
+                if (!Store.get(getContext()).drawOn()) {
+                    // Sans lettres dessinées : le geste part tout de suite, sans attendre le lever.
+                    trail.clear();
+                    trail.add(new float[]{downX, downY, downTime});
+                    trail.add(new float[]{x, y, e.getEventTime()});
+                    pendingSwipe = true;
+                    finishSwipe();
+                    return true;
+                }
                 // Ligne droite (geste) ou tracé (lettre dessinée) : on le saura au lever du doigt.
                 pendingSwipe = true;
                 trail.add(new float[]{x, y, e.getEventTime()});
@@ -362,7 +370,13 @@ final class HomeView extends FrameLayout {
                     starArmed = false;
                     int dir = starDir;
                     star.hide();
-                    if (dir >= 0) host.onStar(dir);
+                    if (dir >= 0) {
+                        host.onStar(dir);
+                    } else {
+                        // Lâcher au centre de l'étoile, sans direction : menu de l'accueil.
+                        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        host.onHomeLongPress();
+                    }
                     decided = true;
                     return true;
                 }
@@ -434,7 +448,7 @@ final class HomeView extends FrameLayout {
         for (int i = 1; i < pts.size(); i++) {
             length += Math.hypot(pts.get(i)[0] - pts.get(i - 1)[0], pts.get(i)[1] - pts.get(i - 1)[1]);
         }
-        boolean drawing = length > 90 * dp && length > 1.3 * chord;
+        boolean drawing = Store.get(getContext()).drawOn() && length > 90 * dp && length > 1.3 * chord;
         if (drawing && touchedItem == null) {
             host.onDrawing(pts);
             return;

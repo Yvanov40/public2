@@ -135,6 +135,10 @@ final class Store {
     boolean searchTop() { return flag(SEARCH_TOP, true); }
     boolean searchGrid() { return flag(SEARCH_GRID, true); }
     static final String ALPHA_LEARN = "alphaLearn", STAR = "star";
+    static final String STAR_ON = "starOn", DRAW_ON = "drawOn", ALPHA_ON = "alphaOn";
+    boolean starOn() { return flag(STAR_ON, true); }         // module Étoile
+    boolean drawOn() { return flag(DRAW_ON, true); }         // module Lettres dessinées
+    boolean alphaOn() { return flag(ALPHA_ON, true); }       // module Alphabet sur les bords
     boolean alphaLearn() { return flag(ALPHA_LEARN, true); }  // lâcher sur une lettre = appli préférée
     /** Appli de la branche {@code dir} de l'étoile (0 = haut, puis sens des aiguilles), ou null. */
     String starApp(int dir) { return text(STAR + dir); }

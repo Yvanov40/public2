@@ -163,6 +163,7 @@ final class AlphaStripView extends View {
 
     /** Côtés où l'alphabet est actif (LEFT, RIGHT, ou les deux). */
     int sides() {
+        if (!store.alphaOn()) return 0;
         int s = store.alphaSide();
         return s == 1 ? LEFT : s == 2 ? RIGHT : LEFT | RIGHT;
     }
@@ -483,7 +484,7 @@ final class AlphaStripView extends View {
         boolean active = phase != PHASE_IDLE;
         if (active) {
             canvas.drawColor(Color.argb((int) (255 * store.dimPercent() / 100f * 0.8f), 0, 0, 0));
-        } else if (!store.alphaVisible()) {
+        } else if (!store.alphaVisible() || !store.alphaOn()) {
             return;
         }
         int s = sides();
