@@ -1,0 +1,17 @@
+// Projet Gradle de l'édition Play Store (gratuite + Pro).
+// L'édition complète (sans achat) se construit sans Gradle avec ./construire.sh.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = 'liseuse'

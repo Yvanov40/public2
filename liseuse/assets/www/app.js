@@ -55,6 +55,7 @@ function demarrer() {
   } else if (ouvert && app.prefs.reprendre && app.livres.some(l => l.id === ouvert)) {
     ouvrirLivre(ouvert);
   }
+  chargerPro();
   if (A) A.pret();
 }
 
@@ -67,6 +68,59 @@ app.systeme = function (sombre) {
 function interfaceSombre() {
   return app.prefs.apparence === 'sombre' || (app.prefs.apparence === 'systeme' && app.systemeSombre);
 }
+
+// ================================================================ version Pro
+
+app.pro = { actif: true, prix: '', edition: 'complete' };
+
+function chargerPro() {
+  try { if (A && A.pro) app.pro = JSON.parse(A.pro()); } catch (e) { /* édition complète */ }
+  majPro();
+}
+
+app.estPro = () => !!app.pro.actif;
+
+function majPro() {
+  const z = $('#etat-pro');
+  if (!z) return;
+  if (app.pro.edition === 'complete') {
+    z.innerHTML = '<p class="texte-reglage">Édition complète : toutes les fonctions sont débloquées.</p>';
+  } else if (app.pro.actif) {
+    z.innerHTML = '<p class="texte-reglage"><strong>Liseuse Pro est activée.</strong> Merci pour votre soutien !</p>';
+  } else {
+    z.innerHTML = `<p class="texte-reglage">Débloquez les PDF, les dossiers, la sélection multiple et toute la personnalisation, en un seul achat.</p>
+      <div class="boutons-pro"><button class="bouton plein" id="b-pro">Découvrir Liseuse Pro${app.pro.prix ? ' — ' + esc(app.pro.prix) : ''}</button>
+      <button class="bouton lien" id="b-restaurer">Restaurer un achat</button></div>`;
+    $('#b-pro').onclick = () => ecranPro(null);
+    $('#b-restaurer').onclick = () => { if (A) A.restaurerPro(); };
+  }
+}
+
+/** Fenêtre de présentation de la version Pro. */
+async function ecranPro(raison) {
+  const prix = app.pro.prix;
+  const v = await dialogue('Liseuse Pro', `${raison ? `<p class="raison-pro"><strong>${esc(raison)}</strong> : c'est une fonction de Liseuse Pro.</p>` : ''}
+    <ul class="avantages-pro">
+      <li><svg><use href="#i-livre"/></svg><span><strong>PDF</strong> convertis en livre ou lus tels quels, même très gros</span></li>
+      <li><svg><use href="#i-dossier"/></svg><span><strong>Dossiers</strong> et sous-dossiers pour ranger la bibliothèque</span></li>
+      <li><svg><use href="#i-coche"/></svg><span><strong>Sélection multiple</strong> : déplacer, partager, supprimer d'un coup</span></li>
+      <li><svg><use href="#i-aa"/></svg><span><strong>Personnalisation</strong> : couleur de l'appli, icônes, raccourci avec votre image, thème de lecture sur mesure</span></li>
+    </ul>
+    <p class="petit-pro">Achat unique, sans abonnement ni publicité. Retrouvé automatiquement sur vos autres appareils avec le même compte Google.</p>`,
+    [{ texte: 'Plus tard', valeur: null }, { texte: 'Restaurer', valeur: 'restaurer' },
+      { texte: prix ? `Débloquer — ${prix}` : 'Débloquer', classe: 'plein', valeur: 'acheter' }]);
+  if (!A) return;
+  if (v === 'acheter') A.acheterPro();
+  else if (v === 'restaurer') A.restaurerPro();
+}
+
+/** Vrai si la fonction est utilisable ; sinon présente la version Pro. */
+function exigerPro(raison) {
+  if (app.estPro()) return true;
+  ecranPro(raison);
+  return false;
+}
+app.exigerPro = exigerPro;
 
 // ================================================================ couleur de l'application
 
@@ -104,6 +158,7 @@ function afficherPersonnalisation() {
   $('#icones').onclick = async e => {
     const b = e.target.closest('[data-icone]');
     if (!b || b.classList.contains('actif')) return;
+    if (!exigerPro('Le choix de l\'icône')) return;
     const ok = await dialogue('Changer l\'icône ?', '<p>La nouvelle icône apparaît sur l\'écran d\'accueil après quelques secondes. Si l\'ancienne y était épinglée, il faudra peut-être la remettre depuis la liste des applications.</p>',
       [{ texte: 'Annuler', valeur: false }, { texte: 'Changer', classe: 'plein', valeur: true }]);
     if (!ok) return;
@@ -115,6 +170,7 @@ function afficherPersonnalisation() {
 }
 
 function choisirAccent(c) {
+  if (!exigerPro('La couleur de l\'application')) { afficherPersonnalisation(); return; }
   app.prefs.accent = c;
   Store.set('app', app.prefs);
   appliquerApparence();
@@ -122,6 +178,7 @@ function choisirAccent(c) {
 }
 
 async function raccourciPerso() {
+  if (!exigerPro('Le raccourci personnalisé')) return;
   const nom = await dialogue('Raccourci personnalisé', `<label for="r-nom">Nom sous l'icône</label><input type="text" id="r-nom" value="Mes livres" maxlength="24">
     <p>Choisissez ensuite une image (photo, dessin…) : elle sera recadrée en carré.</p>`,
     [{ texte: 'Annuler', valeur: null }, { texte: 'Choisir l\'image', classe: 'plein', valeur: () => $('#r-nom').value.trim() || 'Liseuse' }]);
@@ -212,6 +269,7 @@ function nouvelIdDossier() { return 'd' + Date.now().toString(36) + Math.random(
 const COULEURS_DOSSIER = ['#c9893a', '#b5543a', '#c2457a', '#7b5bb5', '#2f6db5', '#128a8a', '#2e7d4f', '#5f6b78'];
 
 async function creerDossier(parent) {
+  if (!exigerPro('Les dossiers')) return null;
   const nom = await dialogue('Nouveau dossier', `<label for="n-dossier">Nom du dossier</label><input type="text" id="n-dossier" maxlength="60" placeholder="Romans, Cours, Travail…">`,
     [{ texte: 'Annuler', valeur: null }, { texte: 'Créer', classe: 'plein', valeur: () => $('#n-dossier').value.trim() }]);
   if (!nom) return null;
@@ -265,6 +323,7 @@ async function choisirDossier(titre, exclus) {
 }
 
 async function deplacerLivres(ids, idsDossiers) {
+  if (!exigerPro('Le rangement en dossiers')) return false;
   const cible = await choisirDossier('Déplacer vers…', idsDossiers);
   if (cible === null) return false;
   const r = rangement();
@@ -429,6 +488,7 @@ function afficherBiblio() {
 // ================================================================ sélection multiple
 
 function commencerSelection(cle) {
+  if (!exigerPro('La sélection multiple')) return;
   app.selection = new Set(cle ? [cle] : []);
   fermerFeuilles();
   afficherBiblio();
@@ -575,6 +635,12 @@ function montrer(ecran) {
 let fileChoixPdf = Promise.resolve();
 function choisirModePdf(e) {
   fileChoixPdf = fileChoixPdf.then(async () => {
+    if (!app.estPro()) {
+      $('#import').classList.remove('actif');
+      await ecranPro('Les PDF');
+      if (A) A.pdfEchec(e.jeton, 'Ajout annulé.');
+      return;
+    }
     let mode = app.prefs.pdf;
     if (mode !== 'convertir' && mode !== 'garder') {
       $('#import').classList.remove('actif');
@@ -734,6 +800,12 @@ app.toast = toast;
 // ================================================================ évènements venant d'Android
 
 app.evenement = function (e) {
+  if (e.type === 'pro') {
+    app.pro = { actif: !!e.actif, prix: e.prix || '', edition: e.edition || app.pro.edition };
+    majPro();
+    if (e.message) toast(e.message, 3500);
+    return;
+  }
   if (e.type === 'pdf-choix') {
     choisirModePdf(e);
     return;
@@ -840,6 +912,7 @@ async function faireAction(action) {
   else if (action === 'pdf-origine') ouvrirPdf(l);
   else if (action === 'autre-appli') { if (A) A.ouvrirAilleurs(l.id); }
   else if (action === 'vers-epub') {
+    if (!exigerPro('La conversion des PDF')) return;
     const ok = await dialogue('Convertir en livre ?', '<p>Le PDF est converti en livre au texte adaptable. Le PDF d\'origine est gardé : vous pourrez toujours le revoir tel quel depuis le menu du livre.</p>',
       [{ texte: 'Annuler', valeur: false }, { texte: 'Convertir', classe: 'plein', valeur: true }]);
     if (ok && A) A.pdfVersEpub(l.id);

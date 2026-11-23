@@ -1,0 +1,71 @@
+# Construit l'édition Play Store de la Liseuse (fichier .aab à envoyer sur la Play Console, et .apk de test).
+#
+# Pour signer avec votre clé d'envoi, ajoutez dans GitHub → Settings → Secrets and variables → Actions :
+#   LISEUSE_KEYSTORE_BASE64   le fichier .jks encodé en base64
+#   LISEUSE_KEYSTORE_PASSWORD le mot de passe du fichier
+#   LISEUSE_KEY_ALIAS         l'alias de la clé
+#   LISEUSE_KEY_PASSWORD      le mot de passe de la clé
+# Sans ces secrets, une clé de test jetable est utilisée (fichiers installables pour essayer, pas pour le Store).
+name: Liseuse (Play Store)
+
+on:
+  push:
+    paths:
+      - 'liseuse/**'
+      - '.github/workflows/liseuse-android.yml'
+  workflow_dispatch:
+
+jobs:
+  construire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Clé de signature
+        env:
+          KS_B64: ${{ secrets.LISEUSE_KEYSTORE_BASE64 }}
+          KS_PW: ${{ secrets.LISEUSE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.LISEUSE_KEY_ALIAS }}
+          KEY_PW: ${{ secrets.LISEUSE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            {
+              echo "LISEUSE_KEYSTORE=$RUNNER_TEMP/upload.jks"
+              echo "LISEUSE_KEYSTORE_PASSWORD=$KS_PW"
+              echo "LISEUSE_KEY_ALIAS=$KEY_ALIAS"
+              echo "LISEUSE_KEY_PASSWORD=$KEY_PW"
+            } >> "$GITHUB_ENV"
+            echo "::notice::Signature avec la clé d'envoi du Play Store."
+          else
+            keytool -genkeypair -keystore "$RUNNER_TEMP/test.jks" -storepass test-liseuse -keypass test-liseuse \
+              -alias test -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Test Liseuse"
+            {
+              echo "LISEUSE_KEYSTORE=$RUNNER_TEMP/test.jks"
+              echo "LISEUSE_KEYSTORE_PASSWORD=test-liseuse"
+              echo "LISEUSE_KEY_ALIAS=test"
+              echo "LISEUSE_KEY_PASSWORD=test-liseuse"
+            } >> "$GITHUB_ENV"
+            echo "::warning::Pas de clé d'envoi dans les secrets : fichiers signés avec une clé de test jetable."
+          fi
+
+      - name: Construire (.aab et .apk)
+        working-directory: liseuse
+        run: gradle bundleRelease assembleRelease --stacktrace --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: liseuse-play-${{ github.run_number }}
+          path: |
+            liseuse/build-gradle/outputs/bundle/release/*.aab
+            liseuse/build-gradle/outputs/apk/release/*.apk
+          if-no-files-found: error

@@ -1133,7 +1133,12 @@ const lecteur = window.lecteur = (() => {
       + `<div><button class="theme" data-theme="perso">Aa</button><span class="theme-nom">Perso</span></div>`;
     $('#polices').innerHTML = Object.entries(POLICES).filter(([k]) => k !== 'document' || true).map(([k, p]) =>
       `<button class="police" data-police="${k}" style="font-family:${p.css ? p.css.replace(/"/g, '&quot;') : 'inherit'}">${p.nom}<small>${p.desc}</small></button>`).join('');
-    $('#themes').onclick = e => { const b = e.target.closest('[data-theme]'); if (b) changer('theme', b.dataset.theme); };
+    $('#themes').onclick = e => {
+      const b = e.target.closest('[data-theme]');
+      if (!b) return;
+      if (b.dataset.theme === 'perso' && !app.exigerPro('Le thème de lecture personnalisé')) return;
+      changer('theme', b.dataset.theme);
+    };
     $('#polices').onclick = e => { const b = e.target.closest('[data-police]'); if (b) changer('police', b.dataset.police); };
     $$('[data-pas]').forEach(b => b.onclick = () => {
       const [cle, d] = b.dataset.pas.split(':');

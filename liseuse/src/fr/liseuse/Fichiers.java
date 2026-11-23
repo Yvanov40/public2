@@ -15,7 +15,10 @@ import java.util.List;
 /** Donne accès aux EPUB pour le partage : content://fr.liseuse.fichiers/<id>/<nom>.epub */
 public final class Fichiers extends ContentProvider {
 
-    public static final String AUTORITE = "fr.liseuse.fichiers";
+    /** Autorité du fournisseur : « identifiant de l'appli ».fichiers (deux éditions peuvent cohabiter). */
+    public static String autorite(android.content.Context c) {
+        return c.getPackageName() + ".fichiers";
+    }
 
     @Override
     public boolean onCreate() {

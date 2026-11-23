@@ -1,2 +1,6 @@
 build/
+build-gradle/
+.gradle/
+local.properties
 liseuse.keystore
+*.jks

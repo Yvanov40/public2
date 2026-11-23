@@ -20,6 +20,7 @@ import android.provider.OpenableColumns;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -64,6 +65,10 @@ public final class MainActivity extends Activity {
     private String nomRaccourci = "Liseuse";
 
     private WebView web;
+    private Achats achats;
+    private android.widget.FrameLayout racine;
+    private WindowInsets dernierInsets;
+    private boolean lecturePlein;
     private Bibliotheque biblio;
     private SharedPreferences prefs;
     private final ExecutorService travail = Executors.newSingleThreadExecutor();
@@ -80,6 +85,13 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         biblio = new Bibliotheque(getFilesDir());
+        achats = Achats.creer(this, new Achats.Ecouteur() {
+            @Override
+            public void changement(boolean pro, String prix, String message) {
+                evenement(obj("type", "pro", "actif", pro, "prix", prix == null ? "" : prix,
+                        "message", message == null ? "" : message, "edition", achats == null ? "" : achats.edition()));
+            }
+        });
         prefs = getSharedPreferences("liseuse", MODE_PRIVATE);
         Window w = getWindow();
         w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
@@ -110,7 +122,31 @@ public final class MainActivity extends Activity {
         web.addJavascriptInterface(new Pont(), "Android");
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new Client());
-        setContentView(web);
+        if (racine == null) {
+            racine = new android.widget.FrameLayout(this);
+            racine.setBackgroundColor(fond);
+            // bord à bord (obligatoire pour les versions récentes d'Android) : la page passe sous les barres,
+            // et on lui laisse la place des barres sauf en lecture plein écran
+            racine.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+                @Override
+                public WindowInsets onApplyWindowInsets(View v, WindowInsets ins) {
+                    dernierInsets = ins;
+                    appliquerMarges();
+                    return ins.consumeSystemWindowInsets();
+                }
+            });
+            View d = getWindow().getDecorView();
+            d.setSystemUiVisibility(d.getSystemUiVisibility() | MISE_EN_PAGE);
+            setContentView(racine);
+        }
+        racine.addView(web, new android.widget.FrameLayout.LayoutParams(-1, -1));
+    }
+
+    private void appliquerMarges() {
+        if (racine == null) return;
+        if (lecturePlein || dernierInsets == null) racine.setPadding(0, 0, 0, 0);
+        else racine.setPadding(dernierInsets.getSystemWindowInsetLeft(), dernierInsets.getSystemWindowInsetTop(),
+                dernierInsets.getSystemWindowInsetRight(), dernierInsets.getSystemWindowInsetBottom());
     }
 
     /**
@@ -126,6 +162,7 @@ public final class MainActivity extends Activity {
             }
         });
         WebView ancienne = web;
+        racine.removeView(ancienne);
         pret = false;
         enAttente.clear();
         boolean sombre = systemeSombre();
@@ -136,7 +173,9 @@ public final class MainActivity extends Activity {
         } catch (Throwable ignore) {
         }
         View d = getWindow().getDecorView();
-        d.setSystemUiVisibility(d.getSystemUiVisibility() & ~(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION));
+        d.setSystemUiVisibility((d.getSystemUiVisibility() & ~CACHE) | MISE_EN_PAGE);
+        lecturePlein = false;
+        appliquerMarges();
         WindowManager.LayoutParams lp = getWindow().getAttributes();
         lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
         getWindow().setAttributes(lp);
@@ -163,6 +202,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (achats != null) achats.fermer();
         generationPdf++;
         filPdf.execute(new Runnable() {
             @Override
@@ -259,6 +299,7 @@ public final class MainActivity extends Activity {
 
     private void barres(int couleur, boolean sombre) {
         Window w = getWindow();
+        if (racine != null) racine.setBackgroundColor(couleur);
         w.setStatusBarColor(couleur);
         w.setNavigationBarColor(couleur);
         View d = w.getDecorView();
@@ -921,7 +962,10 @@ public final class MainActivity extends Activity {
                 }
                 if (p.startsWith("/icone/")) {
                     String n = p.substring(7).replaceAll("[^0-9]", "");
-                    int res = getResources().getIdentifier("ic_icone" + n, "mipmap", getPackageName());
+                    int[] icones = {R.mipmap.ic_icone1, R.mipmap.ic_icone2, R.mipmap.ic_icone3, R.mipmap.ic_icone4,
+                            R.mipmap.ic_icone5, R.mipmap.ic_icone6, R.mipmap.ic_icone7, R.mipmap.ic_icone8};
+                    int k = n.isEmpty() ? 0 : Integer.parseInt(n);
+                    int res = k >= 1 && k <= 8 ? icones[k - 1] : 0;
                     if (res == 0) return introuvable();
                     return reponse("image/png", getResources().openRawResource(res));
                 }
@@ -1203,7 +1247,7 @@ public final class MainActivity extends Activity {
             ui.post(new Runnable() {
                 @Override
                 public void run() {
-                    Uri u = Uri.parse("content://" + Fichiers.AUTORITE + "/" + id + "/" + Uri.encode(nomPartage(id, meta)));
+                    Uri u = Uri.parse("content://" + Fichiers.autorite(MainActivity.this) + "/" + id + "/" + Uri.encode(nomPartage(id, meta)));
                     Intent i = new Intent(Intent.ACTION_SEND);
                     i.setType(original(id) ? "application/pdf" : "application/epub+zip");
                     i.putExtra(Intent.EXTRA_STREAM, u);
@@ -1259,7 +1303,7 @@ public final class MainActivity extends Activity {
                             toast("PDF introuvable.");
                             return;
                         }
-                        Uri u = Uri.parse("content://" + Fichiers.AUTORITE + "/" + id + "/"
+                        Uri u = Uri.parse("content://" + Fichiers.autorite(MainActivity.this) + "/" + id + "/"
                                 + Uri.encode(nomFichierSur(meta.optString("titre", "document"), ".pdf")));
                         Intent i = new Intent(Intent.ACTION_VIEW);
                         i.setDataAndType(u, "application/pdf");
@@ -1285,7 +1329,7 @@ public final class MainActivity extends Activity {
                             String id = ids.optString(i);
                             JSONObject meta = biblio.trouver(id);
                             if (meta == null) continue;
-                            Uri u = Uri.parse("content://" + Fichiers.AUTORITE + "/" + id + "/" + Uri.encode(nomPartage(id, meta)));
+                            Uri u = Uri.parse("content://" + Fichiers.autorite(MainActivity.this) + "/" + id + "/" + Uri.encode(nomPartage(id, meta)));
                             uris.add(u);
                             if (clip == null) clip = ClipData.newRawUri("", u);
                             else clip.addItem(new ClipData.Item(u));
@@ -1390,9 +1434,10 @@ public final class MainActivity extends Activity {
                 @Override
                 public void run() {
                     View d = getWindow().getDecorView();
-                    int f = d.getSystemUiVisibility();
-                    int tout = MISE_EN_PAGE | CACHE;
-                    d.setSystemUiVisibility(oui ? f | tout : f & ~tout);
+                    int f = d.getSystemUiVisibility() | MISE_EN_PAGE;
+                    d.setSystemUiVisibility(oui ? f | CACHE : f & ~CACHE);
+                    lecturePlein = oui;
+                    appliquerMarges();
                 }
             });
         }
@@ -1404,7 +1449,7 @@ public final class MainActivity extends Activity {
                 public void run() {
                     View d = getWindow().getDecorView();
                     int f = d.getSystemUiVisibility();
-                    if ((f & View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION) == 0) return; // pas en plein écran
+                    if (!lecturePlein) return; // pas en plein écran
                     d.setSystemUiVisibility(visibles ? f & ~CACHE : f | CACHE);
                 }
             });
@@ -1427,10 +1472,9 @@ public final class MainActivity extends Activity {
                 public void run() {
                     View d = getWindow().getDecorView();
                     int f = d.getSystemUiVisibility();
-                    int plein = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
-                    if (oui) f |= plein;
-                    else f &= ~plein;
-                    d.setSystemUiVisibility(f);
+                    d.setSystemUiVisibility(oui ? f | CACHE | MISE_EN_PAGE : (f & ~CACHE) | MISE_EN_PAGE);
+                    lecturePlein = oui;
+                    appliquerMarges();
                 }
             });
         }
@@ -1705,12 +1749,12 @@ public final class MainActivity extends Activity {
         public int icone() {
             android.content.pm.PackageManager pm = getPackageManager();
             for (int i = 1; i <= NB_ICONES; i++) {
-                int e = pm.getComponentEnabledSetting(new android.content.ComponentName(MainActivity.this, getPackageName() + ".Icone" + i));
+                int e = pm.getComponentEnabledSetting(new android.content.ComponentName(MainActivity.this, "fr.liseuse.Icone" + i));
                 if (e == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED) return i;
                 if (i == 1 && e == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT) {
                     boolean autre = false;
                     for (int k = 2; k <= NB_ICONES; k++) {
-                        if (pm.getComponentEnabledSetting(new android.content.ComponentName(MainActivity.this, getPackageName() + ".Icone" + k))
+                        if (pm.getComponentEnabledSetting(new android.content.ComponentName(MainActivity.this, "fr.liseuse.Icone" + k))
                                 == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED) autre = true;
                     }
                     if (!autre) return 1;
@@ -1724,11 +1768,11 @@ public final class MainActivity extends Activity {
             if (n < 1 || n > NB_ICONES) return;
             android.content.pm.PackageManager pm = getPackageManager();
             // on active d'abord la nouvelle, puis on désactive les autres
-            pm.setComponentEnabledSetting(new android.content.ComponentName(MainActivity.this, getPackageName() + ".Icone" + n),
+            pm.setComponentEnabledSetting(new android.content.ComponentName(MainActivity.this, "fr.liseuse.Icone" + n),
                     android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP);
             for (int i = 1; i <= NB_ICONES; i++) {
                 if (i == n) continue;
-                pm.setComponentEnabledSetting(new android.content.ComponentName(MainActivity.this, getPackageName() + ".Icone" + i),
+                pm.setComponentEnabledSetting(new android.content.ComponentName(MainActivity.this, "fr.liseuse.Icone" + i),
                         android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, android.content.pm.PackageManager.DONT_KILL_APP);
             }
         }
@@ -1752,6 +1796,33 @@ public final class MainActivity extends Activity {
                     } catch (Exception e) {
                         toast("Aucune application pour choisir une image.");
                     }
+                }
+            });
+        }
+
+        // ---------------------------------------------------------------- version Pro
+
+        @JavascriptInterface
+        public String pro() {
+            return obj("actif", achats.estPro(), "prix", achats.prix(), "edition", achats.edition()).toString();
+        }
+
+        @JavascriptInterface
+        public void acheterPro() {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    achats.acheter();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void restaurerPro() {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    achats.restaurer();
                 }
             });
         }

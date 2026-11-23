@@ -89,7 +89,7 @@ public final class PdfActivity extends Activity {
         if (in.getBooleanExtra(EXTRA_ALLUME, false)) w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         lum = in.getFloatExtra(EXTRA_LUM, -1f);
         chaud = in.getIntExtra(EXTRA_CHAUD, 0);
-        if (in.getBooleanExtra(EXTRA_PLEIN, true)) pleinEcran(true);
+        pleinEcran(in.getBooleanExtra(EXTRA_PLEIN, true));
 
         FrameLayout racine = new FrameLayout(this);
         racine.setBackgroundColor(nuit ? 0xFF111111 : 0xFF3A3A3C);
@@ -372,8 +372,8 @@ public final class PdfActivity extends Activity {
     private void pleinEcran(boolean oui) {
         plein = oui;
         View d = getWindow().getDecorView();
-        int f = d.getSystemUiVisibility();
-        f = oui ? f | MISE_EN_PAGE | CACHE : f & ~(MISE_EN_PAGE | CACHE);
+        int f = d.getSystemUiVisibility() | MISE_EN_PAGE; // toujours bord à bord (Android récent)
+        f = oui ? f | CACHE : f & ~CACHE;
         d.setSystemUiVisibility(f);
     }
 
@@ -402,8 +402,8 @@ public final class PdfActivity extends Activity {
     private void montrerBarres(boolean v) {
         barres = v;
         // en plein écran, les menus laissent la place aux barres d'Android (heure en haut, navigation en bas)
-        int hautSys = plein ? dimSysteme("status_bar_height") : 0;
-        int basSys = plein ? dimSysteme("navigation_bar_height") : 0;
+        int hautSys = dimSysteme("status_bar_height");
+        int basSys = dimSysteme("navigation_bar_height");
         haut.setPadding(dp(4), Math.max(dp(8), hautSys + dp(4)), dp(12), dp(8));
         bas.setPadding(dp(6), dp(6), dp(6), basSys + dp(8));
         FrameLayout.LayoutParams pl = (FrameLayout.LayoutParams) panneauLum.getLayoutParams();
@@ -447,7 +447,7 @@ public final class PdfActivity extends Activity {
 
     private void ouvrirAilleurs() {
         try {
-            Uri u = Uri.parse("content://" + Fichiers.AUTORITE + "/" + id + "/document.pdf");
+            Uri u = Uri.parse("content://" + Fichiers.autorite(this) + "/" + id + "/document.pdf");
             Intent i = new Intent(Intent.ACTION_VIEW);
             i.setDataAndType(u, "application/pdf");
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);

@@ -13,11 +13,20 @@ CLE=${CLE:-liseuse.keystore}
 rm -rf "$OUT"
 mkdir -p "$OUT/gen" "$OUT/classes"
 
-echo "▸ Ressources"
-aapt package -f -m -J "$OUT/gen" -M AndroidManifest.xml -S res -A assets -I "$ANDROID_JAR" \
+# version unique (partagée avec Gradle)
+VC=$(grep '^versionCode=' version.properties | cut -d= -f2)
+VN=$(grep '^versionName=' version.properties | cut -d= -f2)
+
+# manifeste pour aapt (le manifeste du dépôt est au format Gradle : sans paquet ni version)
+sed -e "s|<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">|<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"fr.liseuse\" android:versionCode=\"$VC\" android:versionName=\"$VN\">\\n    <uses-sdk android:minSdkVersion=\"24\" android:targetSdkVersion=\"34\" />|" \
+    -e 's| *android:enableOnBackInvokedCallback="false"||' -e 's|\${applicationId}|fr.liseuse|g' AndroidManifest.xml > "$OUT/AndroidManifest.xml"
+
+echo "▸ Ressources ($VN)"
+aapt package -f -m -J "$OUT/gen" -M "$OUT/AndroidManifest.xml" -S res -A assets -I "$ANDROID_JAR" \
   -F "$OUT/base.apk" --min-sdk-version 24 --target-sdk-version 34 --no-version-vectors
 
 echo "▸ Java"
+# src-play (achats Google Play) n'est compilé que par Gradle : ici, édition complète
 find src "$OUT/gen" -name '*.java' > "$OUT/sources.txt"
 javac -nowarn -Xlint:none -encoding UTF-8 -source 8 -target 8 -bootclasspath "$ANDROID_JAR" \
   -d "$OUT/classes" @"$OUT/sources.txt" 2>&1 | grep -v -E '^(warning|Picked up|Note:|[0-9]+ warning)' || true
