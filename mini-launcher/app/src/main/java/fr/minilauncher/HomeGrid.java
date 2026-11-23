@@ -392,6 +392,7 @@ final class HomeGrid extends FrameLayout {
                 dragStartY = y;
                 dragView.bringToFront();
                 dragView.animate().scaleX(1.08f).scaleY(1.08f).alpha(0.85f).setDuration(120).start();
+                invalidateIcons(); // dossiers invisibles : leur contour apparaît
                 return;
             }
         }
@@ -545,6 +546,20 @@ final class HomeGrid extends FrameLayout {
             float corner = g.shape == 1 ? half : half * 0.45f;
             r.set(cx - half, iy - half, cx + half, iy + half);
 
+            if (g.style == 3) {
+                // Invisible : rien n'est dessiné, la case reste un dossier. Contour discret
+                // seulement pendant un déplacement, pour le retrouver.
+                if (getParent() instanceof HomeGrid && ((HomeGrid) getParent()).isDragging()) {
+                    paint.setStyle(Paint.Style.STROKE);
+                    paint.setStrokeWidth(1.5f * dp);
+                    paint.setColor(0x80FFFFFF);
+                    paint.setPathEffect(new android.graphics.DashPathEffect(new float[]{6 * dp, 5 * dp}, 0));
+                    canvas.drawRoundRect(r, corner, corner, paint);
+                    paint.setPathEffect(null);
+                    paint.setStyle(Paint.Style.FILL);
+                }
+                return;
+            }
             if (g.style == 2) {
                 // Initiale sur une pastille de la couleur du dossier.
                 paint.setStyle(Paint.Style.FILL);

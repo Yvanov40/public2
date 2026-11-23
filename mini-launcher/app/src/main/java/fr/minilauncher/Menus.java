@@ -150,7 +150,8 @@ final class Menus {
         Store store = Store.get(a);
         Store.Group g = Store.find(store.groups(), folder);
         if (g == null) return;
-        String[] styles = {"Grille des 4 premières applis", "Première appli + nombre", "Initiale du dossier"};
+        String[] styles = {"Grille des 4 premières applis", "Première appli + nombre", "Initiale du dossier",
+                "Invisible (case vide, même fonctionnement)"};
         String[] shapes = {"Carré arrondi", "Rond"};
         Builder b = new Builder();
         Sheet.Item color = b.add("Couleur", () -> Sheet.colors(a, "Couleur", COLOR_NAMES, COLORS, g.color, i -> {
@@ -161,7 +162,7 @@ final class Menus {
         b.add("Style de l'icône", () -> choose(a, "Style de l'icône", styles, g.style, i -> {
             store.customizeFolder(folder, -1, i, -1);
             changed.run();
-        })).subtitle = styles[Math.max(0, Math.min(2, g.style))];
+        })).subtitle = styles[Math.max(0, Math.min(3, g.style))];
         b.add("Forme", () -> choose(a, "Forme", shapes, g.shape, i -> {
             store.customizeFolder(folder, -1, -1, i);
             changed.run();

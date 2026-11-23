@@ -89,7 +89,9 @@ L'écran principal est une grille de tuiles ; chaque tuile ouvre sa page :
 - Favoris : nombre, complément automatique.
 - Dossiers : fond et opacité du cercle, taille des icônes et du cercle, noms des applis,
   bordure et fond de l'icône. Pour un dossier précis : maintenir puis lâcher sur place >
-  Personnaliser (couleur, style d'icône — grille, première appli, initiale —, forme).
+  Personnaliser (couleur, style d'icône — grille, première appli, initiale, invisible —, forme).
+  Invisible : la case paraît vide mais reste un dossier (contour en pointillés pendant un
+  déplacement).
 - Panneaux et recherche : thème (sombre, noir, anthracite, bleu nuit, clair), opacité,
   arrondi ; recherche en haut ou en bas, en liste ou en grille d'icônes.
 - Effets : couleur d'accent, assombrissement du fond, animations, vibrations.
