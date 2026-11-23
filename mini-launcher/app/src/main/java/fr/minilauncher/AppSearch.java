@@ -109,6 +109,31 @@ final class AppSearch {
                     | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         }
         q.requestFocus();
+        closeWithKeyboard(s);
+    }
+
+    /** Le clavier redescend (Retour, flèche du clavier, glissé) : la recherche se ferme aussi. */
+    private static void closeWithKeyboard(Sheet s) {
+        if (s.dialog.getWindow() == null) return;
+        View decor = s.dialog.getWindow().getDecorView();
+        boolean[] seen = {false};
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            decor.setOnApplyWindowInsetsListener((v, insets) -> {
+                boolean visible = insets.isVisible(android.view.WindowInsets.Type.ime());
+                if (visible) seen[0] = true;
+                else if (seen[0] && s.dialog.isShowing()) s.dialog.dismiss();
+                return v.onApplyWindowInsets(insets);
+            });
+        } else {
+            int screen = decor.getResources().getDisplayMetrics().heightPixels;
+            decor.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+                android.graphics.Rect r = new android.graphics.Rect();
+                decor.getWindowVisibleDisplayFrame(r);
+                boolean visible = screen - r.bottom > screen * 0.15f;
+                if (visible) seen[0] = true;
+                else if (seen[0] && s.dialog.isShowing()) s.dialog.dismiss();
+            });
+        }
     }
 
     /**

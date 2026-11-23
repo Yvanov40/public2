@@ -60,6 +60,11 @@ public final class SettingsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        refreshStatus();
+    }
+
+    /** Libellés d'état (accès accordés ou non), à jour au retour des écrans d'autorisation. */
+    private void refreshStatus() {
         if (badgeApp != null) {
             TextView t = (TextView) ((LinearLayout) badgeApp.getChildAt(0)).getChildAt(0);
             t.setText(Badges.accessGranted(this) ? "Accès aux notifications : activé ✓"
@@ -87,11 +92,160 @@ public final class SettingsActivity extends Activity {
         w.setNavigationBarColor(BG);
         w.setBackgroundDrawable(new ColorDrawable(BG));
 
+        int open = savedInstanceState == null ? -1 : savedInstanceState.getInt("page", -1);
+        if (open >= 0 && open < tiles().length) showPage(open);
+        else showHome();
+    }
+
+    // ------------------------------------------------------------ tuiles
+
+    private static final class Tile {
+        final String icon, title, summary;
+        final Runnable build;
+
+        Tile(String icon, String title, String summary, Runnable build) {
+            this.icon = icon;
+            this.title = title;
+            this.summary = summary;
+            this.build = build;
+        }
+    }
+
+    private int currentPage = -1;
+
+    private Tile[] tiles() {
+        return new Tile[]{
+                new Tile("⌂", "Accueil", "Grille, horloge, garder actif", this::pageAccueil),
+                new Tile("A", "Alphabet", "Bords, loupe, couleurs", this::pageAlphabet),
+                new Tile("☝", "Gestes", "Double tap, glissés, volets", this::pageGestes),
+                new Tile("★", "Favoris et dossiers", "Favoris, cercle des dossiers", this::pageFavoris),
+                new Tile("●", "Pastilles", "Notifications sur les icônes", this::pagePastilles),
+                new Tile("◐", "Apparence", "Lisibilité, couleur, effets", this::pageApparence),
+                new Tile("⌕", "Panneaux et recherche", "Thème, position, grille", this::pagePanneaux),
+        };
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);
+        out.putInt("page", currentPage);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (currentPage >= 0) showHome();
+        else super.onBackPressed();
+    }
+
+    private void newPage() {
+        badgeApp = null;
+        usageAccess = null;
         page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setPadding(px(16), px(28), px(16), px(32));
-        header();
+    }
 
+    private void showContent() {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setBackgroundColor(BG);
+        scroll.setFillViewport(true);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(page);
+        setContentView(scroll);
+    }
+
+    /** L'écran principal : une grille de tuiles, deux par ligne. */
+    private void showHome() {
+        currentPage = -1;
+        newPage();
+        header();
+        Tile[] ts = tiles();
+        LinearLayout row = null;
+        for (int i = 0; i < ts.length; i++) {
+            if (i % 2 == 0) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT);
+                rl.topMargin = px(12);
+                page.addView(row, rl);
+            }
+            int index = i;
+            View tile = tile(ts[i], v -> showPage(index));
+            LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(0, px(132), 1f);
+            if (i % 2 == 0) tl.rightMargin = px(6);
+            else tl.leftMargin = px(6);
+            row.addView(tile, tl);
+        }
+        if (ts.length % 2 == 1 && row != null) {
+            LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(0, px(132), 1f);
+            tl.leftMargin = px(6);
+            row.addView(new View(this), tl);
+        }
+        versionFooter();
+        showContent();
+    }
+
+    private View tile(Tile t, View.OnClickListener l) {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setPadding(px(16), px(16), px(14), px(14));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(CARD);
+        bg.setCornerRadius(px(22));
+        GradientDrawable mask = new GradientDrawable();
+        mask.setColor(Color.WHITE);
+        mask.setCornerRadius(px(22));
+        c.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22FFFFFF), bg, mask));
+        c.setOnClickListener(l);
+
+        TextView icon = text(t.icon, 20, accent);
+        icon.setGravity(Gravity.CENTER);
+        icon.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        GradientDrawable ib = new GradientDrawable();
+        ib.setShape(GradientDrawable.OVAL);
+        ib.setColor((accent & 0x00FFFFFF) | 0x26000000);
+        icon.setBackground(ib);
+        c.addView(icon, new LinearLayout.LayoutParams(px(42), px(42)));
+
+        View spacer = new View(this);
+        c.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
+
+        TextView title = text(t.title, 16, TEXT);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        c.addView(title);
+        TextView sum = text(t.summary, 12, MUTED);
+        sum.setMaxLines(2);
+        sum.setEllipsize(TextUtils.TruncateAt.END);
+        sum.setPadding(0, px(2), 0, 0);
+        c.addView(sum);
+        return c;
+    }
+
+    /** Une page : le retour vers les tuiles, le titre, puis les cartes du thème. */
+    private void showPage(int index) {
+        Tile t = tiles()[index];
+        currentPage = index;
+        newPage();
+        TextView back = text("‹  Réglages", 16, accent);
+        back.setPadding(px(6), px(8), px(16), px(8));
+        clickable(back, v -> showHome());
+        page.addView(back, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        TextView title = text(t.title, 28, TEXT);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setPadding(px(6), px(4), 0, px(4));
+        page.addView(title);
+        t.build.run();
+        showContent();
+        refreshStatus();
+    }
+
+    // ------------------------------------------------------------ pages
+
+    private void pageAccueil() {
         // ---------------------------------------------------------- accueil
         section("Écran d'accueil");
         action("Définir comme écran d'accueil", "Choisir Mini Launcher par défaut", v -> {
@@ -114,6 +268,26 @@ public final class SettingsActivity extends Activity {
                 + "discrète, imposée par Android. Aide aussi : Paramètres > Applis > Mini Launcher > "
                 + "Démarrage automatique, et Économiseur de batterie > Aucune restriction.");
 
+        // ---------------------------------------------------------- horloge
+        section("Horloge");
+        toggle("Afficher l'horloge", "La toucher ouvre les alarmes", store.clock(),
+                on -> store.setFlag(Store.CLOCK, on));
+        slider("Taille", 30, 110, store.clockSize(), "%d", v -> store.setNum(Store.CLOCK_SIZE, v));
+        choice("Position", new String[]{"À gauche", "Au centre", "À droite"}, store.clockAlign(),
+                i -> store.setNum(Store.CLOCK_ALIGN, i));
+        toggle("Afficher la date", null, store.clockDate(), on -> store.setFlag(Store.CLOCK_DATE, on));
+        note("Masque l'horloge pour mettre un widget horloge à la place.");
+
+        // ---------------------------------------------------------- grille
+        section("Grille");
+        slider("Colonnes", 3, 6, store.cols(), "%d", v -> store.setNum(Store.COLS, v));
+        slider("Lignes", 0, 9, store.rowsSetting(), "%d", v -> store.setNum(Store.ROWS, v));
+        slider("Taille des icônes", 36, 72, store.iconSize(), "%d dp", v -> store.setNum(Store.ICON, v));
+        toggle("Nom des applis", null, store.labels(), on -> store.setFlag(Store.LABELS, on));
+        note("Lignes à 0 : automatique, selon la taille de l'écran.");
+    }
+
+    private void pageAlphabet() {
         // ---------------------------------------------------------- alphabet
         section("Alphabet sur les bords");
         choice("Côté", new String[]{"Les deux", "Gauche", "Droite"}, store.alphaSide(),
@@ -133,7 +307,9 @@ public final class SettingsActivity extends Activity {
         note("Poser le doigt sur un bord et le glisser de haut en bas : les applis de la lettre "
                 + "apparaissent à côté. Glisser vers l'intérieur jusqu'à l'appli et lâcher. "
                 + "En haut ★ les favoris.");
+    }
 
+    private void pageGestes() {
         // ---------------------------------------------------------- gestes
         section("Gestes");
         for (int i = 0; i < Actions.GESTURES.length; i++) gestureChoice(i);
@@ -173,21 +349,32 @@ public final class SettingsActivity extends Activity {
         });
         note("« Verrouiller l'écran » utilise le droit administrateur de l'appareil, limité au "
                 + "verrouillage. Ensuite, certains téléphones demandent le code au lieu de l'empreinte.");
+    }
 
-        // ---------------------------------------------------------- lisibilité
-        section("Lisibilité");
-        choice("Icônes de la barre d'état", new String[]{"Automatique", "Claires", "Foncées"}, store.barIcons(),
-                i -> store.setNum(Store.BAR_ICONS, i));
-        choice("Touches du bas", new String[]{"Comme la barre d'état", "Toujours claires"}, store.navKeys(),
-                i -> store.setNum(Store.NAV_KEYS, i));
-        choice("Texte de l'accueil", new String[]{"Automatique", "Blanc", "Noir"}, store.homeText(),
-                i -> store.setNum(Store.HOME_TEXT, i));
-        toggle("Voile sombre en haut", "Garde les icônes claires lisibles sur tout fond", store.topScrim(),
-                on -> store.setFlag(Store.TOP_SCRIM, on));
-        note("Automatique : foncé sur un fond d'écran clair, blanc sur un fond sombre. Le texte de "
-                + "l'accueil comprend l'horloge et le nom des applis. Si un bandeau clair apparaît "
-                + "derrière les touches du bas, choisis « Toujours claires » pour elles.");
+    private void pageFavoris() {
+        // ---------------------------------------------------------- favoris
+        section("Favoris ★");
+        toggle("Compléter automatiquement", "Avec les applis les plus utilisées", store.autoFavorites(),
+                on -> store.setFlag("autoFav", on));
+        slider("Nombre de favoris", 0, 8, store.maxFav(), "%d", v -> store.setNum(Store.MAXFAV, v));
+        note("Appui long sur une appli : l'épingler en favori, l'ajouter à un dossier ou la poser "
+                + "sur l'accueil.");
 
+        // ---------------------------------------------------------- dossiers
+        section("Dossiers");
+        colorChoice("Fond du cercle", ZONE_NAMES, ZONE_COLORS, store.folderBg(), c -> store.setNum(Store.F_BG, c));
+        slider("Opacité du cercle", 0, 100, store.folderBgAlpha(), "%d %%", v -> store.setNum(Store.F_BG_ALPHA, v));
+        slider("Taille des icônes", 34, 64, store.folderIcon(), "%d dp", v -> store.setNum(Store.F_ICON, v));
+        slider("Taille du cercle", 70, 140, store.folderRadius(), "%d %%", v -> store.setNum(Store.F_RADIUS, v));
+        toggle("Noms dans le cercle", null, store.folderLabels(), on -> store.setFlag(Store.F_LABELS, on));
+        toggle("Bordure de couleur", "Sur l'icône du dossier", store.folderBorder(),
+                on -> store.setFlag(Store.F_BORDER, on));
+        slider("Opacité de l'icône", 0, 100, store.folderTile(), "%d %%", v -> store.setNum(Store.F_TILE_ALPHA, v));
+        note("Lâcher une appli sur une autre crée un dossier. Pour un dossier précis (couleur, "
+                + "style, forme) : le maintenir puis lâcher sur place > Personnaliser.");
+    }
+
+    private void pagePastilles() {
         // ---------------------------------------------------------- pastilles
         section("Pastilles de notification");
         badgeApp = row("", "Pour savoir quelles applis ont des notifications", accent);
@@ -212,46 +399,33 @@ public final class SettingsActivity extends Activity {
                 + "leur contenu n'est ni lu ni gardé. S'il est grisé : Paramètres > Applis > Mini "
                 + "Launcher > ⋮ > « Autoriser les paramètres restreints ». Avec cet accès, Play Protect "
                 + "bloque l'installation des mises à jour : couper son analyse le temps de l'installation.");
+    }
 
-        // ---------------------------------------------------------- horloge
-        section("Horloge");
-        toggle("Afficher l'horloge", "La toucher ouvre les alarmes", store.clock(),
-                on -> store.setFlag(Store.CLOCK, on));
-        slider("Taille", 30, 110, store.clockSize(), "%d", v -> store.setNum(Store.CLOCK_SIZE, v));
-        choice("Position", new String[]{"À gauche", "Au centre", "À droite"}, store.clockAlign(),
-                i -> store.setNum(Store.CLOCK_ALIGN, i));
-        toggle("Afficher la date", null, store.clockDate(), on -> store.setFlag(Store.CLOCK_DATE, on));
-        note("Masque l'horloge pour mettre un widget horloge à la place.");
+    private void pageApparence() {
+        // ---------------------------------------------------------- lisibilité
+        section("Lisibilité");
+        choice("Icônes de la barre d'état", new String[]{"Automatique", "Claires", "Foncées"}, store.barIcons(),
+                i -> store.setNum(Store.BAR_ICONS, i));
+        choice("Touches du bas", new String[]{"Comme la barre d'état", "Toujours claires"}, store.navKeys(),
+                i -> store.setNum(Store.NAV_KEYS, i));
+        choice("Texte de l'accueil", new String[]{"Automatique", "Blanc", "Noir"}, store.homeText(),
+                i -> store.setNum(Store.HOME_TEXT, i));
+        toggle("Voile sombre en haut", "Garde les icônes claires lisibles sur tout fond", store.topScrim(),
+                on -> store.setFlag(Store.TOP_SCRIM, on));
+        note("Automatique : foncé sur un fond d'écran clair, blanc sur un fond sombre. Le texte de "
+                + "l'accueil comprend l'horloge et le nom des applis. Si un bandeau clair apparaît "
+                + "derrière les touches du bas, choisis « Toujours claires » pour elles.");
 
-        // ---------------------------------------------------------- grille
-        section("Grille");
-        slider("Colonnes", 3, 6, store.cols(), "%d", v -> store.setNum(Store.COLS, v));
-        slider("Lignes", 0, 9, store.rowsSetting(), "%d", v -> store.setNum(Store.ROWS, v));
-        slider("Taille des icônes", 36, 72, store.iconSize(), "%d dp", v -> store.setNum(Store.ICON, v));
-        toggle("Nom des applis", null, store.labels(), on -> store.setFlag(Store.LABELS, on));
-        note("Lignes à 0 : automatique, selon la taille de l'écran.");
+        // ---------------------------------------------------------- effets
+        section("Effets");
+        accentChoice();
+        slider("Assombrissement", 0, 90, store.dimPercent(), "%d %%", v -> store.setNum(Store.DIM, v));
+        choice("Animations", new String[]{"Aucune", "Normales", "Rapides", "Lentes"}, store.speed(),
+                i -> store.setNum(Store.SPEED, i));
+        toggle("Vibrations", null, store.haptic(), on -> store.setFlag(Store.HAPTIC, on));
+    }
 
-        // ---------------------------------------------------------- favoris
-        section("Favoris ★");
-        toggle("Compléter automatiquement", "Avec les applis les plus utilisées", store.autoFavorites(),
-                on -> store.setFlag("autoFav", on));
-        slider("Nombre de favoris", 0, 8, store.maxFav(), "%d", v -> store.setNum(Store.MAXFAV, v));
-        note("Appui long sur une appli : l'épingler en favori, l'ajouter à un dossier ou la poser "
-                + "sur l'accueil.");
-
-        // ---------------------------------------------------------- dossiers
-        section("Dossiers");
-        colorChoice("Fond du cercle", ZONE_NAMES, ZONE_COLORS, store.folderBg(), c -> store.setNum(Store.F_BG, c));
-        slider("Opacité du cercle", 0, 100, store.folderBgAlpha(), "%d %%", v -> store.setNum(Store.F_BG_ALPHA, v));
-        slider("Taille des icônes", 34, 64, store.folderIcon(), "%d dp", v -> store.setNum(Store.F_ICON, v));
-        slider("Taille du cercle", 70, 140, store.folderRadius(), "%d %%", v -> store.setNum(Store.F_RADIUS, v));
-        toggle("Noms dans le cercle", null, store.folderLabels(), on -> store.setFlag(Store.F_LABELS, on));
-        toggle("Bordure de couleur", "Sur l'icône du dossier", store.folderBorder(),
-                on -> store.setFlag(Store.F_BORDER, on));
-        slider("Opacité de l'icône", 0, 100, store.folderTile(), "%d %%", v -> store.setNum(Store.F_TILE_ALPHA, v));
-        note("Lâcher une appli sur une autre crée un dossier. Pour un dossier précis (couleur, "
-                + "style, forme) : le maintenir puis lâcher sur place > Personnaliser.");
-
+    private void pagePanneaux() {
         // ---------------------------------------------------------- panneaux
         section("Panneaux et recherche");
         choice("Thème des panneaux", Sheet.THEMES, store.panelTheme(), i -> store.setNum(Store.PANEL_THEME, i));
@@ -263,24 +437,8 @@ public final class SettingsActivity extends Activity {
                 i -> store.setFlag(Store.SEARCH_GRID, i == 1));
         note("Les panneaux : recherche, menus d'appui long, choix d'applis, de couleurs, de widgets. "
                 + "Le bouton Accueil ou Retour les ferme.");
-
-        // ---------------------------------------------------------- effets
-        section("Effets");
-        accentChoice();
-        slider("Assombrissement", 0, 90, store.dimPercent(), "%d %%", v -> store.setNum(Store.DIM, v));
-        choice("Animations", new String[]{"Aucune", "Normales", "Rapides", "Lentes"}, store.speed(),
-                i -> store.setNum(Store.SPEED, i));
-        toggle("Vibrations", null, store.haptic(), on -> store.setFlag(Store.HAPTIC, on));
-
-        versionFooter();
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(BG);
-        scroll.setFillViewport(true);
-        scroll.setVerticalScrollBarEnabled(false);
-        scroll.addView(page);
-        setContentView(scroll);
     }
+
 
     // ------------------------------------------------------------ structure
 

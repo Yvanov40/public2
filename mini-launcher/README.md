@@ -62,6 +62,7 @@ verrouillage » dans les réglages.
 ## Réglages
 
 Appui long sur une zone vide > Réglages du launcher (ou « Mini Launcher » dans le tiroir).
+L'écran principal est une grille de tuiles ; chaque tuile ouvre sa page :
 
 - Alphabet : côté(s), hauteur, position, effet loupe, couleur et opacité de la zone,
   couleur des lettres, toujours visible, largeur de la zone tactile.
