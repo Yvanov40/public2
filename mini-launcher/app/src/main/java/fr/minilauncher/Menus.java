@@ -85,6 +85,24 @@ final class Menus {
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         s.content.addView(head);
 
+        // Raccourcis de l'appli (« Nouveau message », « Itinéraire »…)
+        List<android.content.pm.ShortcutInfo> shortcuts = Shortcuts.of(a, cn);
+        for (int i = 0; i < shortcuts.size(); i++) {
+            android.content.pm.ShortcutInfo info = shortcuts.get(i);
+            Sheet.Item it = new Sheet.Item(Shortcuts.label(info).toString());
+            it.icon = Shortcuts.icon(a, info);
+            android.view.View r = s.row(it);
+            r.setOnClickListener(v -> {
+                s.dialog.dismiss();
+                Shortcuts.start(a, info, null);
+            });
+            s.content.addView(r);
+        }
+        if (!shortcuts.isEmpty()) {
+            android.view.View space = new android.view.View(a);
+            s.content.addView(space, new android.widget.LinearLayout.LayoutParams(1, s.px(10)));
+        }
+
         // Tuiles d'action
         List<Object[]> acts = new ArrayList<>();
         boolean pinned = store.isPinned(key);

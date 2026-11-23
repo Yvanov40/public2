@@ -384,9 +384,16 @@ public final class HomeActivity extends Activity
 
     @Override
     public void onHomeLongPress() {
+        Store st = Store.get(this);
+        boolean locked = st.homeLocked();
         String[] items = {"Ajouter une appli", "Créer un dossier", "Ajouter un widget", "Fond d'écran",
+                locked ? "Déverrouiller la disposition" : "Verrouiller la disposition", "Verrouiller l'écran",
                 "Réglages du launcher"};
         Sheet.list(this, "Mini Launcher " + Store.version(this), items, which -> {
+            if ((which <= 2) && locked) {
+                Toast.makeText(this, "Accueil verrouillé : le déverrouiller d'abord", Toast.LENGTH_SHORT).show();
+                return;
+            }
             switch (which) {
                 case 0:
                     Menus.pickApp(this, "Ajouter à l'accueil", grid.sortedApps(), app -> {
@@ -408,10 +415,23 @@ public final class HomeActivity extends Activity
                     } catch (ActivityNotFoundException ignored) {
                     }
                     break;
+                case 4:
+                    st.setFlag(Store.HOME_LOCKED, !locked);
+                    Toast.makeText(this, locked ? "Disposition déverrouillée"
+                            : "Disposition verrouillée : plus rien ne bouge", Toast.LENGTH_SHORT).show();
+                    break;
+                case 5:
+                    Actions.lock(this);
+                    break;
                 default:
                     startActivity(new Intent(this, SettingsActivity.class));
             }
         });
+    }
+
+    @Override
+    public void onLiftMenu(AppRepository.AppEntry app, String folder) {
+        Menus.appMenu(this, app.component, app.label, folder, this::refreshAll);
     }
 
     @Override

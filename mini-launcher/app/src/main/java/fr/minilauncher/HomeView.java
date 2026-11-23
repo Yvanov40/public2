@@ -56,6 +56,9 @@ final class HomeView extends FrameLayout {
          * doigt n'a pas bougé (menu de l'appli au lieu d'un dépôt).
          */
         void onFolderAppDrop(AppRepository.AppEntry app, String folder, float x, float y, boolean moved);
+
+        /** Appui long sur une appli de l'alphabet ou d'un dossier : son menu, tout de suite. */
+        void onLiftMenu(AppRepository.AppEntry app, String folder);
     }
 
     private static final long LONG_PRESS_MS = 500;
@@ -126,8 +129,7 @@ final class HomeView extends FrameLayout {
         ghostMoved = false;
         folderForwarding = false;
         stripForwarding = false;
-        grid.setExternalDrag(true);
-        invalidate();
+        host().onLiftMenu(app, folder); // le menu tout de suite ; un glissé le fermera
     }
 
     private boolean ghostTouch(MotionEvent e) {
@@ -136,7 +138,16 @@ final class HomeView extends FrameLayout {
             case MotionEvent.ACTION_MOVE:
                 ghostX = x;
                 ghostY = y;
-                if (Math.hypot(x - ghostStartX, y - ghostStartY) > slop) ghostMoved = true;
+                if (!ghostMoved && Math.hypot(x - ghostStartX, y - ghostStartY) > slop * 1.5f) {
+                    ghostMoved = true;
+                    Sheet.dismissAll();
+                    if (Store.get(getContext()).homeLocked()) {
+                        android.widget.Toast.makeText(getContext(), "Accueil verrouillé",
+                                android.widget.Toast.LENGTH_SHORT).show();
+                    } else {
+                        grid.setExternalDrag(true);
+                    }
+                }
                 invalidate();
                 return true;
             case MotionEvent.ACTION_UP: {
@@ -146,8 +157,11 @@ final class HomeView extends FrameLayout {
                 ghostApp = null;
                 grid.setExternalDrag(false);
                 invalidate();
-                // On vise avec l'icône, dessinée au-dessus du doigt.
-                host.onFolderAppDrop(app, folder, x - grid.getLeft(), y - 46 * dp - grid.getTop(), moved);
+                // Lâché sur place : le menu, déjà ouvert, reste. Sinon, dépôt (si l'accueil
+                // n'est pas verrouillé) ; on vise avec l'icône, dessinée au-dessus du doigt.
+                if (moved && !Store.get(getContext()).homeLocked()) {
+                    host.onFolderAppDrop(app, folder, x - grid.getLeft(), y - 46 * dp - grid.getTop(), true);
+                }
                 return true;
             }
             case MotionEvent.ACTION_CANCEL:
@@ -182,13 +196,44 @@ final class HomeView extends FrameLayout {
                 cancel.recycle();
                 toChildren = false;
             }
-            draggingItem = true;
-            dragMoved = false;
-            grid().startDrag(touchedItem, downX, downY);
+            // Le menu s'ouvre tout de suite ; si le doigt glisse ensuite, il se ferme et
+            // l'élément part en glisser-déposer.
+            pendingItemDrag = true;
+            host().onHomeItemMenu(touchedItem);
         } else {
             host().onHomeLongPress();
         }
     };
+
+    /** Appui long sur un élément de l'accueil, menu ouvert : on attend un glissé éventuel. */
+    private boolean pendingItemDrag;
+
+    private boolean pendingTouch(MotionEvent e) {
+        float x = e.getX(), y = e.getY();
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                if (Math.hypot(x - downX, y - downY) > slop * 1.5f) {
+                    pendingItemDrag = false;
+                    if (Store.get(getContext()).homeLocked()) {
+                        android.widget.Toast.makeText(getContext(), "Accueil verrouillé",
+                                android.widget.Toast.LENGTH_SHORT).show();
+                        decided = true;
+                        return true;
+                    }
+                    Sheet.dismissAll();
+                    draggingItem = true;
+                    dragMoved = true;
+                    grid.startDrag(touchedItem, downX, downY);
+                    grid.moveDrag(x, y);
+                }
+                return true;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                pendingItemDrag = false; // lâché sur place : le menu reste ouvert
+                return true;
+        }
+        return true;
+    }
 
     HomeView(Context context, HomeGrid grid, AlphaStripView strip, FolderWheelView folderWheel, Host host) {
         super(context);
@@ -214,7 +259,7 @@ final class HomeView extends FrameLayout {
     @Override
     protected void dispatchDraw(android.graphics.Canvas canvas) {
         super.dispatchDraw(canvas);
-        if (ghostApp != null && ghostApp.icon != null) {
+        if (ghostApp != null && ghostMoved && ghostApp.icon != null && !Store.get(getContext()).homeLocked()) {
             // L'appli soulevée, un peu au-dessus du doigt pour rester visible.
             float half = 30 * dp, gx = ghostX, gy = ghostY - 46 * dp;
             ink.setStyle(android.graphics.Paint.Style.FILL);
@@ -303,6 +348,7 @@ final class HomeView extends FrameLayout {
     public boolean dispatchTouchEvent(MotionEvent e) {
         int action = e.getActionMasked();
         if (ghostApp != null) return ghostTouch(e);
+        if (pendingItemDrag) return pendingTouch(e);
 
         // Un dossier ouvert ou l'alphabet affiché garde la main sur les gestes suivants.
         if (folderForwarding || (folderWheel.isOpen() && action == MotionEvent.ACTION_DOWN)) {
@@ -560,7 +606,6 @@ final class HomeView extends FrameLayout {
             case MotionEvent.ACTION_UP:
                 draggingItem = false;
                 grid.endDrag(x - grid.getLeft(), y - grid.getTop());
-                if (!dragMoved) host.onHomeItemMenu(touchedItem);
                 return true;
             case MotionEvent.ACTION_CANCEL:
                 draggingItem = false;
