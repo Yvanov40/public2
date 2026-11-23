@@ -127,6 +127,13 @@ final class Store {
     boolean badges() { return flag(BADGES, true); }
     int badgeStyle() { return num(BADGE_STYLE, 1); }         // 0 point, 1 nombre
     int badgeColor() { return num(BADGE_COLOR, 0xFFFF5A5F); } // 0 = couleur d'accent
+    static final String PANEL_THEME = "panelTheme", PANEL_ALPHA = "panelAlpha", PANEL_RADIUS = "panelRadius",
+            SEARCH_TOP = "searchTop", SEARCH_GRID = "searchGrid";
+    int panelTheme() { return num(PANEL_THEME, 0); }         // voir Sheet.THEMES
+    int panelAlpha() { return num(PANEL_ALPHA, 100); }       // %
+    int panelRadius() { return num(PANEL_RADIUS, 26); }      // dp
+    boolean searchTop() { return flag(SEARCH_TOP, true); }
+    boolean searchGrid() { return flag(SEARCH_GRID, true); }
     static final String KEEP_ALIVE = "keepAlive";
     boolean keepAlive() { return flag(KEEP_ALIVE, true); }
     static final String NAV_KEYS = "navKeys";

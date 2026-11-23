@@ -165,7 +165,7 @@ final class Recents {
         c.setOrientation(LinearLayout.VERTICAL);
         c.setGravity(Gravity.CENTER_HORIZONTAL);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xFF242730);
+        bg.setColor(Sheet.FIELD);
         bg.setCornerRadius(s.px(22));
         c.setBackground(bg);
         c.setClipToOutline(true);

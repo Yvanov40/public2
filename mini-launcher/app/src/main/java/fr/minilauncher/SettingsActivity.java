@@ -252,6 +252,18 @@ public final class SettingsActivity extends Activity {
         note("Lâcher une appli sur une autre crée un dossier. Pour un dossier précis (couleur, "
                 + "style, forme) : le maintenir puis lâcher sur place > Personnaliser.");
 
+        // ---------------------------------------------------------- panneaux
+        section("Panneaux et recherche");
+        choice("Thème des panneaux", Sheet.THEMES, store.panelTheme(), i -> store.setNum(Store.PANEL_THEME, i));
+        slider("Opacité", 50, 100, store.panelAlpha(), "%d %%", v -> store.setNum(Store.PANEL_ALPHA, v));
+        slider("Arrondi des coins", 8, 36, store.panelRadius(), "%d dp", v -> store.setNum(Store.PANEL_RADIUS, v));
+        choice("Recherche : position", new String[]{"En bas", "En haut"}, store.searchTop() ? 1 : 0,
+                i -> store.setFlag(Store.SEARCH_TOP, i == 1));
+        choice("Recherche : affichage", new String[]{"Liste", "Grille d'icônes"}, store.searchGrid() ? 1 : 0,
+                i -> store.setFlag(Store.SEARCH_GRID, i == 1));
+        note("Les panneaux : recherche, menus d'appui long, choix d'applis, de couleurs, de widgets. "
+                + "Le bouton Accueil ou Retour les ferme.");
+
         // ---------------------------------------------------------- effets
         section("Effets");
         accentChoice();

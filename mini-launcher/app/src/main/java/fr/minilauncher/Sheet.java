@@ -38,11 +38,54 @@ import java.util.Locale;
  */
 final class Sheet {
 
-    static final int CARD = 0xFF1A1C23;
-    static final int TEXT = 0xFFF2F3F7;
-    static final int MUTED = 0xFF8C92A3;
-    static final int DIVIDER = 0xFF272A34;
+    // Couleurs du thème choisi (Réglages > Panneaux), mises à jour à chaque ouverture.
+    static int CARD = 0xFF1A1C23;
+    static int TEXT = 0xFFF2F3F7;
+    static int MUTED = 0xFF8C92A3;
+    static int DIVIDER = 0xFF272A34;
+    static int FIELD = 0xFF242730;   // champ de saisie, cartes
+    static int HANDLE = 0xFF3A3D48;  // poignée, fond de case
+    static int SUBTLE = 0xFF5C6273;  // chevrons, contours
+    static int RIPPLE = 0x22FFFFFF;
     static final int DANGER = 0xFFFF8F8F;
+
+    static final String[] THEMES = {"Sombre", "Noir", "Anthracite", "Bleu nuit", "Clair"};
+    private static final int[][] PALETTES = {
+            // fond, texte, secondaire, séparateur, champ, poignée, discret
+            {0x1A1C23, 0xFFF2F3F7, 0xFF8C92A3, 0xFF272A34, 0xFF242730, 0xFF3A3D48, 0xFF5C6273},
+            {0x000000, 0xFFF2F3F7, 0xFF8C92A3, 0xFF1E1F24, 0xFF16171B, 0xFF33353D, 0xFF5C6273},
+            {0x2A2C33, 0xFFF2F3F7, 0xFF9AA0B0, 0xFF383B45, 0xFF34373F, 0xFF4A4D58, 0xFF6A7080},
+            {0x141B33, 0xFFEEF1FA, 0xFF8E98B8, 0xFF222B48, 0xFF1E2641, 0xFF34406A, 0xFF5A668E},
+            {0xF6F7FA, 0xFF15171C, 0xFF6B7080, 0xFFE2E4EA, 0xFFE9EBF0, 0xFFC9CCD5, 0xFF9AA0AE}};
+
+    static void applyTheme(Store st) {
+        int[] p = PALETTES[Math.max(0, Math.min(PALETTES.length - 1, st.panelTheme()))];
+        int alpha = (int) (255 * Math.max(50, Math.min(100, st.panelAlpha())) / 100f);
+        CARD = (alpha << 24) | p[0];
+        TEXT = p[1];
+        MUTED = p[2];
+        DIVIDER = p[3];
+        FIELD = p[4];
+        HANDLE = p[5];
+        SUBTLE = p[6];
+        RIPPLE = st.panelTheme() == 4 ? 0x1A000000 : 0x22FFFFFF;
+    }
+
+    /** Panneaux ouverts : le bouton Accueil les ferme tous. */
+    private static final List<java.lang.ref.WeakReference<Sheet>> OPEN = new ArrayList<>();
+
+    static void dismissAll() {
+        for (java.lang.ref.WeakReference<Sheet> r : new ArrayList<>(OPEN)) {
+            Sheet s = r.get();
+            if (s != null && s.dialog.isShowing()) {
+                try {
+                    s.dialog.dismiss();
+                } catch (RuntimeException ignored) {
+                }
+            }
+        }
+        OPEN.clear();
+    }
 
     interface IntCallback {
         void on(int index);
@@ -84,10 +127,19 @@ final class Sheet {
         }
     }
 
+    final boolean top; // panneau en haut de l'écran (recherche) au lieu d'en bas
+
     Sheet(Activity a, String title) {
+        this(a, title, false);
+    }
+
+    Sheet(Activity a, String title, boolean top) {
         activity = a;
+        this.top = top;
         dp = a.getResources().getDisplayMetrics().density;
-        accent = Store.get(a).accent();
+        Store st = Store.get(a);
+        applyTheme(st);
+        accent = st.accent();
         dialog = new Dialog(a);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
@@ -95,22 +147,24 @@ final class Sheet {
         panel.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(CARD);
-        float r = 26 * dp;
-        bg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
+        float r = st.panelRadius() * dp;
+        bg.setCornerRadii(top ? new float[]{0, 0, 0, 0, r, r, r, r} : new float[]{r, r, r, r, 0, 0, 0, 0});
         panel.setBackground(bg);
         panel.setClipToOutline(true);
-        panel.setPadding(0, px(10), 0, px(16));
+        panel.setPadding(0, top ? px(44) : px(10), 0, px(16));
 
-        // Poignée
-        View handle = new View(a);
-        GradientDrawable hb = new GradientDrawable();
-        hb.setColor(0xFF3A3D48);
-        hb.setCornerRadius(px(3));
-        handle.setBackground(hb);
-        LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(px(38), px(5));
-        hl.gravity = Gravity.CENTER_HORIZONTAL;
-        hl.bottomMargin = px(10);
-        panel.addView(handle, hl);
+        if (!top) {
+            // Poignée
+            View handle = new View(a);
+            GradientDrawable hb = new GradientDrawable();
+            hb.setColor(HANDLE);
+            hb.setCornerRadius(px(3));
+            handle.setBackground(hb);
+            LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(px(38), px(5));
+            hl.gravity = Gravity.CENTER_HORIZONTAL;
+            hl.bottomMargin = px(10);
+            panel.addView(handle, hl);
+        }
 
         if (title != null) {
             TextView t = text(title, 19, TEXT);
@@ -147,7 +201,7 @@ final class Sheet {
     static void ripple(View v) {
         GradientDrawable mask = new GradientDrawable();
         mask.setColor(Color.WHITE);
-        v.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22FFFFFF), null, mask));
+        v.setBackground(new RippleDrawable(ColorStateList.valueOf(RIPPLE), null, mask));
     }
 
     /** Champ de recherche en haut du panneau. */
@@ -160,7 +214,7 @@ final class Sheet {
         e.setSingleLine(true);
         e.setInputType(InputType.TYPE_CLASS_TEXT);
         GradientDrawable g = new GradientDrawable();
-        g.setColor(0xFF242730);
+        g.setColor(FIELD);
         g.setCornerRadius(px(14));
         e.setBackground(g);
         e.setPadding(px(16), px(12), px(16), px(12));
@@ -227,7 +281,7 @@ final class Sheet {
                 g.setColor(accent);
             } else {
                 g.setColor(Color.TRANSPARENT);
-                g.setStroke(px(2), 0xFF5C6273);
+                g.setStroke(px(2), SUBTLE);
             }
             box.setBackground(g);
         };
@@ -284,17 +338,25 @@ final class Sheet {
     void show() {
         FrameLayout root = new FrameLayout(activity);
         root.addView(panel, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+                FrameLayout.LayoutParams.WRAP_CONTENT, top ? Gravity.TOP : Gravity.BOTTOM));
         dialog.setContentView(root);
         Window w = dialog.getWindow();
         if (w != null) {
             w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            w.setGravity(Gravity.BOTTOM);
-            w.setWindowAnimations(android.R.style.Animation_InputMethod);
+            w.setGravity(top ? Gravity.TOP : Gravity.BOTTOM);
+            w.setWindowAnimations(top ? android.R.style.Animation_Dialog : android.R.style.Animation_InputMethod);
+            if (top) {
+                w.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+                w.setStatusBarColor(Color.TRANSPARENT);
+            }
             w.setDimAmount(0.55f);
             w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         }
+        OPEN.add(new java.lang.ref.WeakReference<>(this));
+        dialog.setOnDismissListener(d -> {
+            for (int i = OPEN.size() - 1; i >= 0; i--) if (OPEN.get(i).get() == this) OPEN.remove(i);
+        });
         dialog.show();
     }
 
@@ -392,7 +454,7 @@ final class Sheet {
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         GradientDrawable g = new GradientDrawable();
-        g.setColor(0xFF242730);
+        g.setColor(FIELD);
         g.setCornerRadius(s.px(14));
         input.setBackground(g);
         input.setPadding(s.px(16), s.px(14), s.px(16), s.px(14));

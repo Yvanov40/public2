@@ -83,7 +83,7 @@ final class WidgetPicker {
             texts.addView(s.text(label, 16, Sheet.TEXT));
             texts.addView(s.text(list.size() == 1 ? "1 widget" : list.size() + " widgets", 13, Sheet.MUTED));
             head.addView(texts, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-            TextView chevron = s.text("›", 24, 0xFF5C6273);
+            TextView chevron = s.text("›", 24, Sheet.SUBTLE);
             head.addView(chevron);
             Sheet.ripple(head);
             block.addView(head);
@@ -124,7 +124,7 @@ final class WidgetPicker {
         LinearLayout c = new LinearLayout(a);
         c.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xFF242730);
+        bg.setColor(Sheet.FIELD);
         bg.setCornerRadius(s.px(18));
         c.setBackground(bg);
         c.setClipToOutline(true);

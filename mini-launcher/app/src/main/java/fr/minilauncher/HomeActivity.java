@@ -294,6 +294,7 @@ public final class HomeActivity extends Activity
     }
 
     private void closeOverlays() {
+        Sheet.dismissAll();
         strip.close();
         folderWheel.close();
     }

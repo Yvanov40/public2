@@ -33,8 +33,10 @@ final class AppSearch {
         Map<String, Integer> usage = new HashMap<>();
         for (Map.Entry<String, Integer> u : store.usage()) usage.put(u.getKey(), u.getValue());
 
-        Sheet s = new Sheet(a, null);
+        boolean grid = store.searchGrid();
+        Sheet s = new Sheet(a, null, store.searchTop());
         EditText q = s.addSearch("Rechercher une appli");
+        int max = grid ? 12 : MAX;
         q.setImeOptions(EditorInfo.IME_ACTION_GO);
         List<AppRepository.AppEntry> shown = new ArrayList<>();
 
@@ -44,13 +46,16 @@ final class AppSearch {
             String query = Sheet.fold(q.getText().toString().trim());
             if (query.isEmpty()) {
                 for (Object[] r : Recents.load(a, apps)) {
-                    if (shown.size() >= MAX) break;
+                    if (shown.size() >= max) break;
                     shown.add((AppRepository.AppEntry) r[0]);
                 }
             } else {
-                shown.addAll(rank(apps, query, usage));
+                List<AppRepository.AppEntry> found = rank(apps, query, usage);
+                shown.addAll(found.subList(0, Math.min(max, found.size())));
             }
-            for (int i = 0; i < shown.size(); i++) {
+            if (grid) {
+                grid(a, s, shown, !query.isEmpty());
+            } else for (int i = 0; i < shown.size(); i++) {
                 AppRepository.AppEntry app = shown.get(i);
                 if (i > 0) s.addDivider();
                 Sheet.Item it = new Sheet.Item(app.label);
@@ -130,8 +135,57 @@ final class AppSearch {
             return Integer.compare((Integer) y[2], (Integer) x[2]);
         });
         List<AppRepository.AppEntry> out = new ArrayList<>();
-        for (int i = 0; i < Math.min(MAX, scored.size()); i++) out.add((AppRepository.AppEntry) scored.get(i)[0]);
+        for (int i = 0; i < Math.min(12, scored.size()); i++) out.add((AppRepository.AppEntry) scored.get(i)[0]);
         return out;
+    }
+
+    /** Grille d'icônes (4 par ligne), la première mise en avant quand on a tapé quelque chose. */
+    private static void grid(Activity a, Sheet s, List<AppRepository.AppEntry> apps, boolean highlightFirst) {
+        int cols = 4;
+        android.widget.LinearLayout row = null;
+        for (int i = 0; i < apps.size(); i++) {
+            if (i % cols == 0) {
+                row = new android.widget.LinearLayout(a);
+                row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+                row.setPadding(s.px(10), 0, s.px(10), 0);
+                s.content.addView(row);
+            }
+            AppRepository.AppEntry app = apps.get(i);
+            android.widget.LinearLayout cell = new android.widget.LinearLayout(a);
+            cell.setOrientation(android.widget.LinearLayout.VERTICAL);
+            cell.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+            cell.setPadding(s.px(4), s.px(10), s.px(4), s.px(10));
+            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+            bg.setCornerRadius(s.px(18));
+            bg.setColor(i == 0 && highlightFirst ? ((s.accent & 0x00FFFFFF) | 0x33000000) : 0);
+            android.graphics.drawable.GradientDrawable mask = new android.graphics.drawable.GradientDrawable();
+            mask.setCornerRadius(s.px(18));
+            mask.setColor(0xFFFFFFFF);
+            cell.setBackground(new android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(Sheet.RIPPLE), bg, mask));
+            android.widget.ImageView icon = new android.widget.ImageView(a);
+            icon.setImageDrawable(app.icon);
+            cell.addView(icon, new android.widget.LinearLayout.LayoutParams(s.px(50), s.px(50)));
+            android.widget.TextView name = s.text(app.label, 12, Sheet.TEXT);
+            name.setSingleLine(true);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            name.setGravity(android.view.Gravity.CENTER);
+            name.setPadding(0, s.px(6), 0, 0);
+            cell.addView(name, new android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT));
+            cell.setOnClickListener(v -> open(a, s, app));
+            android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            lp.setMargins(s.px(2), s.px(2), s.px(2), s.px(2));
+            row.addView(cell, lp);
+        }
+        // Cases vides pour garder la largeur des colonnes sur la dernière ligne.
+        if (row != null) {
+            for (int k = apps.size() % cols; k != 0 && k < cols; k++) {
+                row.addView(new View(a), new android.widget.LinearLayout.LayoutParams(0, 1, 1f));
+            }
+        }
     }
 
     private static boolean wordStarts(String label, String q) {
