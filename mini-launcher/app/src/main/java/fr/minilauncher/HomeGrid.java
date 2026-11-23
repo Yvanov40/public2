@@ -218,7 +218,7 @@ final class HomeGrid extends FrameLayout {
     private View folderView(Store.HomeItem it) {
         Store.Group g = Store.find(store.groups(), it.folder);
         if (g == null) return null;
-        return new FolderIconView(getContext(), g, folderApps(g.name), store);
+        return new FolderIconView(getContext(), g, folderApps(g.name), store, it.w > 1 || it.h > 1);
     }
 
     /** Les applis d'un dossier, dans l'ordre alphabétique. */
@@ -236,6 +236,28 @@ final class HomeGrid extends FrameLayout {
     /** Toutes les applis, dans l'ordre alphabétique. */
     List<AppRepository.AppEntry> sortedApps() {
         return lastList == null ? new java.util.ArrayList<>() : lastList;
+    }
+
+    /** Dossier en mode « icônes directes » ? */
+    boolean folderDirect(Store.HomeItem it) {
+        if (it == null || it.folder == null) return false;
+        Store.Group g = Store.find(store.groups(), it.folder);
+        return g != null && g.direct && g.style != 3;
+    }
+
+    /**
+     * Appli touchée dans un dossier à icônes directes (x, y en coordonnées de la grille), ou
+     * null si le toucher n'est pas sur une mini-icône (ou sur « +n »).
+     */
+    AppRepository.AppEntry folderAppAt(Store.HomeItem it, float x, float y) {
+        for (Map.Entry<View, Store.HomeItem> e : viewItems.entrySet()) {
+            if (e.getValue() != it || !(e.getKey() instanceof FolderIconView)) continue;
+            View v = e.getKey();
+            int i = ((FolderIconView) v).appIndexAt(x - v.getLeft(), y - v.getTop());
+            List<AppRepository.AppEntry> apps = folderApps(it.folder);
+            return i >= 0 && i < apps.size() ? apps.get(i) : null;
+        }
+        return null;
     }
 
     int folderColor(String name) {
@@ -588,10 +610,15 @@ final class HomeGrid extends FrameLayout {
         private final android.graphics.RectF r = new android.graphics.RectF();
         private final Rect tb = new Rect();
 
-        FolderIconView(Context c, Store.Group g, List<AppRepository.AppEntry> apps, Store store) {
+        private final boolean large;
+        /** Mini-icônes dessinées : {gauche, haut, droite, bas, index} (index -2 = « +n »). */
+        private final List<float[]> spots = new java.util.ArrayList<>();
+
+        FolderIconView(Context c, Store.Group g, List<AppRepository.AppEntry> apps, Store store, boolean large) {
             super(c);
             this.g = g;
             this.apps = apps;
+            this.large = large;
             iconDp = store.iconSize();
             showLabel = store.labels();
             border = store.folderBorder();
@@ -612,7 +639,12 @@ final class HomeGrid extends FrameLayout {
             float cx = getWidth() / 2f, iy = Math.max(4 * dp, (getHeight() - block) / 2f) + half;
             float corner = g.shape == 1 ? half : half * 0.45f;
             r.set(cx - half, iy - half, cx + half, iy + half);
+            spots.clear();
 
+            if (g.style != 3 && (large || g.direct)) {
+                drawPanel(canvas);
+                return;
+            }
             if (g.style == 3) {
                 // Invisible : rien n'est dessiné, la case reste un dossier. Contour discret
                 // seulement pendant un déplacement, pour le retrouver.
@@ -683,7 +715,73 @@ final class HomeGrid extends FrameLayout {
             CharSequence s = TextUtils.ellipsize(g.name, label, getWidth() - 8 * dp, TextUtils.TruncateAt.END);
             canvas.drawText(s, 0, s.length(), cx, iy + half + 18 * dp, label);
         }
+
+        /**
+         * Grand dossier ou icônes directes : un panneau arrondi avec la grille de ses applis
+         * (« +n » si elles ne tiennent pas toutes), et le nom dessous.
+         */
+        private void drawPanel(Canvas canvas) {
+            float pad = 6 * dp, labelH = showLabel ? 22 * dp : 0;
+            android.graphics.RectF box = new android.graphics.RectF(pad, pad, getWidth() - pad, getHeight() - pad - labelH);
+            float corner = g.shape == 1 ? Math.min(box.width(), box.height()) / 2f : 18 * dp;
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(0xFF1B1D26);
+            paint.setAlpha(tileAlpha);
+            canvas.drawRoundRect(box, corner, corner, paint);
+            if (border) {
+                paint.setColor(g.color);
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(2 * dp);
+                canvas.drawRoundRect(box, corner, corner, paint);
+                paint.setStyle(Paint.Style.FILL);
+            }
+            float inner = 8 * dp, gap = 6 * dp;
+            float bw = box.width() - 2 * inner, bh = box.height() - 2 * inner;
+            float t = Math.max(20 * dp, Math.min(48 * dp, Math.min(bw, bh) / 2.3f));
+            int cols = Math.max(1, (int) ((bw + gap) / (t + gap)));
+            int rows = Math.max(1, (int) ((bh + gap) / (t + gap)));
+            int cap = cols * rows;
+            int shown = apps.size() > cap ? cap - 1 : apps.size();
+            float gw = cols * t + (cols - 1) * gap, gh = rows * t + (rows - 1) * gap;
+            float x0 = box.left + (box.width() - gw) / 2f, y0 = box.top + (box.height() - gh) / 2f;
+            for (int i = 0; i < Math.min(cap, apps.size() > cap ? cap : apps.size()); i++) {
+                float l = x0 + (i % cols) * (t + gap), tp = y0 + (i / cols) * (t + gap);
+                if (i < shown) {
+                    Drawable d = apps.get(i).icon;
+                    if (d != null) {
+                        d.setBounds((int) l, (int) tp, (int) (l + t), (int) (tp + t));
+                        d.draw(canvas);
+                    }
+                    spots.add(new float[]{l, tp, l + t, tp + t, i});
+                } else {
+                    paint.setColor(0x33FFFFFF);
+                    canvas.drawCircle(l + t / 2, tp + t / 2, t / 2, paint);
+                    big.setColor(Color.WHITE);
+                    big.setTextSize(t * 0.38f);
+                    String more = "+" + (apps.size() - shown);
+                    big.getTextBounds(more, 0, more.length(), tb);
+                    canvas.drawText(more, l + t / 2, tp + t / 2 + tb.height() / 2f - tb.bottom, big);
+                    spots.add(new float[]{l, tp, l + t, tp + t, -2});
+                }
+            }
+            Badges.draw(getContext(), canvas, box.right - 10 * dp, box.top + 10 * dp, 12 * dp,
+                    Badges.count(getContext(), apps));
+            if (!showLabel) return;
+            CharSequence s = TextUtils.ellipsize(g.name, label, getWidth() - 8 * dp, TextUtils.TruncateAt.END);
+            canvas.drawText(s, 0, s.length(), getWidth() / 2f, box.bottom + 17 * dp, label);
+        }
+
+        /** Mini-icône sous (x, y) (coordonnées de la vue) : index de l'appli, -2 pour « +n », -1 sinon. */
+        int appIndexAt(float x, float y) {
+            for (float[] sp : spots) {
+                float m = 4 * dp;
+                if (x >= sp[0] - m && x <= sp[2] + m && y >= sp[1] - m && y <= sp[3] + m) return (int) sp[4];
+            }
+            return -1;
+        }
     }
+
+    // (méthodes de FolderIconView plus bas)
 
     /** Icône d'appli avec son nom. */
     private static final class AppIconView extends View {

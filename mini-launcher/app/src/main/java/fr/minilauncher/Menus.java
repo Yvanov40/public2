@@ -135,18 +135,7 @@ final class Menus {
             }
         }});
 
-        int cols = acts.size() <= 4 ? acts.size() : 3;
-        android.widget.LinearLayout row = null;
-        for (int i = 0; i < acts.size(); i++) {
-            if (i % cols == 0) {
-                row = new android.widget.LinearLayout(a);
-                row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-                row.setPadding(s.px(16), 0, s.px(16), s.px(8));
-                s.content.addView(row);
-            }
-            Object[] act = acts.get(i);
-            row.addView(tile(s, a, (String) act[0], (String) act[1], (Boolean) act[2], (Runnable) act[3]));
-        }
+        addTiles(s, a, acts);
         s.show();
     }
 
@@ -197,22 +186,31 @@ final class Menus {
 
     // ------------------------------------------------------------ dossier
 
-    static void folderMenu(Activity a, String folder, List<AppRepository.AppEntry> apps, Runnable changed) {
+    /**
+     * Menu d'un dossier, en tuiles : applis, personnaliser, taille sur l'accueil, renommer,
+     * supprimer. {@code resize} ouvre le choix de la taille (null : pas de tuile Taille).
+     */
+    static void folderMenu(Activity a, String folder, List<AppRepository.AppEntry> apps, Runnable changed,
+                           Runnable resize) {
         Store store = Store.get(a);
-        Builder b = new Builder();
-        b.add("Choisir les applis…", () -> {
+        Store.Group g0 = Store.find(store.groups(), folder);
+        int color = g0 == null ? Store.get(a).accent() : g0.color;
+        int n = g0 == null ? 0 : g0.apps.size();
+        List<Object[]> acts = new ArrayList<>();
+        acts.add(new Object[]{"＋", "Applis", false, (Runnable) () -> {
             Store.Group g = Store.find(store.groups(), folder);
             pickApps(a, "Applis du dossier", apps, g == null ? new ArrayList<>() : g.apps, keys -> {
                 store.setFolderApps(folder, keys);
                 changed.run();
             });
-        });
-        b.add("Personnaliser…", () -> customizeFolder(a, folder, changed));
-        b.add("Renommer", () -> askName(a, "Renommer le dossier", folder, name -> {
+        }});
+        acts.add(new Object[]{"◐", "Personnaliser", false, (Runnable) () -> customizeFolder(a, folder, changed)});
+        if (resize != null) acts.add(new Object[]{"⤢", "Taille", false, resize});
+        acts.add(new Object[]{"✎", "Renommer", false, (Runnable) () -> askName(a, "Renommer le dossier", folder, name -> {
             store.renameFolder(folder, name);
             changed.run();
-        }));
-        b.add("Supprimer le dossier", () -> {
+        })});
+        acts.add(new Object[]{"✕", "Supprimer", true, (Runnable) () -> {
             Builder c = new Builder();
             c.add("Supprimer", () -> {
                 store.deleteFolder(folder);
@@ -221,8 +219,72 @@ final class Menus {
             c.add("Annuler", () -> {
             });
             c.show(a, "Supprimer « " + folder + " » ? Les applis restent installées.");
-        }).danger = true;
-        b.show(a, folder);
+        }});
+        tileSheet(a, null, color, folder, n + (n > 1 ? " applis" : " appli"), acts);
+    }
+
+    /**
+     * Panneau en tuiles : en-tête (icône ou pastille de couleur, titre, sous-titre) puis des
+     * tuiles {glyphe, libellé, rouge ?, action}, trois par ligne.
+     */
+    static void tileSheet(Activity a, Drawable icon, int dot, String title, String subtitle, List<Object[]> acts) {
+        Sheet s = new Sheet(a, null);
+        android.widget.LinearLayout head = new android.widget.LinearLayout(a);
+        head.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        head.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        head.setPadding(s.px(22), s.px(2), s.px(22), s.px(14));
+        android.view.View lead;
+        if (icon != null) {
+            android.widget.ImageView iv = new android.widget.ImageView(a);
+            iv.setImageDrawable(icon);
+            lead = iv;
+        } else {
+            lead = new android.view.View(a);
+            android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+            gd.setCornerRadius(s.px(14));
+            gd.setColor(dot);
+            lead.setBackground(gd);
+        }
+        android.widget.LinearLayout.LayoutParams ll = new android.widget.LinearLayout.LayoutParams(s.px(48), s.px(48));
+        ll.rightMargin = s.px(16);
+        head.addView(lead, ll);
+        android.widget.LinearLayout texts = new android.widget.LinearLayout(a);
+        texts.setOrientation(android.widget.LinearLayout.VERTICAL);
+        android.widget.TextView t = s.text(title, 19, Sheet.TEXT);
+        t.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
+        t.setSingleLine(true);
+        t.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        texts.addView(t);
+        if (subtitle != null) texts.addView(s.text(subtitle, 13, Sheet.MUTED));
+        head.addView(texts, new android.widget.LinearLayout.LayoutParams(0,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        s.content.addView(head);
+        addTiles(s, a, acts);
+        s.show();
+    }
+
+    private static void addTiles(Sheet s, Activity a, List<Object[]> acts) {
+        int cols = acts.size() <= 4 ? acts.size() : 3;
+        android.widget.LinearLayout row = null;
+        for (int i = 0; i < acts.size(); i++) {
+            if (i % cols == 0) {
+                row = new android.widget.LinearLayout(a);
+                row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+                row.setPadding(s.px(16), 0, s.px(16), s.px(8));
+                s.content.addView(row);
+            }
+            Object[] act = acts.get(i);
+            row.addView(tile(s, a, (String) act[0], (String) act[1], (Boolean) act[2], (Runnable) act[3]));
+        }
+        // Cases vides : la dernière ligne garde la largeur des tuiles.
+        if (row != null) {
+            for (int k = acts.size() % cols; k != 0 && k < cols; k++) {
+                android.view.View v = new android.view.View(a);
+                android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, s.px(96), 1f);
+                lp.setMargins(s.px(4), 0, s.px(4), 0);
+                row.addView(v, lp);
+            }
+        }
     }
 
     private static final String[] COLOR_NAMES = {"Orange", "Vert", "Rose", "Violet", "Bleu ciel", "Jaune",
@@ -248,6 +310,11 @@ final class Menus {
             store.customizeFolder(folder, -1, i, -1);
             changed.run();
         })).subtitle = styles[Math.max(0, Math.min(3, g.style))];
+        String[] modes = {"Ouvre le cercle", "Icônes directes (toucher une mini-icône l'ouvre)"};
+        b.add("Toucher le dossier", () -> choose(a, "Toucher le dossier", modes, g.direct ? 1 : 0, i -> {
+            store.setFolderDirect(folder, i == 1);
+            changed.run();
+        })).subtitle = modes[g.direct ? 1 : 0];
         b.add("Forme", () -> choose(a, "Forme", shapes, g.shape, i -> {
             store.customizeFolder(folder, -1, -1, i);
             changed.run();

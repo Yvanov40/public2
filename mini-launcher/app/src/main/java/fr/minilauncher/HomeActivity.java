@@ -361,47 +361,44 @@ public final class HomeActivity extends Activity
     public void onHomeLongPress() {
         Store st = Store.get(this);
         boolean locked = st.homeLocked();
-        String[] items = {"Ajouter une appli", "Créer un dossier", "Ajouter un widget", "Fond d'écran",
-                locked ? "Déverrouiller la disposition" : "Verrouiller la disposition", "Verrouiller l'écran",
-                "Réglages du launcher"};
-        Sheet.list(this, "Mini Launcher " + Store.version(this), items, which -> {
-            if ((which <= 2) && locked) {
-                Toast.makeText(this, "Accueil verrouillé : le déverrouiller d'abord", Toast.LENGTH_SHORT).show();
+        Runnable lockedToast = () -> Toast.makeText(this, "Accueil verrouillé : le déverrouiller d'abord",
+                Toast.LENGTH_SHORT).show();
+        List<Object[]> acts = new ArrayList<>();
+        acts.add(new Object[]{"＋", "Appli", false, (Runnable) () -> {
+            if (locked) {
+                lockedToast.run();
                 return;
             }
-            switch (which) {
-                case 0:
-                    Menus.pickApp(this, "Ajouter à l'accueil", grid.sortedApps(), app -> {
-                        Store store = Store.get(this);
-                        String key = Store.key(app.component);
-                        if (!store.isOnHome(key)) store.toggleHomeApp(key);
-                        refreshAll();
-                    });
-                    break;
-                case 1:
-                    Menus.newFolder(this, grid.sortedApps(), this::refreshAll);
-                    break;
-                case 2:
-                    pickWidget();
-                    break;
-                case 3:
-                    try {
-                        startActivity(Intent.createChooser(new Intent(Intent.ACTION_SET_WALLPAPER), "Fond d'écran"));
-                    } catch (ActivityNotFoundException ignored) {
-                    }
-                    break;
-                case 4:
-                    st.setFlag(Store.HOME_LOCKED, !locked);
-                    Toast.makeText(this, locked ? "Disposition déverrouillée"
-                            : "Disposition verrouillée : plus rien ne bouge", Toast.LENGTH_SHORT).show();
-                    break;
-                case 5:
-                    Actions.lock(this);
-                    break;
-                default:
-                    startActivity(new Intent(this, SettingsActivity.class));
+            Menus.pickApp(this, "Ajouter à l'accueil", grid.sortedApps(), app -> {
+                String key = Store.key(app.component);
+                if (!st.isOnHome(key)) st.toggleHomeApp(key);
+                refreshAll();
+            });
+        }});
+        acts.add(new Object[]{"▦", "Dossier", false, (Runnable) () -> {
+            if (locked) lockedToast.run();
+            else Menus.newFolder(this, grid.sortedApps(), this::refreshAll);
+        }});
+        acts.add(new Object[]{"▭", "Widget", false, (Runnable) () -> {
+            if (locked) lockedToast.run();
+            else pickWidget();
+        }});
+        acts.add(new Object[]{"◩", "Fond d'écran", false, (Runnable) () -> {
+            try {
+                startActivity(Intent.createChooser(new Intent(Intent.ACTION_SET_WALLPAPER), "Fond d'écran"));
+            } catch (ActivityNotFoundException ignored) {
             }
-        });
+        }});
+        acts.add(new Object[]{locked ? "🔓" : "🔒", locked ? "Déverrouiller la disposition" : "Verrouiller la disposition",
+                false, (Runnable) () -> {
+            st.setFlag(Store.HOME_LOCKED, !locked);
+            Toast.makeText(this, locked ? "Disposition déverrouillée"
+                    : "Disposition verrouillée : plus rien ne bouge", Toast.LENGTH_SHORT).show();
+        }});
+        acts.add(new Object[]{"⏻", "Verrouiller l'écran", false, (Runnable) () -> Actions.lock(this)});
+        acts.add(new Object[]{"⚙", "Réglages", false, (Runnable) () -> startActivity(new Intent(this, SettingsActivity.class))});
+        Menus.tileSheet(this, getApplicationInfo().loadIcon(getPackageManager()), 0, "Mini Launcher",
+                "Version " + Store.version(this) + (locked ? " · disposition verrouillée" : ""), acts);
     }
 
     @Override
@@ -417,7 +414,8 @@ public final class HomeActivity extends Activity
     @Override
     public void onHomeItemMenu(Store.HomeItem item) {
         if (item.folder != null) {
-            Menus.folderMenu(this, item.folder, grid.sortedApps(), this::refreshAll);
+            Menus.folderMenu(this, item.folder, grid.sortedApps(), this::refreshAll,
+                    Store.get(this).homeLocked() ? null : () -> chooseSize(item));
         } else if (item.widget) {
             AppWidgetProviderInfo info = widgetManager.getAppWidgetInfo(item.widgetId);
             boolean configurable = info != null && info.configure != null;
@@ -460,7 +458,7 @@ public final class HomeActivity extends Activity
                 items.add(it);
             }
         }
-        Sheet.list(this, "Taille du widget", items, which -> {
+        Sheet.list(this, "Taille sur l'accueil", items, which -> {
             int[] s = sizes.get(which);
             if (!grid.resize(item, s[0], s[1])) {
                 Toast.makeText(this, "Pas assez de place pour cette taille", Toast.LENGTH_SHORT).show();

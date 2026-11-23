@@ -350,7 +350,7 @@ final class HomeView extends FrameLayout {
                 toChildren = touchedItem != null && touchedItem.widget;
                 boolean inBand = x < bandWidth() || x > getWidth() - bandWidth();
 
-                if (touchedItem != null && touchedItem.folder != null) {
+                if (touchedItem != null && touchedItem.folder != null && !grid.folderDirect(touchedItem)) {
                     // Dossier : il s'ouvre en cercle tout de suite, sous le doigt.
                     float[] c = grid.centerOf(touchedItem);
                     if (c != null) {
@@ -437,6 +437,25 @@ final class HomeView extends FrameLayout {
                 if (!decided) {
                     if (touchedItem == null && onClock(downX, downY) && onClockTap != null) {
                         onClockTap.run();
+                    } else if (touchedItem != null && touchedItem.folder != null) {
+                        // Dossier à icônes directes : la mini-icône touchée s'ouvre ; ailleurs (ou
+                        // sur « +n »), le cercle du dossier s'ouvre et reste affiché.
+                        AppRepository.AppEntry app = grid.folderAppAt(touchedItem, downX - grid.getLeft(), downY - grid.getTop());
+                        if (app != null) {
+                            host.onLaunchHomeApp(app, grid.screenBoundsOf(touchedItem));
+                        } else {
+                            float[] c = grid.centerOf(touchedItem);
+                            if (c != null) {
+                                folderWheel.open(touchedItem.folder, grid.folderColor(touchedItem.folder),
+                                        grid.folderApps(touchedItem.folder), c[0] + grid.getLeft(), c[1] + grid.getTop());
+                                MotionEvent down = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN,
+                                        c[0] + grid.getLeft(), c[1] + grid.getTop(), 0);
+                                folderWheel.handleTouch(down);
+                                down.setAction(MotionEvent.ACTION_UP);
+                                folderWheel.handleTouch(down); // simple toucher : le cercle reste ouvert
+                                down.recycle();
+                            }
+                        }
                     } else if (touchedItem != null) {
                         AppRepository.AppEntry app = grid.appOf(touchedItem);
                         if (app != null) host.onLaunchHomeApp(app, grid.screenBoundsOf(touchedItem));
