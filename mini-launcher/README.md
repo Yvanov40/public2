@@ -41,12 +41,9 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
 
 ## Aller vite sans chercher
 
-- **Étoile** : appuyer sans bouger dans le vide (petite vibration), puis un coup de doigt
-  dans une des 8 directions et lâcher. En hésitant, l'étoile s'affiche ; une branche vide
-  propose de choisir son appli. Lâcher au centre sans direction : menu de l'accueil.
-- **Modules** (réglages, première tuile) : étoile, lettres dessinées, lettres qui apprennent,
-  alphabet sur les bords, pastilles, garder actif — chacun activable. Sans étoile, appui long
-  dans le vide = menu de l'accueil ; sans lettres dessinées, les glissés partent tout de suite.
+- **Modules** (réglages, première tuile) : lettres dessinées, lettres qui apprennent,
+  alphabet sur les bords, pastilles, garder actif — chacun activable. Sans lettres dessinées,
+  les glissés partent tout de suite. Appui long dans le vide : menu de l'accueil.
 - **Lettres qui apprennent** : lâcher le doigt sur une lettre de l'alphabet ouvre l'appli la
   plus utilisée de cette lettre (entourée dans la liste).
 - **Appli d'avant** (par défaut : glisser vers la droite) : rouvre l'avant-dernière appli,

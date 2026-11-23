@@ -248,18 +248,14 @@ public final class SettingsActivity extends Activity {
 
     private void pageModules() {
         section("Pour aller vite");
-        toggle("Étoile", "Appuyer sans bouger puis glisser : 8 applis autour du doigt", store.starOn(),
-                on -> store.setFlag(Store.STAR_ON, on));
         toggle("Lettres dessinées", "Dessiner une lettre dans le vide ouvre son appli", store.drawOn(),
                 on -> store.setFlag(Store.DRAW_ON, on));
         toggle("Lettres qui apprennent", "Lâcher sur une lettre de l'alphabet ouvre son appli préférée",
                 store.alphaLearn(), on -> store.setFlag(Store.ALPHA_LEARN, on));
         toggle("Alphabet sur les bords", "L'index A–Z des deux côtés de l'écran", store.alphaOn(),
                 on -> store.setFlag(Store.ALPHA_ON, on));
-        note("Étoile coupée : l'appui long dans le vide ouvre directement le menu de l'accueil. "
-                + "Lettres dessinées coupées : les glissés partent tout de suite, sans attendre le lever "
-                + "du doigt. Avec l'étoile, lâcher au centre sans choisir de direction ouvre le menu de "
-                + "l'accueil.");
+        note("Lettres dessinées coupées : les glissés partent tout de suite, sans attendre le lever "
+                + "du doigt. Appui long dans le vide : menu de l'accueil.");
         section("Autres");
         toggle("Pastilles de notification", "Réglages dans la tuile Pastilles", store.badges(),
                 on -> store.setFlag(Store.BADGES, on));
@@ -356,13 +352,6 @@ public final class SettingsActivity extends Activity {
         addRow(usageAccess);
         note("Les gestes marchent dans les zones vides du milieu de l'écran. Glisser vers le haut "
                 + "ouvre les applis récentes en roue : continuer jusqu'à l'appli et lâcher.");
-
-        section("Étoile");
-        for (int d = 0; d < 8; d++) starRow(d);
-        note("Appuyer sans bouger dans le vide (petite vibration), puis un coup de doigt dans une "
-                + "direction et lâcher : l'appli s'ouvre. En hésitant, l'étoile s'affiche (elle reste "
-                + "tant que le doigt est posé). Une branche vide propose de choisir son appli. Lâcher "
-                + "au centre : menu de l'accueil.");
 
         section("Lettres dessinées");
         drawingRows();
@@ -702,34 +691,6 @@ public final class SettingsActivity extends Activity {
             }
         }));
         addRow(r);
-    }
-
-    private void starRow(int d) {
-        LinearLayout r = row(StarView.DIRECTIONS[d], null, TEXT);
-        TextView val = valueText(starLabel(d));
-        val.setTextColor(store.starApp(d) == null ? MUTED : accent);
-        r.addView(val);
-        r.addView(chevron());
-        clickable(r, v -> Sheet.list(this, "Étoile, branche " + StarView.DIRECTIONS[d].toLowerCase(),
-                new String[]{"Choisir une appli…", "Vider la branche"}, which -> {
-                    if (which == 0) {
-                        Menus.pickApp(this, "Appli de la branche", AppRepository.get(this).cached(), app -> {
-                            store.setStarApp(d, Store.key(app.component));
-                            val.setText(app.label);
-                            val.setTextColor(accent);
-                        });
-                    } else {
-                        store.setStarApp(d, null);
-                        val.setText("—");
-                        val.setTextColor(MUTED);
-                    }
-                }));
-        addRow(r);
-    }
-
-    private String starLabel(int d) {
-        String key = store.starApp(d);
-        return key == null ? "—" : appName(key);
     }
 
     private void drawingRows() {

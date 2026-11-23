@@ -86,7 +86,6 @@ public final class HomeActivity extends Activity
         folderWheel = new FolderWheelView(this);
         folderWheel.setListener(this);
         home = new HomeView(this, grid, strip, folderWheel, this);
-        home.setStar(new StarView(this));
         home.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
@@ -321,30 +320,6 @@ public final class HomeActivity extends Activity
         if (key == null) return null;
         for (AppRepository.AppEntry e : repository.cached()) if (Store.key(e.component).equals(key)) return e;
         return null;
-    }
-
-    @Override
-    public AppRepository.AppEntry[] starApps() {
-        AppRepository.AppEntry[] out = new AppRepository.AppEntry[8];
-        Store st = Store.get(this);
-        for (int i = 0; i < 8; i++) out[i] = appByKey(st.starApp(i));
-        return out;
-    }
-
-    @Override
-    public void onStar(int dir) {
-        Store st = Store.get(this);
-        AppRepository.AppEntry app = appByKey(st.starApp(dir));
-        if (app != null) {
-            Launcher.launch(this, app, null, home);
-            return;
-        }
-        // Branche vide : on y range une appli, elle s'ouvrira avec ce geste.
-        Sheet.apps(this, "Étoile, branche " + StarView.DIRECTIONS[dir].toLowerCase(), grid.sortedApps(), chosen -> {
-            st.setStarApp(dir, Store.key(chosen.component));
-            Toast.makeText(this, chosen.label + " : appuyer-glisser vers " + StarView.DIRECTIONS[dir].toLowerCase(),
-                    Toast.LENGTH_LONG).show();
-        });
     }
 
     @Override

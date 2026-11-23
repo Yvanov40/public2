@@ -42,12 +42,6 @@ final class HomeView extends FrameLayout {
         /** Applis récentes, de la plus récente à la plus ancienne. */
         List<AppRepository.AppEntry> recentApps();
 
-        /** Les 8 applis de l'étoile (null = branche vide). */
-        AppRepository.AppEntry[] starApps();
-
-        /** Branche {@code dir} de l'étoile choisie (vide : proposer d'y mettre une appli). */
-        void onStar(int dir);
-
         /** Un tracé (lettre dessinée) : {x, y, temps} par point. */
         void onDrawing(List<float[]> points);
 
@@ -79,41 +73,18 @@ final class HomeView extends FrameLayout {
     private Store.HomeItem touchedItem;
     private float downX, downY;
     private long downTime;
-    private static final long STAR_ARM_MS = 220;   // appui sans bouger avant l'étoile
-    private static final long STAR_SHOW_MS = 380;  // hésitation avant de la montrer
-
-    private StarView star;
-    private boolean starArmed;
-    private int starDir = -1;
     private boolean pendingSwipe;                  // geste en cours, interprété au lever du doigt
     private final List<float[]> trail = new ArrayList<>();
     private final android.graphics.Paint ink = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
     private final android.graphics.Path inkPath = new android.graphics.Path();
 
-    private final Runnable armStar = () -> {
-        if (decided || touchedItem != null) return;
-        starArmed = true;
-        if (Store.get(getContext()).haptic()) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
-        star.arm(downX, downY, host().starApps());
-        postDelayed(this::revealStar, STAR_SHOW_MS);
-    };
-
-    private void revealStar() {
-        if (starArmed) star.reveal();
-    }
-
     private final Runnable homeMenu = () -> {
-        // Sans le module Étoile : appui long dans le vide = menu de l'accueil.
+        // Appui long dans le vide : menu de l'accueil.
         if (decided || touchedItem != null) return;
         decided = true;
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
         host().onHomeLongPress();
     };
-
-    void setStar(StarView s) {
-        star = s;
-        addView(s, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-    }
 
     // Appli soulevée d'un dossier, qui suit le doigt.
     private AppRepository.AppEntry ghostApp;
@@ -398,16 +369,12 @@ final class HomeView extends FrameLayout {
                     return strip.handleTouch(e);
                 }
                 if (toChildren) super.dispatchTouchEvent(e);
-                starArmed = false;
-                starDir = -1;
                 pendingSwipe = false;
                 trail.clear();
                 trail.add(new float[]{x, y, e.getEventTime()});
                 if (touchedItem == null && !onClock(x, y)) {
-                    // Vide : appuyer puis glisser = étoile (lâcher au centre = menu de l'accueil) ;
-                    // sans étoile, appui long = menu de l'accueil.
-                    if (Store.get(getContext()).starOn()) postDelayed(armStar, STAR_ARM_MS);
-                    else postDelayed(homeMenu, LONG_PRESS_MS);
+                    // Vide : appui long = menu de l'accueil.
+                    postDelayed(homeMenu, LONG_PRESS_MS);
                 } else {
                     postDelayed(longPress, LONG_PRESS_MS);
                 }
@@ -421,25 +388,6 @@ final class HomeView extends FrameLayout {
                     if (far) removeCallbacks(longPress);
                     return super.dispatchTouchEvent(e);
                 }
-                if (starArmed) {
-                    // Étoile : la direction du doigt choisit la branche.
-                    double dist = Math.hypot(dx, dy);
-                    if (dist > slop) removeCallbacks(homeMenu);
-                    int dir = -1;
-                    if (dist > 36 * dp) {
-                        double a = Math.toDegrees(Math.atan2(dx, -dy));
-                        if (a < 0) a += 360;
-                        dir = (int) Math.round(a / 45) % 8;
-                    }
-                    if (dir != starDir) {
-                        starDir = dir;
-                        star.select(dir);
-                        if (dir >= 0 && Store.get(getContext()).haptic()) {
-                            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
-                        }
-                    }
-                    return true;
-                }
                 if (pendingSwipe) {
                     trail.add(new float[]{x, y, e.getEventTime()});
                     invalidate();
@@ -448,7 +396,6 @@ final class HomeView extends FrameLayout {
                 if (decided || !far) return true;
                 decided = true;
                 removeCallbacks(longPress);
-                removeCallbacks(armStar);
                 removeCallbacks(homeMenu);
                 lastTapTime = 0;
                 if (touchedItem == null && dy < 0 && -dy > 1.3f * Math.abs(dx)
@@ -476,22 +423,7 @@ final class HomeView extends FrameLayout {
 
             case MotionEvent.ACTION_UP:
                 removeCallbacks(longPress);
-                removeCallbacks(armStar);
                 removeCallbacks(homeMenu);
-                if (starArmed) {
-                    starArmed = false;
-                    int dir = starDir;
-                    star.hide();
-                    if (dir >= 0) {
-                        host.onStar(dir);
-                    } else {
-                        // Lâcher au centre de l'étoile, sans direction : menu de l'accueil.
-                        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                        host.onHomeLongPress();
-                    }
-                    decided = true;
-                    return true;
-                }
                 if (pendingSwipe) {
                     trail.add(new float[]{x, y, e.getEventTime()});
                     finishSwipe();
@@ -526,12 +458,9 @@ final class HomeView extends FrameLayout {
 
             case MotionEvent.ACTION_CANCEL:
                 removeCallbacks(longPress);
-                removeCallbacks(armStar);
                 removeCallbacks(homeMenu);
-                starArmed = false;
                 pendingSwipe = false;
                 trail.clear();
-                star.hide();
                 invalidate();
                 if (toChildren) {
                     toChildren = false;
