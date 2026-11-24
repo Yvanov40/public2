@@ -78,6 +78,7 @@ final class AppSearch {
                 }
                 View row = s.row(it);
                 row.setOnClickListener(v -> open(a, s, app));
+                row.setOnLongClickListener(v -> place(a, s, app));
                 s.content.addView(row);
             }
             if (!query.isEmpty() && shown.isEmpty()) {
@@ -212,6 +213,7 @@ final class AppSearch {
                     android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
                     android.widget.LinearLayout.LayoutParams.WRAP_CONTENT));
             cell.setOnClickListener(v -> open(a, s, app));
+            cell.setOnLongClickListener(v -> place(a, s, app));
             android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0,
                     android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
             lp.setMargins(s.px(2), s.px(2), s.px(2), s.px(2));
@@ -234,6 +236,14 @@ final class AppSearch {
         StringBuilder b = new StringBuilder();
         for (String w : label.split("[\\s\\-_.:]+")) if (!w.isEmpty()) b.append(w.charAt(0));
         return b.toString();
+    }
+
+    /** Maintenue : la recherche se ferme et l'appli attend d'être posée sur l'accueil. */
+    private static boolean place(Activity a, Sheet s, AppRepository.AppEntry app) {
+        if (!(a instanceof HomeActivity)) return false;
+        s.dialog.dismiss();
+        ((HomeActivity) a).placeOnHome(app);
+        return true;
     }
 
     private static void open(Activity a, Sheet s, AppRepository.AppEntry app) {

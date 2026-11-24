@@ -30,6 +30,8 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
   déplacer le dossier, ou son menu (applis, renommer, retirer, supprimer).
 - **Poser une appli depuis l'alphabet** : à côté de l'alphabet, garder le doigt sur une appli
   (vibration), elle suit le doigt ; la lâcher sur l'accueil, un dossier ou une appli.
+- **Depuis la recherche** : maintenir une appli ferme la recherche ; l'icône flotte, poser le
+  doigt à l'endroit voulu (glisser si besoin) puis lâcher la pose sur l'accueil.
 - **Sortir une appli d'un dossier** : dans le cercle, garder le doigt sur une appli (vibration),
   elle suit le doigt ; lâcher sur une case vide (posée sur l'accueil), sur un autre dossier
   (elle y passe) ou sur une appli (nouveau dossier). Lâcher sans bouger : son menu.

@@ -103,6 +103,54 @@ final class HomeView extends FrameLayout {
         host().onLiftMenu(app, folder); // le menu tout de suite ; un glissé le fermera
     }
 
+    /** Placement d'une appli venue de la recherche : l'icône flotte, le doigt suivant la pose. */
+    private boolean placing;
+
+    void startPlacement(AppRepository.AppEntry app) {
+        ghostApp = app;
+        ghostFolder = null;
+        ghostMoved = true;
+        placing = true;
+        ghostX = getWidth() / 2f;
+        ghostY = getHeight() * 0.55f;
+        grid.setExternalDrag(true);
+        invalidate();
+    }
+
+    void cancelPlacement() {
+        if (!placing) return;
+        placing = false;
+        ghostApp = null;
+        grid.setExternalDrag(false);
+        invalidate();
+    }
+
+    private boolean placeTouch(MotionEvent e) {
+        float x = e.getX(), y = e.getY();
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_MOVE:
+                ghostX = x;
+                ghostY = y;
+                invalidate();
+                return true;
+            case MotionEvent.ACTION_UP: {
+                AppRepository.AppEntry app = ghostApp;
+                placing = false;
+                ghostApp = null;
+                grid.setExternalDrag(false);
+                invalidate();
+                // On vise avec l'icône, dessinée au-dessus du doigt.
+                host.onFolderAppDrop(app, null, x - grid.getLeft(), y - 46 * dp - grid.getTop(), true);
+                return true;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                cancelPlacement();
+                return true;
+        }
+        return true;
+    }
+
     private boolean ghostTouch(MotionEvent e) {
         float x = e.getX(), y = e.getY();
         switch (e.getActionMasked()) {
@@ -345,6 +393,7 @@ final class HomeView extends FrameLayout {
     @Override
     public boolean dispatchTouchEvent(MotionEvent e) {
         int action = e.getActionMasked();
+        if (placing) return placeTouch(e);
         if (ghostApp != null) return ghostTouch(e);
         if (grid.isResizing() || resizeConsume) return resizeTouch(e);
         if (pendingItemDrag) return pendingTouch(e);

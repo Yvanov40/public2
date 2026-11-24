@@ -300,7 +300,19 @@ public final class HomeActivity extends Activity
         Toast.makeText(this, "Étire les poignées ; touche à côté pour terminer", Toast.LENGTH_SHORT).show();
     }
 
+    /** Appli maintenue dans la recherche : à poser sur l'accueil d'un toucher. */
+    void placeOnHome(AppRepository.AppEntry app) {
+        if (Store.get(this).homeLocked()) {
+            Toast.makeText(this, "Accueil verrouillé", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        home.startPlacement(app);
+        Toast.makeText(this, "Pose le doigt à l'endroit voulu, glisse si besoin, puis lâche",
+                Toast.LENGTH_LONG).show();
+    }
+
     private void closeOverlays() {
+        home.cancelPlacement();
         grid.endResize();
         Sheet.dismissAll();
         strip.close();
