@@ -226,11 +226,24 @@ final class HomeGrid extends FrameLayout {
         List<AppRepository.AppEntry> out = new java.util.ArrayList<>();
         Store.Group g = Store.find(store.groups(), name);
         if (g == null) return out;
-        Set<String> members = new HashSet<>(g.apps);
-        for (AppRepository.AppEntry e : sortedApps()) {
-            if (members.contains(Store.key(e.component))) out.add(e);
+        // L'ordre choisi par l'utilisateur (Organiser) : place dans le cercle et applis visibles.
+        Map<String, AppRepository.AppEntry> byKey = new HashMap<>();
+        for (AppRepository.AppEntry e : sortedApps()) byKey.put(Store.key(e.component), e);
+        for (String k : g.apps) {
+            AppRepository.AppEntry e = byKey.get(k);
+            if (e != null) out.add(e);
         }
         return out;
+    }
+
+    /** Nombre d'applis visibles sur l'icône du dossier (grille ou mini-icônes), 0 si aucune. */
+    int folderVisibleCount(Store.HomeItem it) {
+        for (Map.Entry<View, Store.HomeItem> e : viewItems.entrySet()) {
+            if (e.getValue() == it && e.getKey() instanceof FolderIconView) {
+                return ((FolderIconView) e.getKey()).visibleCount();
+            }
+        }
+        return 0;
     }
 
     /** Toutes les applis, dans l'ordre alphabétique. */
@@ -899,6 +912,15 @@ final class HomeGrid extends FrameLayout {
         }
 
         /** Mini-icône sous (x, y) (coordonnées de la vue) : index de l'appli, -2 pour « +n », -1 sinon. */
+        /** Applis dessinées sur l'icône : mini-icônes du panneau, ou les 4 de la grille compacte. */
+        int visibleCount() {
+            int n = 0;
+            for (float[] sp : spots) if (sp[4] >= 0) n++;
+            if (n == 0 && g.style == 0) n = Math.min(4, apps.size());
+            if (n == 0 && g.style == 1) n = Math.min(1, apps.size());
+            return n;
+        }
+
         int appIndexAt(float x, float y) {
             for (float[] sp : spots) {
                 float m = 4 * dp;

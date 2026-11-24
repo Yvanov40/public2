@@ -422,7 +422,7 @@ public final class HomeActivity extends Activity
     public void onHomeItemMenu(Store.HomeItem item) {
         if (item.folder != null) {
             Menus.folderMenu(this, item.folder, grid.sortedApps(), this::refreshAll,
-                    Store.get(this).homeLocked() ? null : () -> startResize(item));
+                    Store.get(this).homeLocked() ? null : () -> startResize(item), grid.folderVisibleCount(item));
         } else if (item.widget) {
             AppWidgetProviderInfo info = widgetManager.getAppWidgetInfo(item.widgetId);
             boolean configurable = info != null && info.configure != null;

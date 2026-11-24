@@ -458,12 +458,25 @@ final class Store {
         }
     }
 
+    /** Nouvelles applis du dossier : celles qui restent gardent leur place, les autres vont à la fin. */
     void setFolderApps(String name, List<String> apps) {
         List<Group> gs = groups();
         Group g = find(gs, name);
         if (g == null) return;
+        List<String> ordered = new ArrayList<>();
+        for (String k : g.apps) if (apps.contains(k)) ordered.add(k);
+        for (String k : apps) if (!ordered.contains(k)) ordered.add(k);
         g.apps.clear();
-        g.apps.addAll(apps);
+        g.apps.addAll(ordered);
+        setGroups(gs);
+    }
+
+    /** Déplace l'appli {@code key} à la position {@code to} dans le dossier. */
+    void moveInFolder(String name, String key, int to) {
+        List<Group> gs = groups();
+        Group g = find(gs, name);
+        if (g == null || !g.apps.remove(key)) return;
+        g.apps.add(Math.max(0, Math.min(g.apps.size(), to)), key);
         setGroups(gs);
     }
 

@@ -191,7 +191,7 @@ final class Menus {
      * supprimer. {@code resize} ouvre le choix de la taille (null : pas de tuile Taille).
      */
     static void folderMenu(Activity a, String folder, List<AppRepository.AppEntry> apps, Runnable changed,
-                           Runnable resize) {
+                           Runnable resize, int visible) {
         Store store = Store.get(a);
         Store.Group g0 = Store.find(store.groups(), folder);
         int color = g0 == null ? Store.get(a).accent() : g0.color;
@@ -204,6 +204,7 @@ final class Menus {
                 changed.run();
             });
         }});
+        acts.add(new Object[]{"⇅", "Organiser", false, (Runnable) () -> organizeFolder(a, folder, apps, visible, changed)});
         acts.add(new Object[]{"◐", "Personnaliser", false, (Runnable) () -> customizeFolder(a, folder, changed)});
         if (resize != null) acts.add(new Object[]{"⤢", "Taille", false, resize});
         acts.add(new Object[]{"✎", "Renommer", false, (Runnable) () -> askName(a, "Renommer le dossier", folder, name -> {
@@ -221,6 +222,113 @@ final class Menus {
             c.show(a, "Supprimer « " + folder + " » ? Les applis restent installées.");
         }});
         tileSheet(a, null, color, folder, n + (n > 1 ? " applis" : " appli"), acts);
+    }
+
+    /**
+     * Organiser un dossier : ses applis en grille, dans leur ordre. Toucher une appli puis la
+     * place voulue l'y déplace. Les {@code visible} premières (encadrées) se voient sur
+     * l'icône du dossier ; l'ordre est aussi celui du cercle (en haut, puis sens horaire).
+     */
+    static void organizeFolder(Activity a, String folder, List<AppRepository.AppEntry> all, int visible,
+                               Runnable changed) {
+        Store store = Store.get(a);
+        Sheet s = new Sheet(a, "Organiser « " + folder + " »");
+        android.widget.TextView hint = s.text("", 13, Sheet.MUTED);
+        hint.setPadding(s.px(22), 0, s.px(22), s.px(10));
+        s.content.addView(hint);
+        android.widget.LinearLayout gridBox = new android.widget.LinearLayout(a);
+        gridBox.setOrientation(android.widget.LinearLayout.VERTICAL);
+        s.content.addView(gridBox);
+        int[] selected = {-1};
+
+        Runnable[] render = {null};
+        render[0] = () -> {
+            gridBox.removeAllViews();
+            List<AppRepository.AppEntry> apps = orderedApps(store, folder, all);
+            hint.setText(selected[0] < 0
+                    ? "Touche une appli, puis la place où la mettre. "
+                    + (visible > 0 ? "Encadrées : les " + visible + " visibles sur l'accueil." : "")
+                    + " Ordre du cercle : en haut, puis sens horaire."
+                    : "Touche maintenant la place de « " + apps.get(selected[0]).label + " ».");
+            int cols = 4;
+            android.widget.LinearLayout row = null;
+            for (int i = 0; i < apps.size(); i++) {
+                if (i % cols == 0) {
+                    row = new android.widget.LinearLayout(a);
+                    row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+                    row.setPadding(s.px(12), 0, s.px(12), s.px(6));
+                    gridBox.addView(row);
+                }
+                AppRepository.AppEntry app = apps.get(i);
+                int index = i;
+                android.widget.LinearLayout cell = new android.widget.LinearLayout(a);
+                cell.setOrientation(android.widget.LinearLayout.VERTICAL);
+                cell.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+                cell.setPadding(s.px(2), s.px(8), s.px(2), s.px(8));
+                android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+                bg.setCornerRadius(s.px(16));
+                if (index == selected[0]) {
+                    bg.setColor((s.accent & 0x00FFFFFF) | 0x55000000);
+                } else if (index < visible) {
+                    bg.setColor((s.accent & 0x00FFFFFF) | 0x14000000);
+                    bg.setStroke(s.px(1.5f), (s.accent & 0x00FFFFFF) | 0xAA000000);
+                } else {
+                    bg.setColor(0);
+                }
+                cell.setBackground(bg);
+                android.widget.ImageView icon = new android.widget.ImageView(a);
+                icon.setImageDrawable(Sheet.copy(app.icon));
+                cell.addView(icon, new android.widget.LinearLayout.LayoutParams(s.px(40), s.px(40)));
+                android.widget.TextView name = s.text((index + 1) + ". " + app.label, 11, Sheet.TEXT);
+                name.setSingleLine(true);
+                name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                name.setGravity(android.view.Gravity.CENTER);
+                name.setPadding(0, s.px(5), 0, 0);
+                cell.addView(name, new android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT));
+                cell.setOnClickListener(v -> {
+                    if (selected[0] < 0) {
+                        selected[0] = index;                    // 1er toucher : on prend l'appli
+                    } else if (selected[0] == index) {
+                        selected[0] = -1;                       // retoucher : on la repose
+                    } else {
+                        List<AppRepository.AppEntry> cur = orderedApps(store, folder, all);
+                        store.moveInFolder(folder, Store.key(cur.get(selected[0]).component), index);
+                        selected[0] = -1;
+                        changed.run();
+                    }
+                    render[0].run();
+                });
+                android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                lp.setMargins(s.px(3), s.px(3), s.px(3), s.px(3));
+                row.addView(cell, lp);
+            }
+            if (row != null) {
+                for (int k = apps.size() % cols; k != 0 && k < cols; k++) {
+                    android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, 1, 1f);
+                    lp.setMargins(s.px(3), 0, s.px(3), 0);
+                    row.addView(new android.view.View(a), lp);
+                }
+            }
+        };
+        render[0].run();
+        s.show();
+    }
+
+    /** Les applis du dossier, dans l'ordre enregistré. */
+    private static List<AppRepository.AppEntry> orderedApps(Store store, String folder, List<AppRepository.AppEntry> all) {
+        List<AppRepository.AppEntry> out = new ArrayList<>();
+        Store.Group g = Store.find(store.groups(), folder);
+        if (g == null) return out;
+        java.util.Map<String, AppRepository.AppEntry> byKey = new java.util.HashMap<>();
+        for (AppRepository.AppEntry e : all) byKey.put(Store.key(e.component), e);
+        for (String k : g.apps) {
+            AppRepository.AppEntry e = byKey.get(k);
+            if (e != null) out.add(e);
+        }
+        return out;
     }
 
     /**
