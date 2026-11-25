@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Lecteur</string>
+    <string name="hint">Rechercher ou coller un lien YouTube</string>
+    <string name="video">Vidéo</string>
+    <string name="play_pause">Lecture / pause</string>
+    <string name="search">Rechercher</string>
+</resources>

@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.Lecteur" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorPrimary">#C62828</item>
+        <item name="colorAccent">#E53935</item>
+    </style>
+</resources>
