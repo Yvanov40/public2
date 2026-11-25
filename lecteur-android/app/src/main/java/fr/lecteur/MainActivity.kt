@@ -110,7 +110,7 @@ class MainActivity : AppCompatActivity() {
     private val adapters = Array(PAGES) { RowAdapter() }
     private val lists = arrayOfNulls<RecyclerView>(PAGES)
     private val refreshers = arrayOfNulls<SwipeRefreshLayout>(PAGES)
-    private val navIds = intArrayOf(R.id.nav_home, R.id.nav_subs, R.id.nav_offline, R.id.nav_folders, R.id.nav_settings)
+    private val navIds = intArrayOf(R.id.nav_home, R.id.nav_subs, R.id.nav_offline, R.id.nav_settings)
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var loadJob: Job? = null
@@ -220,8 +220,12 @@ class MainActivity : AppCompatActivity() {
     /** Un fichier de Music/Lecteur ou Movies/Lecteur, avec les infos YouTube si on les connaît. */
     private class OffItem(
         val uri: Uri, val title: String, val uploader: String?, val thumb: String?,
-        val video: Boolean, val path: String, val storeUri: String?
+        val video: Boolean, val path: String, val storeUri: String?,
+        val podcast: Boolean = false, val added: Long = 0
     )
+
+    /** Filtre de la Bibliothèque : all, video, audio, podcast, folders */
+    private var libFilter = "all"
 
     private val mediaPerm = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         rescanLocal()
@@ -249,7 +253,7 @@ class MainActivity : AppCompatActivity() {
             } catch (_: SecurityException) {
             }
             Store.addFolder(uri.toString())
-            render(FOLDERS)
+            render(OFFLINE)
         }
     }
     private val notifPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -372,7 +376,11 @@ class MainActivity : AppCompatActivity() {
                     podPage?.page == page -> closePodcast()
                     channelPage?.page == page -> closeChannel()
                     page == SUBS && podQuery != null -> clearPodSearch()
-                    page == FOLDERS && folderStack.isNotEmpty() -> leaveFolder()
+                    page == OFFLINE && folderStack.isNotEmpty() -> leaveFolder()
+                    page == OFFLINE && libFilter != "all" -> {
+                        libFilter = "all"
+                        render(OFFLINE)
+                    }
                     page == HOME && searchQuery != null -> clearSearch()
                     page != HOME -> pager.setCurrentItem(HOME, true)
                     else -> moveTaskToBack(true) // l'audio continue
@@ -518,10 +526,11 @@ class MainActivity : AppCompatActivity() {
             podPage?.page == page -> closePodcast()
             channelPage?.page == page -> closeChannel()
             page == HOME && searchQuery != null -> clearSearch()
-            page == FOLDERS && folderStack.isNotEmpty() -> {
+            page == OFFLINE && (folderStack.isNotEmpty() || libFilter != "all") -> {
+                libFilter = "all"
                 folderStack.clear()
                 folderFiles = null
-                render(FOLDERS)
+                render(OFFLINE)
             }
             else -> lists[page]?.smoothScrollToPosition(0)
         }
@@ -545,7 +554,6 @@ class MainActivity : AppCompatActivity() {
             HOME -> homeRows(rows)
             SUBS -> subsRows(rows)
             OFFLINE -> offlineRows(rows)
-            FOLDERS -> folderRows(rows)
             SETTINGS -> settingsRows(rows)
         }
         adapters[page].submit(rows)
@@ -1342,6 +1350,7 @@ class MainActivity : AppCompatActivity() {
         isAudio(type, name) || type?.startsWith("video/") == true || ext(name) in VIDEO_EXT
 
     private fun enterFolder(doc: DocumentFile, name: String) {
+        libFilter = "folders"
         folderStack += doc to name
         loadFolder()
     }
@@ -1350,14 +1359,14 @@ class MainActivity : AppCompatActivity() {
         if (folderStack.isNotEmpty()) folderStack.removeAt(folderStack.size - 1)
         if (folderStack.isEmpty()) {
             folderFiles = null
-            render(FOLDERS)
+            render(OFFLINE)
         } else loadFolder()
     }
 
     private fun loadFolder() {
         val doc = folderStack.lastOrNull()?.first ?: return
         folderFiles = null
-        render(FOLDERS)
+        render(OFFLINE)
         folderJob?.cancel()
         folderJob = lifecycleScope.launch {
             val list = withContext(Dispatchers.IO) {
@@ -1369,7 +1378,7 @@ class MainActivity : AppCompatActivity() {
                 }.sortedWith(compareBy<FileEntry>({ !it.dir }, { it.name.lowercase() }))
             }
             folderFiles = list
-            render(FOLDERS)
+            render(OFFLINE)
         }
     }
 
@@ -1432,7 +1441,7 @@ class MainActivity : AppCompatActivity() {
                 } catch (_: Exception) {
                 }
                 Store.removeFolder(uri)
-                render(FOLDERS)
+                render(OFFLINE)
             }
             .setNegativeButton("Annuler", null)
             .show()
@@ -1500,7 +1509,9 @@ class MainActivity : AppCompatActivity() {
             OffItem(
                 f.uri, d?.title ?: f.name.substringBeforeLast('.'), d?.uploader,
                 if (f.video) f.uri.toString() else (d?.thumb ?: f.uri.toString()),
-                f.video, f.path, d?.uri
+                f.video, f.path, d?.uri,
+                podcast = d != null && !d.video && !d.source.contains("youtu"),
+                added = f.added * 1000
             )
         }.toMutableList()
         // Anciennes versions d'Android : fichiers enregistrés directement (file://)
@@ -1509,7 +1520,8 @@ class MainActivity : AppCompatActivity() {
             if (path != null && java.io.File(path).exists() && out.none { it.path == d.path }) {
                 out += OffItem(
                     Uri.parse(d.uri), d.title, d.uploader, d.thumb, d.video,
-                    d.path ?: if (d.video) "Movies/Lecteur" else "Music/Lecteur", d.uri
+                    d.path ?: if (d.video) "Movies/Lecteur" else "Music/Lecteur", d.uri,
+                    podcast = !d.video && !d.source.contains("youtu")
                 )
             }
         }
@@ -1517,6 +1529,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun offlineRows(rows: MutableList<Row>) {
+        val filters = listOf("all", "video", "audio", "podcast", "folders")
+        rows += Row.Choice(
+            "", null, listOf("Tout", "Vidéos", "Audio", "Podcasts", "Dossiers"),
+            filters.indexOf(libFilter).coerceAtLeast(0)
+        ) { i ->
+            libFilter = filters[i]
+            if (libFilter != "folders") {
+                folderStack.clear()
+                folderFiles = null
+            }
+            render(OFFLINE)
+            lists[OFFLINE]?.scrollToPosition(0)
+        }
         val queue = Downloads.all()
         if (queue.isNotEmpty()) {
             rows += Row.Header("En cours")
@@ -1553,33 +1578,118 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val list = offlineItems()
-        if (hasMediaPerm()) rows += Row.Header("Téléchargés")
-        else {
-            rows += Row.Header("Téléchargés", "Tout retrouver") { askMediaPerm() }
-            rows += Row.Note(
-                "Pour afficher aussi les fichiers déjà présents dans Music/Lecteur et Movies/Lecteur " +
-                    "(par exemple ceux d'avant une réinstallation), touche « Tout retrouver » et autorise l'accès."
-            )
+        if (libFilter == "folders") {
+            folderRows(rows)
+            return
         }
-        if (list.isEmpty()) {
-            rows += Row.Note(
-                "Rien pour l'instant.\nFais un appui long sur une vidéo, ou touche « Télécharger » " +
-                    "sous la vidéo en cours.",
-                R.drawable.ic_download
-            )
-        }
-        list.forEachIndexed { i, d ->
+
+        val all = offlineItems()
+        val videos = all.filter { it.video }
+        val audios = all.filter { !it.video && !it.podcast }
+        val pods = all.filter { it.podcast }
+
+        if (!hasMediaPerm()) {
             rows += Row.Entry(
-                d.title,
-                (if (d.video) "Vidéo" else "Audio") + " · " + (d.uploader?.let { "$it · " } ?: "") + d.path,
-                d.thumb,
-                if (d.video) R.drawable.ic_video else R.drawable.ic_audio,
-                onClick = { playDownloads(list, i) },
-                onLong = { downloadMenu(list, i) }
+                "Retrouver tous les fichiers",
+                "Autorise l'accès pour afficher aussi ceux d'avant une réinstallation",
+                null, R.drawable.ic_download, onClick = { askMediaPerm() }
             )
         }
-        rows += Row.Note("Emplacement : mémoire interne › Music/Lecteur (audio) et Movies/Lecteur (vidéo)")
+
+        fun entries(list: List<OffItem>, max: Int = Int.MAX_VALUE, showKind: Boolean = false) {
+            list.take(max).forEachIndexed { i, d ->
+                val kind = when { d.video -> "Vidéo"; d.podcast -> "Podcast"; else -> "Audio" }
+                rows += Row.Entry(
+                    d.title,
+                    listOfNotNull(if (showKind) kind else null, d.uploader, resumeText(d.uri.toString()))
+                        .joinToString(" · ").ifEmpty { d.path },
+                    d.thumb,
+                    if (d.video) R.drawable.ic_video else R.drawable.ic_audio,
+                    onClick = { playDownloads(list, i) },
+                    onLong = { downloadMenu(list, i) }
+                )
+            }
+        }
+
+        fun section(title: String, list: List<OffItem>, key: String) {
+            if (list.isEmpty()) return
+            rows += Row.Header("$title · ${list.size}", if (list.size > 4) "Tout voir" else null) {
+                libFilter = key
+                render(OFFLINE)
+                lists[OFFLINE]?.scrollToPosition(0)
+            }
+            entries(list, 4)
+        }
+
+        when (libFilter) {
+            "video" -> {
+                rows += Row.Header("Vidéos · ${videos.size}")
+                if (videos.isEmpty()) rows += Row.Note("Aucune vidéo téléchargée.", R.drawable.ic_video)
+                entries(videos)
+            }
+            "audio" -> {
+                rows += Row.Header("Audio · ${audios.size}")
+                if (audios.isEmpty()) rows += Row.Note("Aucun audio téléchargé.", R.drawable.ic_audio)
+                entries(audios)
+            }
+            "podcast" -> {
+                if (pods.isEmpty()) rows += Row.Note("Aucun épisode téléchargé.", R.drawable.ic_headphones)
+                // Regroupés par émission
+                pods.groupBy { it.uploader ?: "Podcast" }.forEach { (show, eps) ->
+                    rows += Row.Header("$show · ${eps.size}")
+                    entries(eps)
+                }
+            }
+            else -> {
+                if (all.isEmpty()) {
+                    rows += Row.Note(
+                        "Rien de téléchargé pour l'instant.\nFais un appui long sur une vidéo ou un épisode, " +
+                            "ou touche « Télécharger » sous la vidéo en cours.",
+                        R.drawable.ic_download
+                    )
+                }
+                val resume = all.filter { Store.position(it.uri.toString()) > 0 }
+                if (resume.isNotEmpty()) {
+                    rows += Row.Header("À reprendre")
+                    entries(resume, 5, showKind = true)
+                }
+                val weekAgo = System.currentTimeMillis() - 7 * 86_400_000L
+                val recent = all.filter { it.added > weekAgo }
+                if (recent.isNotEmpty() && recent.size < all.size) {
+                    rows += Row.Header("Ajoutés récemment")
+                    entries(recent, 5, showKind = true)
+                }
+                section("Vidéos", videos, "video")
+                section("Audio", audios, "audio")
+                section("Podcasts", pods, "podcast")
+
+                // Fichiers et dossiers du téléphone
+                val folders = Store.folders()
+                rows += Row.Header("Dossiers du téléphone", if (folders.isNotEmpty()) "Tout voir" else null) {
+                    libFilter = "folders"
+                    render(OFFLINE)
+                }
+                folders.take(4).forEach { f ->
+                    val uri = Uri.parse(f)
+                    val doc = DocumentFile.fromTreeUri(this, uri)
+                    val name = doc?.name ?: uri.lastPathSegment ?: f
+                    rows += Row.Entry(
+                        name, "Dossier", null, R.drawable.ic_folder,
+                        onClick = { if (doc != null) enterFolder(doc, name) },
+                        onLong = { confirmRemoveFolder(f) }
+                    )
+                }
+                rows += Row.Entry(
+                    "Ajouter un dossier…", "Musique, vidéos ou podcasts déjà sur le téléphone", null, R.drawable.ic_add,
+                    onClick = { openTree.launch(null) }
+                )
+                rows += Row.Entry(
+                    "Ouvrir un fichier…", "Audio ou vidéo", null, R.drawable.ic_file,
+                    onClick = { openFile.launch(arrayOf("audio/*", "video/*")) }
+                )
+                rows += Row.Note("Téléchargements : mémoire interne › Music/Lecteur (audio) et Movies/Lecteur (vidéo)")
+            }
+        }
     }
 
     private fun downloadMenu(list: List<OffItem>, i: Int) {
@@ -2013,12 +2123,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val PAGES = 5
+        private const val PAGES = 4
         private const val HOME = 0
         private const val SUBS = 1
         private const val OFFLINE = 2
-        private const val FOLDERS = 3
-        private const val SETTINGS = 4
+        private const val SETTINGS = 3
         private val AUDIO_EXT = setOf("mp3", "m4a", "aac", "ogg", "oga", "opus", "flac", "wav", "wma", "amr")
         private val VIDEO_EXT = setOf("mp4", "mkv", "webm", "mov", "3gp", "avi", "m4v", "ts")
     }
