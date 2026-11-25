@@ -1,0 +1,21 @@
+name: Lecteur — recompilation hebdomadaire
+
+# Chaque lundi, relance la compilation de l'appli Lecteur (branche de développement) :
+# dernière version de NewPipeExtractor contre les blocages de YouTube,
+# et clé de signature gardée en vie dans le cache.
+on:
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  relancer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Relancer « APK Lecteur »
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run lecteur-apk.yml --ref ccr-fc039c6a-jtd25n -R "${{ github.repository }}"
