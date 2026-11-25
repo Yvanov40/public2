@@ -284,7 +284,7 @@ object Music {
         Playback.notifyChanged()
     }
 
-    private suspend fun source(t: Track): MediaSource {
+    private suspend fun source(t: Track, viaFallback: Boolean = false): MediaSource {
         if (t.local) {
             val item = MediaItem.Builder()
                 .setUri(t.url)
@@ -296,27 +296,47 @@ object Music {
                 .build()
             return DefaultMediaSourceFactory(app).createMediaSource(item)
         }
-        val info = withContext(Dispatchers.IO) { StreamInfo.getInfo(t.url) }
+        if (!viaFallback) {
+            try {
+                val info = withContext(Dispatchers.IO) { StreamInfo.getInfo(t.url) }
+                return withContext(Dispatchers.IO) {
+                    Sources.build(info, t.mediaId, audioOnly = true, title = t.title, artist = t.artist, artwork = t.thumb)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!Settings.fallback) throw e
+            }
+        }
+        // YouTube refuse : serveur relais
+        val id = Fallback.videoId(t.url) ?: throw java.io.IOException("lien non reconnu")
         return withContext(Dispatchers.IO) {
-            Sources.build(info, t.mediaId, audioOnly = true, title = t.title, artist = t.artist, artwork = t.thumb)
+            Fallback.build(id, t.mediaId, audioOnly = true, title = t.title, artist = t.artist, artwork = t.thumb).source
         }
     }
 
+    /** Erreur pendant la lecture du titre en cours : on le relance via le relais. */
+    fun retryWithFallback() {
+        if (!active) return
+        val pos = player.currentPosition
+        load(index, now = true, viaFallback = true, startAt = pos)
+    }
+
     /** Prépare le titre [i] : tout de suite (now) ou à la suite de la liste du lecteur. */
-    private fun load(i: Int, now: Boolean) {
+    private fun load(i: Int, now: Boolean, viaFallback: Boolean = false, startAt: Long = 0) {
         if (i !in tracks.indices || i in resolving) return
         resolving += i
         val gen = generation
         val t = tracks[i]
         Playback.scope.launch {
             try {
-                val src = source(t)
+                val src = source(t, viaFallback)
                 if (gen != generation) return@launch
                 if (now) {
                     inPlayer.clear()
                     inPlayer += i
                     index = i
-                    player.setMediaSource(src)
+                    player.setMediaSource(src, startAt)
                     player.prepare()
                     player.play()
                 } else {

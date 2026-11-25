@@ -28,6 +28,12 @@ Lecteur audio/vidéo YouTube léger pour Android (usage personnel).
 - Hors ligne : téléchargement audio (m4a) ou vidéo (mp4 720p max) dans Music/Lecteur et Movies/Lecteur (mémoire interne) ; suivi en direct, annulation, relance des échecs ; la liste reprend tout le contenu de ces dossiers
 - Dossiers : ouvrir un fichier ou ajouter des dossiers du téléphone ; lecture enchaînée du dossier
 
+## Protection contre les blocages de YouTube
+
+- Jeton anti-robot (« PO Token ») généré comme NewPipe, dans un navigateur caché
+- Serveurs relais Piped en secours si YouTube refuse une vidéo, une musique ou une recherche
+- Recompilation automatique chaque semaine (dernière version de NewPipeExtractor)
+
 ## Installer
 
 L'APK est compilé par GitHub Actions (workflow « APK Lecteur ») et publié dans la

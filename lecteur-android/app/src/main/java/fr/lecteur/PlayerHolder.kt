@@ -48,6 +48,10 @@ object PlayerHolder {
         p.playbackParameters = PlaybackParameters(prefs.getFloat("speed", 1f))
         p.skipSilenceEnabled = Settings.skipSilence
         p.addListener(object : Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                Playback.onPlayerError(error)
+            }
+
             override fun onPlaybackParametersChanged(pp: PlaybackParameters) {
                 prefs.edit().putFloat("speed", pp.speed).apply()
             }

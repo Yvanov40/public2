@@ -108,6 +108,14 @@ object Settings {
     fun sbEnabled(cat: String) = bool("sb_$cat", cat in setOf("sponsor", "selfpromo", "interaction"))
     fun setSb(cat: String, v: Boolean) = setBool("sb_$cat", v)
 
+    var poToken: Boolean
+        get() = bool("poToken", true)
+        set(v) = setBool("poToken", v)
+
+    var fallback: Boolean
+        get() = bool("fallback", true)
+        set(v) = setBool("fallback", v)
+
     var checkNew: Boolean
         get() = bool("checkNew", true)
         set(v) = setBool("checkNew", v)

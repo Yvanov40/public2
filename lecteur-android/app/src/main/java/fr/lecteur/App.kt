@@ -19,6 +19,7 @@ class App : Application() {
         }
         Playback.init(this)
         Music.init(this)
+        PoToken.init(this)
         NewContentWorker.schedule(this)
         NewPipe.init(DownloaderImpl.instance, Localization("fr", "FR"), ContentCountry("FR"))
     }

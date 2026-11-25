@@ -51,9 +51,17 @@ object Playback {
     /** Charge et lance une vidéo YouTube (reprise à la dernière position). */
     suspend fun playYoutube(url: String, audioOnly: Boolean): Vid {
         Music.stop()
-        val (info, source) = withContext(Dispatchers.IO) {
-            val i = Yt.info(url)
-            i to Sources.build(i)
+        val (info, source) = try {
+            withContext(Dispatchers.IO) {
+                val i = Yt.info(url)
+                i to Sources.build(i)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // YouTube refuse : on passe par un serveur relais
+            if (!Settings.fallback) throw e
+            return playViaFallback(url, audioOnly, e)
         }
         val p = PlayerHolder.get(app)
         // En arrière-plan direct : la piste vidéo n'est jamais chargée
@@ -77,6 +85,59 @@ object Playback {
         SponsorBlock.load(scope, info.url)
         changed()
         return v
+    }
+
+    /** Mêmes étapes que [playYoutube], mais via un serveur relais (Piped). */
+    private suspend fun playViaFallback(url: String, audioOnly: Boolean, cause: Exception?): Vid {
+        val id = Fallback.videoId(url) ?: throw (cause ?: java.io.IOException("lien non reconnu"))
+        val mediaId = "https://www.youtube.com/watch?v=$id"
+        val r = try {
+            withContext(Dispatchers.IO) { Fallback.build(id, mediaId, audioOnly) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw java.io.IOException((cause?.message?.let { "$it — " } ?: "") + "relais : ${e.message}")
+        }
+        val p = PlayerHolder.get(app)
+        PlayerHolder.videoMode = !audioOnly
+        PlayerHolder.setVideoEnabled(p, !audioOnly)
+        p.setMediaSource(r.source, Store.position(mediaId).coerceAtLeast(0))
+        p.prepare()
+        p.play()
+        PlayerHolder.current = r.vid
+        Store.addWatched(r.vid)
+        infos[mediaId] = r.info
+        related = r.related
+        SponsorBlock.load(scope, mediaId)
+        Toast.makeText(app, "Lecture via un serveur relais", Toast.LENGTH_SHORT).show()
+        changed()
+        return r.vid
+    }
+
+    private val retried = HashSet<String>()
+
+    /** Erreur pendant la lecture (souvent un refus de YouTube) : nouvel essai via le relais. */
+    fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+        if (!Settings.fallback) return
+        val p = PlayerHolder.peek() ?: return
+        val id = p.currentMediaItem?.mediaId ?: return
+        val io = error.errorCode in 2000..2999
+        if (!io || !retried.add(id)) return
+        when {
+            id.startsWith("music:") -> Music.retryWithFallback()
+            id.contains("youtube.com/watch") || id.contains("youtu.be") -> {
+                val pos = p.currentPosition
+                val audioOnly = !PlayerHolder.videoMode
+                scope.launch {
+                    try {
+                        playViaFallback(id, audioOnly, null)
+                        if (pos > 0) PlayerHolder.peek()?.seekTo(pos)
+                    } catch (e: Exception) {
+                        Toast.makeText(app, "Lecture impossible : ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
     }
 
     /** Lecture de fichiers ou d'épisodes (adresses directes). */

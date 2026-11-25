@@ -18,9 +18,19 @@ object Yt {
 
     /** filter : "all" (vidéos + chaînes) ou "videos". */
     suspend fun search(query: String, filter: String = "all"): List<InfoItem> = withContext(Dispatchers.IO) {
-        val ex = ServiceList.YouTube.getSearchExtractor(query, listOf(filter), "")
-        ex.fetchPage()
-        ex.initialPage.items
+        try {
+            val ex = ServiceList.YouTube.getSearchExtractor(query, listOf(filter), "")
+            ex.fetchPage()
+            ex.initialPage.items
+        } catch (e: Exception) {
+            // YouTube refuse : recherche via un serveur relais
+            if (!Settings.fallback) throw e
+            try {
+                Fallback.search(query)
+            } catch (_: Exception) {
+                throw e
+            }
+        }
     }
 
     suspend fun info(url: String): StreamInfo = withContext(Dispatchers.IO) { StreamInfo.getInfo(url) }
