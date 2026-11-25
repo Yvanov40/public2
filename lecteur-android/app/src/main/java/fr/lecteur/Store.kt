@@ -23,7 +23,7 @@ object Store {
 
     class Download(
         val uri: String, val title: String, val uploader: String?,
-        val thumb: String?, val video: Boolean, val source: String
+        val thumb: String?, val video: Boolean, val source: String, val path: String? = null
     )
 
     private fun arr(key: String) = try {
@@ -67,7 +67,7 @@ object Store {
     @Synchronized fun downloads(): List<Download> = objects("downloads").map {
         Download(
             it.optString("uri"), it.optString("title"), it.str("uploader"),
-            it.str("thumb"), it.optBoolean("video"), it.optString("source")
+            it.str("thumb"), it.optBoolean("video"), it.optString("source"), it.str("path")
         )
     }
 
@@ -75,6 +75,7 @@ object Store {
         put("downloads", JSONArray(list.map {
             JSONObject().put("uri", it.uri).put("title", it.title).put("uploader", it.uploader)
                 .put("thumb", it.thumb).put("video", it.video).put("source", it.source)
+                .put("path", it.path)
         }))
         main.post { onChange?.invoke() }
     }

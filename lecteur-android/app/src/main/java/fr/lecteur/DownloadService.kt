@@ -33,10 +33,10 @@ import java.util.concurrent.atomic.AtomicInteger
 /** Téléchargements l'un après l'autre, avec progression dans une notification. */
 class DownloadService : Service() {
 
-    private class Task(val url: String, val video: Boolean)
+    private class Cancelled : Exception()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val queue = Channel<Task>(Channel.UNLIMITED)
+    private val queue = Channel<Downloads.Item>(Channel.UNLIMITED)
     private val pending = AtomicInteger(0)
     @Volatile private var lastStartId = 0
     private lateinit var nm: NotificationManager
@@ -73,10 +73,10 @@ class DownloadService : Service() {
             if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
         )
         lastStartId = startId
-        val url = intent?.getStringExtra(EXTRA_URL)
-        if (url != null) {
+        val item = intent?.getIntExtra(EXTRA_ID, -1)?.let { Downloads.get(it) }
+        if (item != null) {
             pending.incrementAndGet()
-            queue.trySend(Task(url, intent.getBooleanExtra(EXTRA_VIDEO, false)))
+            queue.trySend(item)
         } else if (pending.get() == 0) {
             stopSelfResult(startId)
         }
@@ -88,23 +88,29 @@ class DownloadService : Service() {
         super.onDestroy()
     }
 
-    private fun process(t: Task) {
-        var title = "Vidéo"
+    private fun process(t: Downloads.Item) {
+        if (t.cancel) return
+        t.state = Downloads.State.RUNNING
+        var title = t.title
         val work = File(cacheDir, "telechargement").apply { deleteRecursively(); mkdirs() }
         try {
-            update(title, "Analyse…", -1)
+            update(t, "Analyse…", -1)
             val info = StreamInfo.getInfo(t.url)
             title = info.name
+            t.title = info.name
             val base = safeName(info.name)
             val uri: Uri
+            val path: String
             if (!t.video) {
                 val a = Sources.pickAudio(info.audioStreams) ?: error("aucun flux audio")
                 val m4a = a.format == MediaFormat.M4A
                 val f = File(work, "audio")
-                fetch(a, f) { p -> update(title, "Audio", (p * 100).toInt()) }
+                fetch(t, a, f) { p -> update(t, "Audio", (p * 100).toInt()) }
                 val ext = if (m4a) "m4a" else (a.format?.suffix ?: "webm")
                 val mime = if (m4a) "audio/mp4" else (a.format?.mimeType ?: "audio/webm")
+                if (t.cancel) throw Cancelled()
                 uri = Saver.save(this, f, "$base.$ext", mime, false, info.name)
+                path = "Music/Lecteur/$base.$ext"
             } else {
                 val v = Sources.pickVideoForDownload(info.videoOnlyStreams)
                 val a = Sources.pickAudio(info.audioStreams)?.takeIf { it.format == MediaFormat.M4A }
@@ -112,27 +118,37 @@ class DownloadService : Service() {
                 if (v != null && a != null) {
                     val vf = File(work, "video")
                     val af = File(work, "audio")
-                    fetch(v, vf) { p -> update(title, "Vidéo", (p * 85).toInt()) }
-                    fetch(a, af) { p -> update(title, "Audio", 85 + (p * 12).toInt()) }
-                    update(title, "Assemblage…", 98)
+                    fetch(t, v, vf) { p -> update(t, "Vidéo", (p * 85).toInt()) }
+                    fetch(t, a, af) { p -> update(t, "Audio", 85 + (p * 12).toInt()) }
+                    update(t, "Assemblage…", 98)
                     Muxer.mux(vf, af, out)
                 } else {
                     val m = info.videoStreams
                         .filter { it.isUrl && it.format == MediaFormat.MPEG_4 }
                         .maxByOrNull { it.height } ?: error("aucun flux vidéo téléchargeable")
-                    fetch(m, out) { p -> update(title, "Vidéo", (p * 100).toInt()) }
+                    fetch(t, m, out) { p -> update(t, "Vidéo", (p * 100).toInt()) }
                 }
+                if (t.cancel) throw Cancelled()
                 uri = Saver.save(this, out, "$base.mp4", "video/mp4", true, info.name)
+                path = "Movies/Lecteur/$base.mp4"
             }
             Store.addDownload(
                 Store.Download(
                     uri.toString(), info.name, info.uploaderName,
-                    Sources.bestThumb(info.thumbnails), t.video, info.url
+                    Sources.bestThumb(info.thumbnails), t.video, info.url, path
                 )
             )
+            Downloads.remove(t)
             notifyEnd("Téléchargé", title)
+        } catch (e: Cancelled) {
+            t.state = Downloads.State.CANCELLED
+            t.stage = "Annulé"
+            Downloads.changed()
         } catch (e: Exception) {
             Log.e(TAG, "Téléchargement", e)
+            t.state = Downloads.State.FAILED
+            t.stage = "Échec : ${e.message ?: e.javaClass.simpleName}"
+            Downloads.changed()
             notifyEnd("Échec du téléchargement", "$title : ${e.message}")
         } finally {
             work.deleteRecursively()
@@ -140,7 +156,7 @@ class DownloadService : Service() {
     }
 
     /** Téléchargement par morceaux (YouTube bride les gros téléchargements d'un seul tenant). */
-    private fun fetch(s: Stream, dest: File, progress: (Float) -> Unit) {
+    private fun fetch(t: Downloads.Item, s: Stream, dest: File, progress: (Float) -> Unit) {
         val url = s.content
         val total = s.itagItem?.contentLength?.takeIf { it > 0 }
             ?: Uri.parse(url).getQueryParameter("clen")?.toLongOrNull() ?: -1L
@@ -153,6 +169,7 @@ class DownloadService : Service() {
             var pos = 0L
             var rn = 0
             while (pos < total) {
+                if (t.cancel) throw Cancelled()
                 val end = minOf(pos + CHUNK, total) - 1
                 val bytes = retry { call(url, pos to end, ++rn).use { r -> r.body?.bytes() ?: ByteArray(0) } }
                 if (bytes.isEmpty()) throw IOException("réponse vide")
@@ -212,10 +229,17 @@ class DownloadService : Service() {
             .setContentIntent(openApp())
             .build()
 
-    private fun update(title: String, text: String, pct: Int) {
+    private fun update(t: Downloads.Item, text: String, pct: Int) {
         if (pct == lastPct && pct >= 0) return
         lastPct = pct
-        val n = build(title, text, pct)
+        t.stage = text
+        t.pct = pct
+        Downloads.changed()
+        val waiting = Downloads.active() - 1
+        val n = build(
+            t.title + if (waiting > 0) " (+$waiting en attente)" else "",
+            text, pct
+        )
         current = n
         try { nm.notify(NOTIF_ID, n) } catch (_: Exception) {}
     }
@@ -240,13 +264,12 @@ class DownloadService : Service() {
         private const val CHANNEL = "downloads"
         private const val NOTIF_ID = 42
         private const val CHUNK = 5L * 1024 * 1024
-        private const val EXTRA_URL = "url"
-        private const val EXTRA_VIDEO = "video"
+        private const val EXTRA_ID = "id"
 
-        fun start(ctx: Context, url: String, video: Boolean) {
+        fun start(ctx: Context, url: String, video: Boolean, title: String?) {
+            val item = Downloads.add(url, video, title)
             ContextCompat.startForegroundService(
-                ctx,
-                Intent(ctx, DownloadService::class.java).putExtra(EXTRA_URL, url).putExtra(EXTRA_VIDEO, video)
+                ctx, Intent(ctx, DownloadService::class.java).putExtra(EXTRA_ID, item.id)
             )
         }
     }

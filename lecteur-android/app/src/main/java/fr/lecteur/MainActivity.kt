@@ -90,7 +90,7 @@ class MainActivity : AppCompatActivity() {
     private val folderStack = ArrayList<Pair<DocumentFile, String>>()
     private var folderFiles: List<FileEntry>? = null
     private var folderJob: Job? = null
-    private var pendingDownload: Pair<String, Boolean>? = null
+    private var pendingDownload: Triple<String, Boolean, String?>? = null
 
     private val openFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) playSingleLocal(uri)
@@ -109,7 +109,7 @@ class MainActivity : AppCompatActivity() {
     private val storagePerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val p = pendingDownload
         pendingDownload = null
-        if (granted && p != null) startDownload(p.first, p.second)
+        if (granted && p != null) startDownload(p.first, p.second, p.third)
         else if (!granted) toast("Permission refusée : impossible d'enregistrer le fichier")
     }
 
@@ -169,7 +169,9 @@ class MainActivity : AppCompatActivity() {
         }
         miniVideo.setOnClickListener { setVideoMode(true) }
         miniBar.setOnClickListener { if (!PlayerHolder.videoMode) setVideoMode(true) }
-        miniDownload.setOnClickListener { currentYoutubeUrl()?.let { askDownload(it) } }
+        miniDownload.setOnClickListener {
+            currentYoutubeUrl()?.let { askDownload(it, player.mediaMetadata.title?.toString()) }
+        }
 
         setupSwipeDown()
         playerView.setFullscreenButtonClickListener { full ->
@@ -194,7 +196,8 @@ class MainActivity : AppCompatActivity() {
             this, SessionToken(this, ComponentName(this, PlaybackService::class.java))
         ).buildAsync()
 
-        Store.onChange = { if (tab == Tab.OFFLINE) render() }
+        Store.onChange = { if (tab == Tab.OFFLINE) render() else updateTabs() }
+        Downloads.onChange = { if (tab == Tab.OFFLINE) render() else updateTabs() }
         refreshUi()
         render()
         handleIntent(intent)
@@ -221,6 +224,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         Store.onChange = null
+        Downloads.onChange = null
         player.removeListener(listener)
         playerView.player = null
         controllerFuture?.let { MediaController.releaseFuture(it) }
@@ -399,33 +403,34 @@ class MainActivity : AppCompatActivity() {
     private fun currentYoutubeUrl(): String? =
         player.currentMediaItem?.mediaId?.takeIf { it.startsWith("http") }
 
-    private fun askDownload(url: String) {
+    private fun askDownload(url: String, title: String?) {
         AlertDialog.Builder(this)
             .setTitle("Télécharger")
             .setItems(arrayOf("Audio seul (écoute hors ligne)", "Vidéo (720p max)")) { _, w ->
-                startDownload(url, w == 1)
+                startDownload(url, w == 1, title)
             }
             .show()
     }
 
-    private fun ytMenu(url: String) {
+    private fun ytMenu(url: String, title: String?) {
         AlertDialog.Builder(this)
+            .setTitle(title)
             .setItems(arrayOf("Lire", "Télécharger l'audio", "Télécharger la vidéo")) { _, w ->
                 when (w) {
                     0 -> play(url)
-                    1 -> startDownload(url, false)
-                    else -> startDownload(url, true)
+                    1 -> startDownload(url, false, title)
+                    else -> startDownload(url, true, title)
                 }
             }
             .show()
     }
 
-    private fun startDownload(url: String, video: Boolean) {
+    private fun startDownload(url: String, video: Boolean, title: String?) {
         if (Build.VERSION.SDK_INT < 29 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
             PackageManager.PERMISSION_GRANTED
         ) {
-            pendingDownload = url to video
+            pendingDownload = Triple(url, video, title)
             storagePerm.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             return
         }
@@ -433,8 +438,8 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
-        DownloadService.start(this, url, video)
-        toast(if (video) "Téléchargement de la vidéo lancé" else "Téléchargement de l'audio lancé")
+        DownloadService.start(this, url, video, title)
+        toast("Téléchargement ajouté : voir l'onglet Hors ligne")
     }
 
     private fun confirmDelete(d: Store.Download) {
@@ -476,8 +481,14 @@ class MainActivity : AppCompatActivity() {
         results.scrollToPosition(0)
     }
 
-    private fun render() {
+    private fun updateTabs() {
         tabButtons.forEach { (t, b) -> b.alpha = if (t == tab) 1f else 0.5f }
+        val n = Downloads.active()
+        tabButtons[Tab.OFFLINE]?.text = if (n > 0) "Hors ligne ($n)" else getString(R.string.tab_offline)
+    }
+
+    private fun render() {
+        updateTabs()
         val rows = mutableListOf<Row>()
         when (tab) {
             Tab.HOME -> homeRows(rows)
@@ -494,7 +505,7 @@ class MainActivity : AppCompatActivity() {
                 .joinToString(" · "),
             thumb, R.drawable.ic_video,
             onClick = { play(url) },
-            onLong = { ytMenu(url) }
+            onLong = { ytMenu(url, title) }
         )
 
     private fun itemRow(it: StreamInfoItem) =
@@ -556,27 +567,96 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun offlineRows(rows: MutableList<Row>) {
+        rows += Row.Header(
+            "Emplacement : mémoire interne du téléphone, dossier Music/Lecteur pour l'audio " +
+                "et Movies/Lecteur pour la vidéo (visibles dans l'appli Fichiers, la galerie " +
+                "et les lecteurs de musique).",
+            small = true
+        )
+
+        val queue = Downloads.all()
+        if (queue.isNotEmpty()) {
+            rows += Row.Header("En cours")
+            queue.forEach { d ->
+                val kind = if (d.video) "Vidéo" else "Audio"
+                rows += when (d.state) {
+                    Downloads.State.WAITING, Downloads.State.RUNNING -> Row.Progress(
+                        d.title,
+                        "$kind · " + d.stage + if (d.pct >= 0) " · ${d.pct} %" else "",
+                        if (d.state == Downloads.State.WAITING) 0 else d.pct,
+                        if (d.video) R.drawable.ic_video else R.drawable.ic_audio,
+                        R.drawable.ic_close,
+                        onAction = { Downloads.cancel(d) }
+                    )
+                    else -> Row.Progress(
+                        d.title, "$kind · ${d.stage}", null,
+                        if (d.video) R.drawable.ic_video else R.drawable.ic_audio,
+                        R.drawable.ic_retry,
+                        onAction = {
+                            Downloads.remove(d)
+                            startDownload(d.url, d.video, d.title)
+                        },
+                        onClick = {
+                            AlertDialog.Builder(this)
+                                .setTitle(d.title)
+                                .setMessage(d.stage)
+                                .setPositiveButton("Relancer") { _, _ ->
+                                    Downloads.remove(d)
+                                    startDownload(d.url, d.video, d.title)
+                                }
+                                .setNegativeButton("Retirer") { _, _ -> Downloads.remove(d) }
+                                .show()
+                        }
+                    )
+                }
+            }
+        }
+
         val list = Store.downloads()
+        rows += Row.Header("Téléchargés")
         if (list.isEmpty()) {
-            rows += Row.Header("Aucun téléchargement")
             rows += Row.Header(
-                "Pendant une lecture YouTube, touche ⬇, ou fais un appui long sur une vidéo. " +
-                    "Les fichiers vont dans Musique/Lecteur et Films/Lecteur.",
+                "Rien pour l'instant. Pendant une lecture YouTube, touche ⬇, " +
+                    "ou fais un appui long sur une vidéo.",
                 small = true
             )
             return
         }
-        rows += Row.Header("Téléchargements")
         list.forEachIndexed { i, d ->
+            val where = d.path ?: if (d.video) "Movies/Lecteur" else "Music/Lecteur"
             rows += Row.Entry(
                 d.title,
-                (if (d.video) "Vidéo" else "Audio") + (d.uploader?.let { " · $it" } ?: ""),
+                (if (d.video) "Vidéo" else "Audio") + " · " + where,
                 d.thumb,
                 if (d.video) R.drawable.ic_video else R.drawable.ic_audio,
                 onClick = { playDownloads(list, i) },
-                onLong = { confirmDelete(d) }
+                onLong = { downloadMenu(d) }
             )
         }
+    }
+
+    private fun downloadMenu(d: Store.Download) {
+        val where = d.path ?: if (d.video) "Movies/Lecteur" else "Music/Lecteur"
+        AlertDialog.Builder(this)
+            .setTitle(d.title)
+            .setMessage("Fichier : mémoire interne › $where")
+            .setPositiveButton("Partager") { _, _ -> share(d) }
+            .setNegativeButton("Supprimer") { _, _ -> confirmDelete(d) }
+            .setNeutralButton("Fermer", null)
+            .show()
+    }
+
+    private fun share(d: Store.Download) {
+        val uri = Uri.parse(d.uri)
+        if (uri.scheme != "content") {
+            toast("Partage possible depuis l'appli Fichiers")
+            return
+        }
+        val send = Intent(Intent.ACTION_SEND)
+            .setType(if (d.video) "video/mp4" else "audio/*")
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        startActivity(Intent.createChooser(send, d.title))
     }
 
     private fun folderRows(rows: MutableList<Row>) {

@@ -25,6 +25,15 @@ sealed class Row {
         val onClick: () -> Unit,
         val onLong: (() -> Unit)? = null
     ) : Row()
+    class Progress(
+        val title: String,
+        val state: String,
+        val pct: Int?,
+        val icon: Int,
+        val actionIcon: Int,
+        val onAction: () -> Unit,
+        val onClick: (() -> Unit)? = null
+    ) : Row()
 }
 
 /** Une seule liste pour tout : titres, recherches récentes, vidéos, fichiers, dossiers. */
@@ -42,6 +51,7 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         is Row.Header -> 0
         is Row.Chips -> 1
         is Row.Entry -> 2
+        is Row.Progress -> 3
     }
 
     private class HeaderHolder(val text: TextView) : RecyclerView.ViewHolder(text)
@@ -50,6 +60,14 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         val thumb: ImageView = v.findViewById(R.id.thumb)
         val title: TextView = v.findViewById(R.id.title)
         val sub: TextView = v.findViewById(R.id.sub)
+    }
+
+    private class ProgressHolder(v: View) : RecyclerView.ViewHolder(v) {
+        val kind: ImageView = v.findViewById(R.id.kind)
+        val title: TextView = v.findViewById(R.id.title)
+        val state: TextView = v.findViewById(R.id.state)
+        val bar: android.widget.ProgressBar = v.findViewById(R.id.progress)
+        val action: android.widget.ImageButton = v.findViewById(R.id.action)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -76,6 +94,7 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 }
                 ChipsHolder(scroll, box)
             }
+            3 -> ProgressHolder(LayoutInflater.from(ctx).inflate(R.layout.item_download, parent, false))
             else -> EntryHolder(LayoutInflater.from(ctx).inflate(R.layout.item_video, parent, false))
         }
     }
@@ -114,6 +133,25 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                         setOnLongClickListener { row.onLong(s); true }
                     })
                 }
+            }
+            is Row.Progress -> {
+                val h = holder as ProgressHolder
+                h.kind.setImageResource(row.icon)
+                h.title.text = row.title
+                h.state.text = row.state
+                val pct = row.pct
+                if (pct == null) {
+                    h.bar.visibility = View.GONE
+                } else {
+                    h.bar.visibility = View.VISIBLE
+                    h.bar.isIndeterminate = pct < 0
+                    if (pct >= 0) h.bar.progress = pct
+                }
+                h.action.setImageResource(row.actionIcon)
+                h.action.setOnClickListener { row.onAction() }
+                val click = row.onClick
+                if (click != null) h.itemView.setOnClickListener { click() }
+                else h.itemView.setOnClickListener(null)
             }
             is Row.Entry -> {
                 val h = holder as EntryHolder
