@@ -76,15 +76,23 @@ object Pod {
                     when (p.name) {
                         "item", "entry" -> item = mutableMapOf()
                         "image" -> if (item == null) inImage = true
-                        "itunes:image" -> p.getAttributeValue(null, "href")?.let {
-                            if (item != null) item!!["image"] = it else if (art == null) art = it
+                        "itunes:image" -> {
+                            val href = p.getAttributeValue(null, "href")
+                            val m = item
+                            if (href != null) {
+                                if (m != null) m["image"] = href
+                                else if (art == null) art = href
+                            }
                         }
-                        "enclosure" -> item?.let { m ->
-                            p.getAttributeValue(null, "url")?.let { m["url"] = it }
-                            p.getAttributeValue(null, "type")?.let { m["type"] = it }
+                        "enclosure" -> {
+                            val m = item
+                            val u = p.getAttributeValue(null, "url")
+                            if (m != null && u != null) m["url"] = u
                         }
-                        "media:content" -> item?.let { m ->
-                            if (m["url"] == null) p.getAttributeValue(null, "url")?.let { m["url"] = it }
+                        "media:content" -> {
+                            val m = item
+                            val u = p.getAttributeValue(null, "url")
+                            if (m != null && u != null && m["url"] == null) m["url"] = u
                         }
                     }
                 }
@@ -103,7 +111,7 @@ object Pod {
                             "pubDate", "published" -> m["date"] = t
                             "itunes:duration" -> m["duration"] = t
                         }
-                        inImage && p.name == "url" -> if (t.isNotEmpty()) art = art ?: t
+                        inImage && p.name == "url" -> { if (t.isNotEmpty() && art == null) art = t }
                         p.name == "title" && title.isEmpty() -> title = t
                         p.name == "itunes:author" && author == null -> author = t.ifEmpty { null }
                     }

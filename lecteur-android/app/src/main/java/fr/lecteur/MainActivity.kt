@@ -734,8 +734,7 @@ class MainActivity : AppCompatActivity() {
         val pods = Store.podcasts()
         if (pods.isEmpty()) {
             rows += Row.Note(
-                "Aucun podcast pour l'instant.
-Cherche un podcast avec la barre de recherche, " +
+                "Aucun podcast pour l'instant.\nCherche un podcast avec la barre de recherche, " +
                     "ou ajoute directement l'adresse de son flux RSS.",
                 R.drawable.ic_headphones
             )
@@ -816,8 +815,7 @@ Cherche un podcast avec la barre de recherche, " +
         }
         val eps = pp.episodes
         when {
-            pp.error != null -> rows += Row.Note("Impossible de lire ce flux : ${pp.error}
-Vérifie que c'est bien l'adresse d'un flux RSS.")
+            pp.error != null -> rows += Row.Note("Impossible de lire ce flux : ${pp.error}\nVérifie que c'est bien l'adresse d'un flux RSS.")
             eps == null -> rows += Row.Note("Chargement…")
             eps.isEmpty() -> rows += Row.Note("Aucun épisode.")
             else -> {
@@ -898,6 +896,25 @@ Vérifie que c'est bien l'adresse d'un flux RSS.")
         refreshUi()
     }
 
+    private fun downloadEpisode(e: Episode) {
+        if (Build.VERSION.SDK_INT < 29 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            storagePerm.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
+        DownloadService.startDirect(this, e.audioUrl, e.title, e.podcastTitle, e.image ?: e.podcastArt)
+        Snackbar.make(root, "Téléchargement ajouté", Snackbar.LENGTH_LONG)
+            .setAnchorView(if (bottomNav.isVisible) bottomNav else null)
+            .setAction("Voir") { pager.setCurrentItem(OFFLINE, true) }
+            .show()
+    }
+
     private fun episodeMenu(list: List<Episode>, i: Int) {
         val e = list[i]
         val id = Pod.mediaId(e)
@@ -909,24 +926,7 @@ Vérifie que c'est bien l'adresse d'un flux RSS.")
                     Store.setPosition(id, 0)
                     playEpisodes(list, i)
                 },
-                Opt(R.drawable.ic_download, "Télécharger l'épisode") {
-                    if (Build.VERSION.SDK_INT < 29 &&
-                        ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
-                        PackageManager.PERMISSION_GRANTED
-                    ) {
-                        storagePerm.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                        return@Opt
-                    }
-                    if (Build.VERSION.SDK_INT >= 33 &&
-                        ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-                        PackageManager.PERMISSION_GRANTED
-                    ) notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    DownloadService.startDirect(this, e.audioUrl, e.title, e.podcastTitle, e.image ?: e.podcastArt)
-                    Snackbar.make(root, "Téléchargement ajouté", Snackbar.LENGTH_LONG)
-                        .setAnchorView(if (bottomNav.isVisible) bottomNav else null)
-                        .setAction("Voir") { pager.setCurrentItem(OFFLINE, true) }
-                        .show()
-                },
+                Opt(R.drawable.ic_download, "Télécharger l'épisode") { downloadEpisode(e) },
                 Opt(R.drawable.ic_play, if (done) "Marquer comme non écouté" else "Marquer comme écouté") {
                     Store.setPosition(id, if (done) 0 else -1)
                     renderAll()
