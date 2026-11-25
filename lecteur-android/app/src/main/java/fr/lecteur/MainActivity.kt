@@ -2350,7 +2350,7 @@ class MainActivity : AppCompatActivity() {
             "Sauter les silences", "Raccourcit les blancs, surtout utile pour les podcasts", Settings.skipSilence
         ) { on -> Settings.skipSilence = on; PlayerHolder.applySkipSilence() }
         rows += Row.Toggle(
-            "Égaliser le volume", "Voix plus régulières, passages forts adoucis (Android 9 et plus)", Settings.normalize
+            "Égaliser le volume (expérimental)", "Voix plus régulières. Si tu entends un grésillement, désactive-le.", Settings.normalize
         ) { on -> Settings.normalize = on; PlayerHolder.applyNormalize() }
         rows += Row.Toggle(
             "Vidéo suivante automatique",

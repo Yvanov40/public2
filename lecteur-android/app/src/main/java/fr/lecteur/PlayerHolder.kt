@@ -47,16 +47,21 @@ object PlayerHolder {
         // La vitesse choisie est retenue d'une vidéo à l'autre et entre les lancements
         p.playbackParameters = PlaybackParameters(prefs.getFloat("speed", 1f))
         p.skipSilenceEnabled = Settings.skipSilence
-        // Session audio fixe, pour pouvoir y brancher l'égaliseur de volume
-        sessionId = androidx.media3.common.util.Util.generateAudioSessionIdV21(app)
-        p.audioSessionId = sessionId
-        applyNormalize()
         p.addListener(object : Player.Listener {
             override fun onPlaybackParametersChanged(pp: PlaybackParameters) {
                 prefs.edit().putFloat("speed", pp.speed).apply()
             }
 
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                sessionId = audioSessionId
+                applyNormalize()
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // L'égaliseur ne tourne que pendant la lecture (jamais en pause)
+                if (android.os.Build.VERSION.SDK_INT >= 28) {
+                    try { (dynamics as? android.media.audiofx.DynamicsProcessing)?.enabled = isPlaying && Settings.normalize } catch (_: Exception) {}
+                }
                 if (isPlaying) {
                     handler.postDelayed(saver, 15_000)
                     handler.removeCallbacks(sponsorCheck)
@@ -133,15 +138,16 @@ object PlayerHolder {
                 2, false, 0, true, 1, false, 0, true
             ).build()
             val d = android.media.audiofx.DynamicsProcessing(0, sessionId, cfg)
+            // Réglage doux : compression légère, pas d'amplification du bruit de fond
             d.setMbcBandAllChannelsTo(
                 0, android.media.audiofx.DynamicsProcessing.MbcBand(
-                    true, 20000f, 5f, 200f, 4f, -30f, 6f, -90f, 1f, 0f, 10f
+                    true, 20000f, 10f, 300f, 2f, -24f, 6f, -60f, 1f, 0f, 2f
                 )
             )
             d.setLimiterAllChannelsTo(
-                android.media.audiofx.DynamicsProcessing.Limiter(true, true, 1, 1f, 60f, 10f, -1f, 0f)
+                android.media.audiofx.DynamicsProcessing.Limiter(true, true, 1, 2f, 80f, 10f, -2f, 0f)
             )
-            d.enabled = true
+            d.enabled = player?.isPlaying == true
             dynamics = d
         } catch (_: Exception) {
         }

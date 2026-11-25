@@ -11,6 +11,12 @@ class App : Application() {
         Store.init(this)
         Settings.init(this)
         Settings.applyNightMode()
+        // v22 : l'égaliseur de volume est remis à « désactivé » (grésillements signalés)
+        val prefs = getSharedPreferences("settings", MODE_PRIVATE)
+        if (!prefs.getBoolean("normalizeReset22", false)) {
+            Settings.normalize = false
+            prefs.edit().putBoolean("normalizeReset22", true).apply()
+        }
         Playback.init(this)
         Music.init(this)
         NewContentWorker.schedule(this)
