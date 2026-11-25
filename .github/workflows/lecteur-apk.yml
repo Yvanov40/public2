@@ -32,6 +32,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+          # Garde les dépendances en cache d'une compilation à l'autre (sinon Maven Central limite)
+          cache-read-only: false
 
       - name: Dernière version de NewPipeExtractor
         id: npe
@@ -75,7 +77,10 @@ jobs:
           fi
 
       - name: Compilation
-        run: gradle assembleRelease --stacktrace -PnpeVersion=${{ steps.npe.outputs.tag }} -PversionCode=${{ github.run_number }}
+        run: |
+          ARGS="assembleRelease -PnpeVersion=${{ steps.npe.outputs.tag }} -PversionCode=${{ github.run_number }}"
+          # Une nouvelle tentative si un dépôt de dépendances refuse temporairement (erreur 429…)
+          gradle $ARGS || { echo "Nouvelle tentative dans 60 s"; sleep 60; gradle $ARGS; }
 
       - name: Renommer l'APK
         run: cp app/build/outputs/apk/release/app-release.apk lecteur.apk
