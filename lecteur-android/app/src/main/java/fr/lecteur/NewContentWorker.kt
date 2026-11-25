@@ -92,7 +92,7 @@ class NewContentWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
         )
         val lines = (eps.map { "${it.podcastTitle} : ${it.title}" } + vids.map { "${it.uploader ?: ""} : ${it.title}" }).take(6)
         val open = PendingIntent.getActivity(
-            ctx, 2, Intent(ctx, MainActivity::class.java).putExtra("page", 1),
+            ctx, 2, Intent(ctx, MainActivity::class.java).putExtra("page", 2),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val style = NotificationCompat.InboxStyle()

@@ -18,4 +18,6 @@
     <string name="sleep">Minuteur</string>
     <string name="info">Infos</string>
     <string name="queue">File</string>
+    <string name="tab_music">Musique</string>
+    <string name="hint_music">Titres, albums, artistes…</string>
 </resources>

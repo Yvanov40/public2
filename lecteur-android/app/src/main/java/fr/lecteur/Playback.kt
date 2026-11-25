@@ -31,6 +31,7 @@ object Playback {
     /** Prévenir l'écran qu'il faut se rafraîchir. */
     var listener: (() -> Unit)? = null
     private fun changed() = listener?.invoke()
+    fun notifyChanged() = changed()
 
     // ——— Infos de l'élément en cours (par mediaId) ———
     class Info(val description: String?, val html: Boolean, val chapters: List<Pair<Long, String>>)
@@ -49,6 +50,7 @@ object Playback {
 
     /** Charge et lance une vidéo YouTube (reprise à la dernière position). */
     suspend fun playYoutube(url: String, audioOnly: Boolean): Vid {
+        Music.stop()
         val (info, source) = withContext(Dispatchers.IO) {
             val i = Yt.info(url)
             i to Sources.build(i)
@@ -79,6 +81,7 @@ object Playback {
 
     /** Lecture de fichiers ou d'épisodes (adresses directes). */
     fun startedLocal() {
+        Music.stop()
         PlayerHolder.current = null
         related = emptyList()
         SponsorBlock.clear()
@@ -119,6 +122,7 @@ object Playback {
             cancelSleep()
             return false
         }
+        if (Music.active) return Music.onEnded()
         val next = queue.removeFirstOrNull()
         if (next != null) {
             playQueued(next)

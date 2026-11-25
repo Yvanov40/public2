@@ -71,10 +71,12 @@ object PlayerHolder {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 // Élément précédent terminé : marqué comme vu / écouté
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                    lastId?.let { Store.setPosition(it, -1) }
+                    lastId?.takeIf { !it.startsWith("music:") }?.let { Store.setPosition(it, -1) }
                     Playback.onItemFinishedInList()
                 }
                 lastId = mediaItem?.mediaId?.ifEmpty { null }
+                Music.onTransition()
+                if (lastId?.startsWith("music:") == true) return
                 // Élément suivant d'une liste : reprise là où on s'était arrêté
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
                     val pos = lastId?.let { Store.position(it) } ?: 0
@@ -84,7 +86,7 @@ object PlayerHolder {
 
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_ENDED) {
-                    lastId?.let { Store.setPosition(it, -1) }
+                    lastId?.takeIf { !it.startsWith("music:") }?.let { Store.setPosition(it, -1) }
                     // File d'attente, vidéo suivante automatique ou minuteur « fin de l'élément »
                     handler.post { Playback.onEnded() }
                 }
@@ -152,7 +154,7 @@ object PlayerHolder {
     /** Mémorise où on en est (vidéo, épisode, fichier) pour reprendre plus tard. */
     private fun savePosition(p: Player) {
         val id = p.currentMediaItem?.mediaId?.ifEmpty { null } ?: return
-        if (p.isCurrentMediaItemLive) return
+        if (id.startsWith("music:") || p.isCurrentMediaItemLive) return
         val dur = p.duration
         if (dur == C.TIME_UNSET || dur <= 0) return
         val pos = p.currentPosition

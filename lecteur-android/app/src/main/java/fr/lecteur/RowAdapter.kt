@@ -43,6 +43,17 @@ sealed class Row {
     ) : Row()
     class Toggle(val title: String, val sub: String?, val checked: Boolean, val onChange: (Boolean) -> Unit) : Row()
     class Colors(val title: String, val items: List<Pair<String, Int>>, val selected: Int, val onSelect: (Int) -> Unit) : Row()
+    class Track(
+        val title: String, val sub: String?, val thumb: String?, val number: String? = null,
+        val playing: Boolean = false, val liked: Boolean = false, val round: Boolean = false,
+        val onClick: () -> Unit, val onLong: (() -> Unit)? = null
+    ) : Row()
+    class Card(val title: String, val sub: String?, val thumb: String?, val round: Boolean = false, val onClick: () -> Unit, val onLong: (() -> Unit)? = null)
+    class Cards(val items: List<Card>) : Row()
+    class MusicHeader(
+        val title: String, val sub: String?, val thumb: String?, val round: Boolean,
+        val onPlay: (() -> Unit)?, val onShuffle: (() -> Unit)?, val onMore: (() -> Unit)? = null
+    ) : Row()
     class Progress(
         val title: String,
         val state: String,
@@ -80,6 +91,9 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         is Row.Slider -> 12
         is Row.Toggle -> 13
         is Row.Colors -> 14
+        is Row.Track -> 15
+        is Row.Cards -> 16
+        is Row.MusicHeader -> 17
     }
 
     /** Nombre de colonnes occupées : seules les cartes vidéo se partagent la largeur. */
@@ -98,7 +112,9 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             11, 12, 13, 14 -> make(R.layout.item_setting)
             0 -> make(R.layout.item_header)
             1 -> make(R.layout.item_note)
-            2, 4, 5 -> {
+            15 -> make(R.layout.item_track)
+            17 -> make(R.layout.item_music_header)
+            2, 4, 5, 16 -> {
                 val ctx = parent.context
                 val d = ctx.resources.displayMetrics.density
                 val box = LinearLayout(ctx).apply {
@@ -331,6 +347,66 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     addView(box)
                 })
             }
+            is Row.Track -> {
+                val title = v.findViewById<TextView>(R.id.title)
+                title.text = row.title
+                title.setTextColor(
+                    MaterialColors.getColor(
+                        v, if (row.playing) com.google.android.material.R.attr.colorPrimary
+                        else com.google.android.material.R.attr.colorOnSurface
+                    )
+                )
+                val sub = v.findViewById<TextView>(R.id.sub)
+                sub.text = row.sub
+                sub.visibility = if (row.sub.isNullOrEmpty()) View.GONE else View.VISIBLE
+                val num = v.findViewById<TextView>(R.id.number)
+                num.text = row.number
+                num.visibility = if (row.number == null) View.GONE else View.VISIBLE
+                v.findViewById<View>(R.id.liked).visibility = if (row.liked) View.VISIBLE else View.GONE
+                val img = v.findViewById<com.google.android.material.imageview.ShapeableImageView>(R.id.thumb)
+                shape(img, row.round, 8f)
+                Thumbs.load(img, row.thumb, if (row.round) R.drawable.ic_person else R.drawable.ic_music)
+                v.setOnClickListener { row.onClick() }
+                val long = row.onLong
+                if (long != null) v.setOnLongClickListener { long(); true } else v.setOnLongClickListener(null)
+            }
+            is Row.Cards -> {
+                val box = (holder as StripHolder).box
+                box.removeAllViews()
+                val inf = LayoutInflater.from(box.context)
+                row.items.forEach { c ->
+                    val card = inf.inflate(R.layout.item_square_card, box, false)
+                    card.findViewById<TextView>(R.id.title).text = c.title
+                    val sub = card.findViewById<TextView>(R.id.sub)
+                    sub.text = c.sub
+                    sub.visibility = if (c.sub.isNullOrEmpty()) View.GONE else View.VISIBLE
+                    val img = card.findViewById<com.google.android.material.imageview.ShapeableImageView>(R.id.thumb)
+                    shape(img, c.round, 12f)
+                    Thumbs.load(img, c.thumb, if (c.round) R.drawable.ic_person else R.drawable.ic_music)
+                    card.setOnClickListener { c.onClick() }
+                    c.onLong?.let { l -> card.setOnLongClickListener { l(); true } }
+                    Ui.applyFont(card)
+                    box.addView(card)
+                }
+            }
+            is Row.MusicHeader -> {
+                v.findViewById<TextView>(R.id.title).text = row.title
+                val sub = v.findViewById<TextView>(R.id.sub)
+                sub.text = row.sub
+                sub.visibility = if (row.sub.isNullOrEmpty()) View.GONE else View.VISIBLE
+                val img = v.findViewById<com.google.android.material.imageview.ShapeableImageView>(R.id.thumb)
+                shape(img, row.round, 16f)
+                Thumbs.load(img, row.thumb, if (row.round) R.drawable.ic_person else R.drawable.ic_music)
+                val playAll = v.findViewById<View>(R.id.playAll)
+                val shuf = v.findViewById<View>(R.id.shuffleAll)
+                val more = v.findViewById<View>(R.id.more)
+                playAll.visibility = if (row.onPlay != null) View.VISIBLE else View.GONE
+                shuf.visibility = if (row.onShuffle != null) View.VISIBLE else View.GONE
+                more.visibility = if (row.onMore != null) View.VISIBLE else View.GONE
+                playAll.setOnClickListener { row.onPlay?.invoke() }
+                shuf.setOnClickListener { row.onShuffle?.invoke() }
+                more.setOnClickListener { row.onMore?.invoke() }
+            }
             is Row.Progress -> {
                 v.findViewById<ImageView>(R.id.kind).setImageResource(row.icon)
                 v.findViewById<TextView>(R.id.title).text = row.title
@@ -355,6 +431,14 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 if (click != null) v.setOnClickListener { click() } else v.setOnClickListener(null)
             }
         }
+    }
+
+    private fun shape(img: com.google.android.material.imageview.ShapeableImageView, round: Boolean, cornerDp: Float) {
+        val d = img.resources.displayMetrics.density
+        img.shapeAppearanceModel = if (round)
+            com.google.android.material.shape.ShapeAppearanceModel.builder()
+                .setAllCornerSizes(com.google.android.material.shape.RelativeCornerSize(0.5f)).build()
+        else com.google.android.material.shape.ShapeAppearanceModel.builder().setAllCornerSizes(cornerDp * d).build()
     }
 
     /** Prépare une ligne de réglage et renvoie la zone où placer le contrôle. */

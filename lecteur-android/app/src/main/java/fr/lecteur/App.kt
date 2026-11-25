@@ -12,6 +12,7 @@ class App : Application() {
         Settings.init(this)
         Settings.applyNightMode()
         Playback.init(this)
+        Music.init(this)
         NewContentWorker.schedule(this)
         NewPipe.init(DownloaderImpl.instance, Localization("fr", "FR"), ContentCountry("FR"))
     }

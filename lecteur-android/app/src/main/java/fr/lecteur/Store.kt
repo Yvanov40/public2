@@ -133,6 +133,61 @@ object Store {
 
     @Synchronized fun setLastSeen(key: String, ms: Long) = prefs.edit().putLong("seen_$key", ms).apply()
 
+    // ——— Musique : likes, playlists, écoutés récemment ———
+    private fun trackJson(t: Track) = JSONObject().put("url", t.url).put("title", t.title).put("artist", t.artist)
+        .put("artistUrl", t.artistUrl).put("thumb", t.thumb).put("duration", t.duration).put("album", t.album)
+
+    private fun trackOf(o: JSONObject) = Track(
+        o.optString("url"), o.optString("title"), o.str("artist"), o.str("artistUrl"),
+        o.str("thumb"), o.optLong("duration"), o.str("album")
+    )
+
+    private fun tracks(key: String): List<Track> = objects(key).map(::trackOf)
+    private fun saveTracks(key: String, list: List<Track>) = put(key, JSONArray(list.map(::trackJson)))
+
+    @Synchronized fun likes(): List<Track> = tracks("likes")
+    @Synchronized fun isLiked(url: String) = likes().any { it.url == url }
+    @Synchronized fun toggleLike(t: Track): Boolean {
+        val l = likes()
+        return if (l.any { it.url == t.url }) {
+            saveTracks("likes", l.filterNot { it.url == t.url }); false
+        } else {
+            saveTracks("likes", listOf(t) + l); true
+        }
+    }
+
+    @Synchronized fun recentTracks(): List<Track> = tracks("recentTracks")
+    @Synchronized fun addRecentTrack(t: Track) =
+        saveTracks("recentTracks", (listOf(t) + recentTracks().filterNot { it.url == t.url }).take(60))
+
+    class Playlist(val id: String, val name: String, val tracks: List<Track>)
+
+    @Synchronized fun playlists(): List<Playlist> = objects("playlists").map { o ->
+        val arr = o.optJSONArray("tracks") ?: JSONArray()
+        Playlist(o.optString("id"), o.optString("name"), (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let(::trackOf) })
+    }
+
+    private fun savePlaylists(list: List<Playlist>) = put("playlists", JSONArray(list.map { p ->
+        JSONObject().put("id", p.id).put("name", p.name).put("tracks", JSONArray(p.tracks.map(::trackJson)))
+    }))
+
+    @Synchronized fun createPlaylist(name: String): String {
+        val id = System.currentTimeMillis().toString(36)
+        savePlaylists(playlists() + Playlist(id, name, emptyList()))
+        return id
+    }
+
+    @Synchronized fun renamePlaylist(id: String, name: String) =
+        savePlaylists(playlists().map { if (it.id == id) Playlist(id, name, it.tracks) else it })
+
+    @Synchronized fun deletePlaylist(id: String) = savePlaylists(playlists().filterNot { it.id == id })
+
+    @Synchronized fun addToPlaylist(id: String, t: Track) =
+        savePlaylists(playlists().map { if (it.id == id) Playlist(id, it.name, it.tracks.filterNot { x -> x.url == t.url } + t) else it })
+
+    @Synchronized fun removeFromPlaylist(id: String, index: Int) =
+        savePlaylists(playlists().map { if (it.id == id) Playlist(id, it.name, it.tracks.filterIndexed { i, _ -> i != index }) else it })
+
     // ——— Téléchargements ———
     @Synchronized fun downloads(): List<Download> = objects("downloads").map {
         Download(

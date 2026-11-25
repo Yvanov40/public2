@@ -110,7 +110,30 @@ class MainActivity : AppCompatActivity() {
     private val adapters = Array(PAGES) { RowAdapter() }
     private val lists = arrayOfNulls<RecyclerView>(PAGES)
     private val refreshers = arrayOfNulls<SwipeRefreshLayout>(PAGES)
-    private val navIds = intArrayOf(R.id.nav_home, R.id.nav_subs, R.id.nav_offline, R.id.nav_settings)
+    private val navIds = intArrayOf(R.id.nav_home, R.id.nav_music, R.id.nav_subs, R.id.nav_offline, R.id.nav_settings)
+
+    // ——— Musique ———
+    private sealed class MPage {
+        class AlbumP(var album: Music.Album) : MPage() { var tracks: List<Track>? = null; var error: String? = null }
+        class ArtistP(var artist: Music.Artist) : MPage() {
+            var songs: List<Track>? = null; var albums: List<Music.Album>? = null; var error: String? = null
+        }
+        class PlaylistP(val id: String) : MPage()
+        object Liked : MPage()
+        object Recent : MPage()
+        class LocalAlbumP(val album: Music.LocalAlbum) : MPage()
+        class LocalArtistP(val name: String) : MPage()
+        object LocalAll : MPage()
+        object LocalArtists : MPage()
+        object LocalAlbums : MPage()
+    }
+
+    private val musicStack = ArrayList<MPage>()
+    private var musicQuery: String? = null
+    private var musicResult: Music.SearchResult? = null
+    private var musicJob: Job? = null
+    private var localMusic: List<Track>? = null
+    private var localMusicJob: Job? = null
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var loadJob: Job? = null
@@ -228,6 +251,8 @@ class MainActivity : AppCompatActivity() {
     private var libFilter = "all"
 
     private val mediaPerm = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        localMusic = null
+        render(MUSIC)
         rescanLocal()
     }
     private val deleteLauncher =
@@ -326,6 +351,8 @@ class MainActivity : AppCompatActivity() {
                 if (bottomNav.selectedItemId != navIds[position]) bottomNav.selectedItemId = navIds[position]
                 if (position == SUBS) { if (subsMode == "pod") loadPodFeed() else loadSubsFeed() }
                 if (position == OFFLINE) rescanLocal()
+                query.hint = getString(if (position == MUSIC) R.string.hint_music else R.string.hint)
+                if (position == MUSIC) render(MUSIC)
             }
         })
         bottomNav.setOnItemSelectedListener { item ->
@@ -352,7 +379,12 @@ class MainActivity : AppCompatActivity() {
         miniPlayer.setOnLongClickListener { playerMenu(); true }
 
         // Mini-lecteur
-        miniPlayer.setOnClickListener { setVideoMode(true) }
+        miniPlayer.setOnClickListener {
+            // Musique ou audio : écran « en cours de lecture » ; vidéo : on réaffiche l'image
+            val hasVideo = player.currentTracks.containsType(androidx.media3.common.C.TRACK_TYPE_VIDEO)
+            if (Music.active || !hasVideo) startActivity(Intent(this, NowPlayingActivity::class.java))
+            else setVideoMode(true)
+        }
         findViewById<ImageButton>(R.id.miniVideo).setOnClickListener { setVideoMode(true) }
         findViewById<ImageButton>(R.id.miniClose).setOnClickListener { stopPlayback() }
         miniPlay.setOnClickListener {
@@ -376,6 +408,8 @@ class MainActivity : AppCompatActivity() {
                     podPage?.page == page -> closePodcast()
                     channelPage?.page == page -> closeChannel()
                     page == SUBS && podQuery != null -> clearPodSearch()
+                    page == MUSIC && musicStack.isNotEmpty() -> popMusic()
+                    page == MUSIC && musicQuery != null -> clearSearch()
                     page == OFFLINE && folderStack.isNotEmpty() -> leaveFolder()
                     page == OFFLINE && libFilter != "all" -> {
                         libFilter = "all"
@@ -526,6 +560,13 @@ class MainActivity : AppCompatActivity() {
             podPage?.page == page -> closePodcast()
             channelPage?.page == page -> closeChannel()
             page == HOME && searchQuery != null -> clearSearch()
+            page == MUSIC && (musicStack.isNotEmpty() || musicQuery != null) -> {
+                musicStack.clear()
+                musicQuery = null
+                musicResult = null
+                query.setText("")
+                render(MUSIC)
+            }
             page == OFFLINE && (folderStack.isNotEmpty() || libFilter != "all") -> {
                 libFilter = "all"
                 folderStack.clear()
@@ -548,7 +589,8 @@ class MainActivity : AppCompatActivity() {
         val rows = mutableListOf<Row>()
         val cp = channelPage
         val pp = podPage
-        if (pp != null && pp.page == page) podcastRows(pp, rows)
+        if (page == MUSIC && pp?.page != MUSIC && cp?.page != MUSIC) musicRows(rows)
+        else if (pp != null && pp.page == page) podcastRows(pp, rows)
         else if (cp != null && cp.page == page) channelRows(cp, rows)
         else when (page) {
             HOME -> homeRows(rows)
@@ -580,7 +622,11 @@ class MainActivity : AppCompatActivity() {
         val text = query.text.toString().trim()
         if (text.isEmpty()) return
         hideKeyboard()
-        if (Yt.looksLikeUrl(text)) openLink(text) else search(text)
+        when {
+            Yt.looksLikeUrl(text) -> openLink(text)
+            pager.currentItem == MUSIC -> musicSearch(text)
+            else -> search(text)
+        }
     }
 
     private fun hideKeyboard() {
@@ -627,6 +673,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun clearSearch() {
+        if (pager.currentItem == MUSIC) {
+            musicQuery = null
+            musicResult = null
+            query.setText("")
+            hideKeyboard()
+            render(MUSIC)
+            return
+        }
         searchQuery = null
         searchResults = emptyList()
         podResults = emptyList()
@@ -1750,6 +1804,374 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ——— Musique ———
+
+    private fun musicSearch(q: String) {
+        hideKeyboard()
+        musicQuery = q
+        musicResult = null
+        musicStack.clear()
+        render(MUSIC)
+        musicJob?.cancel()
+        musicJob = lifecycleScope.launch {
+            busy(true)
+            try {
+                musicResult = Music.search(q)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snack("Recherche impossible : ${e.message}")
+                musicResult = Music.SearchResult(emptyList(), emptyList(), emptyList(), emptyList())
+            } finally {
+                busy(false)
+            }
+            render(MUSIC)
+            lists[MUSIC]?.scrollToPosition(0)
+        }
+    }
+
+    private fun pushMusic(p: MPage) {
+        musicStack += p
+        render(MUSIC)
+        lists[MUSIC]?.scrollToPosition(0)
+        when (p) {
+            is MPage.AlbumP -> lifecycleScope.launch {
+                try {
+                    val (a, t) = Music.albumTracks(p.album)
+                    p.album = a
+                    p.tracks = t
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    p.error = e.message ?: "erreur"
+                }
+                if (musicStack.lastOrNull() === p) render(MUSIC)
+            }
+            is MPage.ArtistP -> lifecycleScope.launch {
+                try {
+                    val (a, songs, albums) = Music.artist(p.artist)
+                    p.artist = a
+                    p.songs = songs
+                    p.albums = albums
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    p.error = e.message ?: "erreur"
+                }
+                if (musicStack.lastOrNull() === p) render(MUSIC)
+            }
+            else -> {}
+        }
+    }
+
+    private fun popMusic() {
+        if (musicStack.isNotEmpty()) musicStack.removeAt(musicStack.size - 1)
+        render(MUSIC)
+    }
+
+    private fun loadLocalMusic() {
+        if (localMusicJob?.isActive == true) return
+        localMusicJob = lifecycleScope.launch {
+            localMusic = withContext(Dispatchers.IO) { Music.localTracks(applicationContext) }
+            render(MUSIC)
+        }
+    }
+
+    private fun trackRow(list: List<Track>, i: Int, number: Boolean = false, playlistId: String? = null): Row {
+        val t = list[i]
+        val sub = listOfNotNull(t.artist, if (number) null else t.album, Yt.formatDuration(t.duration).ifEmpty { null })
+            .joinToString(" · ")
+        return Row.Track(
+            t.title, sub, t.thumb, if (number) "${i + 1}" else null,
+            playing = Music.current?.url == t.url, liked = Store.isLiked(t.url),
+            onClick = { Music.play(list, i); openNowPlayingSoon() },
+            onLong = { trackMenu(t, playlistId, i) }
+        )
+    }
+
+    private fun openNowPlayingSoon() {
+        startActivity(Intent(this, NowPlayingActivity::class.java))
+    }
+
+    private fun albumRow(a: Music.Album, kind: String) = Row.Track(
+        a.title, listOfNotNull(kind, a.artist).joinToString(" · "), a.thumb,
+        onClick = { pushMusic(MPage.AlbumP(a)) }
+    )
+
+    private fun artistRow(a: Music.Artist) = Row.Track(
+        a.name, "Artiste", a.thumb, round = true, onClick = { pushMusic(MPage.ArtistP(a)) }
+    )
+
+    private fun trackMenu(t: Track, playlistId: String?, index: Int) {
+        val liked = Store.isLiked(t.url)
+        val opts = mutableListOf(
+            Opt(R.drawable.ic_playnext, "Lire ensuite") { Music.insertNext(t); snack("Sera lu ensuite") },
+            Opt(R.drawable.ic_queue, "Ajouter à la file d'attente") { Music.addLast(t); snack("Ajouté à la file") },
+            Opt(if (liked) R.drawable.ic_heart else R.drawable.ic_heart_outline, if (liked) "Retirer des titres likés" else "J'aime") {
+                Store.toggleLike(t)
+                render(MUSIC)
+            },
+            Opt(R.drawable.ic_playlist_add, "Ajouter à une playlist…") { NowPlayingActivity.addToPlaylist(this, t) }
+        )
+        if (playlistId != null) opts += Opt(R.drawable.ic_close, "Retirer de cette playlist") {
+            Store.removeFromPlaylist(playlistId, index)
+            render(MUSIC)
+        }
+        if (!t.local) {
+            t.artistUrl?.let { u ->
+                opts += Opt(R.drawable.ic_person, "Voir l'artiste") {
+                    pushMusic(MPage.ArtistP(Music.Artist(u, t.artist ?: "Artiste", null)))
+                }
+            }
+            opts += Opt(R.drawable.ic_download, "Télécharger") { startDownload(t.url, false, t.title) }
+            opts += Opt(R.drawable.ic_video, "Voir le clip") { play(t.url) }
+            opts += Opt(R.drawable.ic_share, "Partager le lien") {
+                startActivity(
+                    Intent.createChooser(
+                        Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, t.url), t.title
+                    )
+                )
+            }
+        }
+        sheet(t.title, t.artist, opts)
+    }
+
+    private fun playlistMenu(p: Store.Playlist) {
+        sheet(
+            p.name, "${p.tracks.size} titres", listOf(
+                Opt(R.drawable.ic_settings, "Renommer") {
+                    NowPlayingActivity.askName(this, "Renommer", p.name) { Store.renamePlaylist(p.id, it); render(MUSIC) }
+                },
+                Opt(R.drawable.ic_delete, "Supprimer la playlist") {
+                    MaterialAlertDialogBuilder(this)
+                        .setMessage("Supprimer la playlist « ${p.name} » ? Les titres ne sont pas supprimés.")
+                        .setPositiveButton("Supprimer") { _, _ ->
+                            Store.deletePlaylist(p.id)
+                            if ((musicStack.lastOrNull() as? MPage.PlaylistP)?.id == p.id) popMusic() else render(MUSIC)
+                        }
+                        .setNegativeButton("Annuler", null)
+                        .show()
+                }
+            )
+        )
+    }
+
+    /** Mix : titres des artistes que tu aimes, mélangés. */
+    private fun playMix() {
+        val seeds = (Store.likes() + Store.recentTracks()).filter { !it.local }
+        val artists = seeds.mapNotNull { it.artist }.distinct().shuffled().take(5)
+        if (artists.isEmpty()) {
+            snack("Like quelques titres d'abord (♥) pour créer ton mix")
+            return
+        }
+        lifecycleScope.launch {
+            busy(true)
+            try {
+                val found = artists.map { a -> async { runCatching { Music.songs(a).take(6) }.getOrDefault(emptyList()) } }.awaitAll()
+                val mix = (found.flatten() + Store.likes().filter { !it.local }.shuffled().take(10)).distinctBy { it.url }.shuffled()
+                if (mix.isEmpty()) snack("Mix impossible pour l'instant") else {
+                    Music.play(mix, 0)
+                    openNowPlayingSoon()
+                }
+            } finally {
+                busy(false)
+            }
+        }
+    }
+
+    private fun musicRows(rows: MutableList<Row>) {
+        val page = musicStack.lastOrNull()
+        if (page != null) {
+            rows += Row.Entry("Retour", null, null, R.drawable.ic_back, onClick = { popMusic() })
+            musicPageRows(page, rows)
+            return
+        }
+        val q = musicQuery
+        if (q != null) {
+            val r = musicResult
+            if (r == null) {
+                rows += Row.Note("Recherche de « $q »…")
+                return
+            }
+            if (r.songs.isEmpty() && r.albums.isEmpty() && r.artists.isEmpty() && r.playlists.isEmpty()) {
+                rows += Row.Note("Aucun résultat pour « $q ».", R.drawable.ic_music)
+                return
+            }
+            if (r.songs.isNotEmpty()) {
+                rows += Row.Header("Titres", "Tout lire") { Music.play(r.songs, 0); openNowPlayingSoon() }
+                r.songs.indices.take(8).forEach { rows += trackRow(r.songs, it) }
+            }
+            if (r.artists.isNotEmpty()) {
+                rows += Row.Header("Artistes")
+                r.artists.take(4).forEach { rows += artistRow(it) }
+            }
+            if (r.albums.isNotEmpty()) {
+                rows += Row.Header("Albums")
+                r.albums.take(8).forEach { rows += albumRow(it, "Album") }
+            }
+            if (r.playlists.isNotEmpty()) {
+                rows += Row.Header("Playlists")
+                r.playlists.take(6).forEach { rows += albumRow(it, "Playlist") }
+            }
+            return
+        }
+
+        // Accueil musique
+        val likes = Store.likes()
+        val pls = Store.playlists()
+        val recent = Store.recentTracks()
+        rows += Row.Header("Ma musique")
+        rows += Row.Track(
+            "Titres likés", "${likes.size} titre" + if (likes.size > 1) "s" else "", null,
+            onClick = { pushMusic(MPage.Liked) }
+        )
+        rows += Row.Track("Mix d'après tes goûts", "Titres de tes artistes, mélangés", null, onClick = { playMix() })
+        pls.forEach { p ->
+            rows += Row.Track(
+                p.name, "Playlist · ${p.tracks.size} titres", p.tracks.firstOrNull()?.thumb,
+                onClick = { pushMusic(MPage.PlaylistP(p.id)) }, onLong = { playlistMenu(p) }
+            )
+        }
+        rows += Row.Track("Nouvelle playlist…", null, null, onClick = {
+            NowPlayingActivity.askName(this, "Nouvelle playlist", "") { Store.createPlaylist(it); render(MUSIC) }
+        })
+        if (recent.isNotEmpty()) {
+            rows += Row.Header("Écoutés récemment", "Tout voir") { pushMusic(MPage.Recent) }
+            rows += Row.Cards(recent.take(15).mapIndexed { i, t ->
+                Row.Card(t.title, t.artist, t.thumb, onClick = { Music.play(recent, i); openNowPlayingSoon() },
+                    onLong = { trackMenu(t, null, i) })
+            })
+        }
+
+        // Musique du téléphone
+        rows += Row.Header("Sur ce téléphone")
+        if (!hasMediaPerm()) {
+            rows += Row.Entry(
+                "Afficher ma musique", "Autorise l'accès aux fichiers audio du téléphone", null, R.drawable.ic_music,
+                onClick = { askMediaPerm() }
+            )
+        } else {
+            val local = localMusic
+            if (local == null) {
+                rows += Row.Note("Chargement…")
+                loadLocalMusic()
+            } else if (local.isEmpty()) {
+                rows += Row.Note("Aucune musique trouvée sur le téléphone.")
+            } else {
+                val albums = Music.localAlbums(local)
+                rows += Row.Cards(albums.take(15).map { a ->
+                    Row.Card(a.title, a.artist, a.thumb, onClick = { pushMusic(MPage.LocalAlbumP(a)) })
+                })
+                rows += Row.Track("Tous les titres", "${local.size} titres", null, onClick = { pushMusic(MPage.LocalAll) })
+                rows += Row.Track("Albums", "${albums.size} albums", null, onClick = { pushMusic(MPage.LocalAlbums) })
+                rows += Row.Track(
+                    "Artistes", "${local.mapNotNull { it.artist }.distinct().size} artistes", null, round = true,
+                    onClick = { pushMusic(MPage.LocalArtists) }
+                )
+            }
+        }
+        rows += Row.Note("Cherche un titre, un album ou un artiste avec la barre en haut.")
+    }
+
+    private fun musicPageRows(page: MPage, rows: MutableList<Row>) {
+        fun list(title: String, sub: String?, thumb: String?, tracks: List<Track>, numbered: Boolean = false, playlistId: String? = null, round: Boolean = false, onMore: (() -> Unit)? = null) {
+            rows += Row.MusicHeader(
+                title, sub, thumb, round,
+                onPlay = if (tracks.isEmpty()) null else ({ Music.play(tracks, 0); openNowPlayingSoon() }),
+                onShuffle = if (tracks.size < 2) null else ({ Music.play(tracks, (tracks.indices).random(), shuffled = true); openNowPlayingSoon() }),
+                onMore = onMore
+            )
+            tracks.indices.forEach { rows += trackRow(tracks, it, numbered, playlistId) }
+        }
+        when (page) {
+            is MPage.AlbumP -> {
+                val t = page.tracks
+                when {
+                    page.error != null -> {
+                        rows += Row.MusicHeader(page.album.title, page.album.artist, page.album.thumb, false, null, null)
+                        rows += Row.Note("Impossible de charger : ${page.error}")
+                    }
+                    t == null -> {
+                        rows += Row.MusicHeader(page.album.title, page.album.artist, page.album.thumb, false, null, null)
+                        rows += Row.Note("Chargement…")
+                    }
+                    else -> {
+                        val total = t.sumOf { it.duration }
+                        list(
+                            page.album.title,
+                            listOfNotNull(page.album.artist, "${t.size} titres", Yt.formatDuration(total).ifEmpty { null }).joinToString(" · "),
+                            page.album.thumb, t, numbered = true
+                        )
+                    }
+                }
+            }
+            is MPage.ArtistP -> {
+                val a = page.artist
+                val songs = page.songs
+                rows += Row.MusicHeader(
+                    a.name, "Artiste", a.thumb, true,
+                    onPlay = songs?.takeIf { it.isNotEmpty() }?.let { s -> { Music.play(s, 0); openNowPlayingSoon() } },
+                    onShuffle = songs?.takeIf { it.size > 1 }?.let { s -> { Music.play(s, s.indices.random(), true); openNowPlayingSoon() } }
+                )
+                when {
+                    page.error != null -> rows += Row.Note("Impossible de charger : ${page.error}")
+                    songs == null -> rows += Row.Note("Chargement…")
+                    else -> {
+                        if (songs.isNotEmpty()) {
+                            rows += Row.Header("Titres populaires")
+                            songs.indices.forEach { rows += trackRow(songs, it) }
+                        }
+                        val al = page.albums.orEmpty()
+                        if (al.isNotEmpty()) {
+                            rows += Row.Header("Albums")
+                            rows += Row.Cards(al.map { x -> Row.Card(x.title, x.artist, x.thumb, onClick = { pushMusic(MPage.AlbumP(x)) }) })
+                        }
+                        if (songs.isEmpty() && al.isEmpty()) rows += Row.Note("Rien trouvé pour cet artiste.")
+                    }
+                }
+            }
+            is MPage.PlaylistP -> {
+                val p = Store.playlists().firstOrNull { it.id == page.id }
+                if (p == null) {
+                    rows += Row.Note("Playlist supprimée.")
+                    return
+                }
+                list(p.name, "Playlist · ${p.tracks.size} titres", p.tracks.firstOrNull()?.thumb, p.tracks, playlistId = p.id, onMore = { playlistMenu(p) })
+                if (p.tracks.isEmpty()) rows += Row.Note("Playlist vide.\nAppui long sur un titre → « Ajouter à une playlist… »")
+            }
+            MPage.Liked -> {
+                val l = Store.likes()
+                list("Titres likés", "${l.size} titres", null, l)
+                if (l.isEmpty()) rows += Row.Note("Touche ♥ sur l'écran de lecture, ou appui long sur un titre → « J'aime ».")
+            }
+            MPage.Recent -> list("Écoutés récemment", null, null, Store.recentTracks())
+            is MPage.LocalAlbumP -> list(page.album.title, listOfNotNull(page.album.artist, "${page.album.tracks.size} titres").joinToString(" · "), page.album.thumb, page.album.tracks, numbered = true)
+            is MPage.LocalArtistP -> {
+                val t = localMusic.orEmpty().filter { it.artist == page.name }
+                list(page.name, "${t.size} titres", t.firstOrNull()?.thumb, t, round = true)
+            }
+            MPage.LocalAll -> {
+                val t = localMusic.orEmpty().sortedBy { it.title.lowercase() }
+                list("Tous les titres", "${t.size} titres sur le téléphone", null, t)
+            }
+            MPage.LocalAlbums -> {
+                rows += Row.Header("Albums du téléphone")
+                Music.localAlbums(localMusic.orEmpty()).forEach { a ->
+                    rows += Row.Track(a.title, listOfNotNull(a.artist, "${a.tracks.size} titres").joinToString(" · "), a.thumb,
+                        onClick = { pushMusic(MPage.LocalAlbumP(a)) })
+                }
+            }
+            MPage.LocalArtists -> {
+                rows += Row.Header("Artistes du téléphone")
+                localMusic.orEmpty().groupBy { it.artist ?: "Artiste inconnu" }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
+                    .forEach { (name, t) ->
+                        rows += Row.Track(name, "${t.size} titres", t.firstOrNull()?.thumb, round = true,
+                            onClick = { pushMusic(MPage.LocalArtistP(name)) })
+                    }
+            }
+        }
+    }
+
     // ——— Minuteur, infos, file d'attente ———
 
     private fun updateChips() {
@@ -2123,11 +2545,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val PAGES = 4
+        private const val PAGES = 5
         private const val HOME = 0
-        private const val SUBS = 1
-        private const val OFFLINE = 2
-        private const val SETTINGS = 3
+        private const val MUSIC = 1
+        private const val SUBS = 2
+        private const val OFFLINE = 3
+        private const val SETTINGS = 4
         private val AUDIO_EXT = setOf("mp3", "m4a", "aac", "ogg", "oga", "opus", "flac", "wav", "wma", "amr")
         private val VIDEO_EXT = setOf("mp4", "mkv", "webm", "mov", "3gp", "avi", "m4v", "ts")
     }

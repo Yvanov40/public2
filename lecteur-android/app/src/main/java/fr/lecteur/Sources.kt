@@ -40,14 +40,23 @@ import java.io.ByteArrayInputStream
 object Sources {
     private const val TAG = "Sources"
 
-    fun build(info: StreamInfo): MediaSource {
+    fun build(
+        info: StreamInfo, mediaId: String = info.url, audioOnly: Boolean = false,
+        title: String? = null, artist: String? = null, artwork: String? = null
+    ): MediaSource {
         val ds = YtDataSource.Factory()
         val meta = MediaMetadata.Builder()
-            .setTitle(info.name)
-            .setArtist(info.uploaderName)
-            .setArtworkUri(bestThumb(info.thumbnails)?.let(Uri::parse))
+            .setTitle(title ?: info.name)
+            .setArtist(artist ?: info.uploaderName)
+            .setArtworkUri((artwork ?: bestThumb(info.thumbnails))?.let(Uri::parse))
             .build()
-        val item = MediaItem.Builder().setMediaId(info.url).setMediaMetadata(meta).build()
+        val item = MediaItem.Builder().setMediaId(mediaId).setMediaMetadata(meta).build()
+
+        // Musique : audio seul, la vidéo n'est même pas préparée
+        if (audioOnly) {
+            pickAudio(info.audioStreams)?.let { dash(it, info.duration, item, ds) }?.let { return it }
+            info.audioStreams.firstOrNull { it.isUrl }?.let { return progressive(it.content, item, ds) }
+        }
 
         val parts = mutableListOf<MediaSource>()
         val live = info.streamType == StreamType.LIVE_STREAM ||

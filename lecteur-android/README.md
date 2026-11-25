@@ -14,6 +14,9 @@ Lecteur audio/vidéo YouTube léger pour Android (usage personnel).
 - Appui long sur une vidéo : écouter directement en arrière-plan, télécharger, voir la chaîne, partager
 - Podcasts : recherche (annuaires Apple Podcasts et fyyd), flux trouvé à partir d'un lien de page ou Apple Podcasts, ajout d'un flux RSS (Acast…), nouveaux épisodes, téléchargement des épisodes
 - Reprise de lecture partout (vidéos, épisodes, fichiers) là où on s’était arrêté
+- Musique façon Spotify : recherche YouTube Music (titres, albums, artistes, playlists), pages d'album et d'artiste,
+  titres likés, playlists perso, mix, aléatoire / répétition, écran « en cours de lecture » aux couleurs de la pochette,
+  paroles synchronisées (LRCLIB), musique du téléphone par album et artiste
 - Minuteur de sommeil, file d'attente (« Lire ensuite »), vidéo suivante automatique
 - SponsorBlock (saute sponsors, intros…), saut des silences, égaliseur de volume
 - Description et chapitres (YouTube et podcasts), image dans l'image

@@ -54,6 +54,28 @@ object Thumbs {
         }
     }
 
+    /** Récupère l'image (pour en extraire les couleurs). */
+    fun get(ctx: android.content.Context, url: String?, cb: (Bitmap?) -> Unit) {
+        if (url == null) return cb(null)
+        cache.get(url)?.let { return cb(it) }
+        val app = ctx.applicationContext
+        pool.execute {
+            val bmp = try {
+                if (url.startsWith("content://")) {
+                    if (Build.VERSION.SDK_INT >= 29) app.contentResolver.loadThumbnail(Uri.parse(url), Size(480, 480), null) else null
+                } else {
+                    val req = okhttp3.Request.Builder().url(url).build()
+                    DownloaderImpl.instance.client.newCall(req).execute().use { it.body?.bytes() }
+                        ?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                }
+            } catch (_: Exception) {
+                null
+            }
+            bmp?.let { cache.put(url, it) }
+            main.post { cb(bmp) }
+        }
+    }
+
     private fun show(view: ImageView, bmp: Bitmap) {
         view.scaleType = ImageView.ScaleType.CENTER_CROP
         view.setImageBitmap(bmp)
