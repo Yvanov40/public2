@@ -71,6 +71,54 @@ object Settings {
         get() = p.getInt("maxHeight", 1080)
         set(v) = p.edit().putInt("maxHeight", v).apply()
 
+    private fun bool(k: String, d: Boolean) = p.getBoolean(k, d)
+    private fun setBool(k: String, v: Boolean) = p.edit().putBoolean(k, v).apply()
+
+    var skipSilence: Boolean
+        get() = bool("skipSilence", false)
+        set(v) = setBool("skipSilence", v)
+
+    var normalize: Boolean
+        get() = bool("normalize", false)
+        set(v) = setBool("normalize", v)
+
+    var autoplay: Boolean
+        get() = bool("autoplay", false)
+        set(v) = setBool("autoplay", v)
+
+    var pip: Boolean
+        get() = bool("pip", false)
+        set(v) = setBool("pip", v)
+
+    var sponsorBlock: Boolean
+        get() = bool("sponsorBlock", true)
+        set(v) = setBool("sponsorBlock", v)
+
+    /** clé SponsorBlock → libellé */
+    val sbCategories = listOf(
+        "sponsor" to "Sponsors",
+        "selfpromo" to "Autopromotion",
+        "interaction" to "Rappels « abonne-toi »",
+        "intro" to "Intros / attentes",
+        "outro" to "Génériques de fin",
+        "music_offtopic" to "Hors-sujet (musique)"
+    )
+
+    fun sbEnabled(cat: String) = bool("sb_$cat", cat in setOf("sponsor", "selfpromo", "interaction"))
+    fun setSb(cat: String, v: Boolean) = setBool("sb_$cat", v)
+
+    var checkNew: Boolean
+        get() = bool("checkNew", true)
+        set(v) = setBool("checkNew", v)
+
+    var autoDownload: Boolean
+        get() = bool("autoDownload", false)
+        set(v) = setBool("autoDownload", v)
+
+    var lastUpdateCheck: Long
+        get() = p.getLong("lastUpdateCheck", 0)
+        set(v) = p.edit().putLong("lastUpdateCheck", v).apply()
+
     val cards get() = layout == "cards"
 
     fun applyNightMode() = AppCompatDelegate.setDefaultNightMode(

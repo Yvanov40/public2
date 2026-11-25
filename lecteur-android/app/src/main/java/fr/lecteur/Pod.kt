@@ -23,7 +23,9 @@ data class Episode(
     val image: String?,
     val podcastTitle: String,
     val podcastArt: String?,
-    val feedUrl: String
+    val feedUrl: String,
+    val description: String? = null,
+    val chapters: List<Pair<Long, String>> = emptyList()
 )
 
 /** Podcasts : recherche dans l'annuaire Apple et lecture des flux RSS (Acast, etc.). */
@@ -138,7 +140,8 @@ object Pod {
         p.setInput(xml.reader())
 
         var title = ""; var author: String? = null; var art: String? = null
-        val eps = mutableListOf<Triple<MutableMap<String, String>, String?, Unit>>()
+        val eps = mutableListOf<Triple<MutableMap<String, String>, List<Pair<Long, String>>, Unit>>()
+        var chapters = mutableListOf<Pair<Long, String>>()
         var item: MutableMap<String, String>? = null
         var inImage = false
         val text = StringBuilder()
@@ -149,7 +152,15 @@ object Pod {
                 XmlPullParser.START_TAG -> {
                     text.setLength(0)
                     when (p.name) {
-                        "item", "entry" -> item = mutableMapOf()
+                        "item", "entry" -> {
+                            item = mutableMapOf()
+                            chapters = mutableListOf()
+                        }
+                        "psc:chapter" -> if (item != null) {
+                            val st = parseDuration(p.getAttributeValue(null, "start")?.substringBefore('.'))
+                            val ti = p.getAttributeValue(null, "title")
+                            if (ti != null) chapters.add(st * 1000 to ti)
+                        }
                         "image" -> if (item == null) inImage = true
                         "itunes:image" -> {
                             val href = p.getAttributeValue(null, "href")
@@ -177,7 +188,7 @@ object Pod {
                     val m = item
                     when {
                         p.name == "item" || p.name == "entry" -> {
-                            if (m != null) eps += Triple(m, null, Unit)
+                            if (m != null) eps += Triple(m, chapters.toList(), Unit)
                             item = null
                         }
                         p.name == "image" -> inImage = false
@@ -185,6 +196,9 @@ object Pod {
                             "title" -> if (t.isNotEmpty()) m["title"] = t
                             "pubDate", "published" -> m["date"] = t
                             "itunes:duration" -> m["duration"] = t
+                            "content:encoded" -> if (t.isNotEmpty()) m["desc"] = t
+                            "description", "itunes:summary", "summary" ->
+                                if (t.isNotEmpty() && m["desc"] == null) m["desc"] = t
                         }
                         inImage && p.name == "url" -> { if (t.isNotEmpty() && art == null) art = t }
                         p.name == "title" && title.isEmpty() -> title = t
@@ -197,11 +211,11 @@ object Pod {
         }
 
         val podcast = Podcast(feedUrl, title.ifEmpty { feedUrl }, author, art)
-        val episodes = eps.mapNotNull { (m, _, _) ->
+        val episodes = eps.mapNotNull { (m, ch, _) ->
             val audio = m["url"] ?: return@mapNotNull null
             Episode(
                 m["title"] ?: "Épisode", audio, parseDate(m["date"]), parseDuration(m["duration"]),
-                m["image"], podcast.title, art, feedUrl
+                m["image"], podcast.title, art, feedUrl, m["desc"], ch
             )
         }
         return podcast to episodes

@@ -164,37 +164,14 @@ class DownloadService : Service() {
     /** Épisode de podcast : simple fichier audio. */
     private fun downloadDirect(t: Downloads.Item, work: File) {
         t.state = Downloads.State.RUNNING
-        val f = File(work, "episode")
         update(t, "Audio", 0)
-        val req = okhttp3.Request.Builder().url(t.url).header("User-Agent", DownloaderImpl.USER_AGENT).build()
-        val r = DownloaderImpl.instance.client.newCall(req).execute()
-        r.use { resp ->
-            if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
-            val body = resp.body ?: throw IOException("réponse vide")
-            val total = body.contentLength()
-            body.byteStream().use { input ->
-                f.outputStream().buffered().use { out ->
-                    val buf = ByteArray(64 * 1024)
-                    var done = 0L
-                    while (true) {
-                        if (t.cancel) throw Cancelled()
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        out.write(buf, 0, n)
-                        done += n
-                        if (total > 0) update(t, "Audio", (done * 100 / total).toInt())
-                    }
-                }
+        try {
+            DirectDownload.run(this, t.url, t.title, t.artist, t.thumb, work, { t.cancel }) { pct ->
+                update(t, "Audio", pct)
             }
+        } catch (e: DirectDownload.Cancelled) {
+            throw Cancelled()
         }
-        val path = Uri.parse(t.url).lastPathSegment.orEmpty()
-        val ext = path.substringAfterLast('.', "mp3").lowercase().takeIf { it.length in 2..4 } ?: "mp3"
-        val mime = when (ext) { "m4a", "mp4", "aac" -> "audio/mp4"; "ogg", "oga", "opus" -> "audio/ogg"; else -> "audio/mpeg" }
-        val base = safeName(t.title)
-        val uri = Saver.save(this, f, "$base.$ext", mime, false, t.title)
-        Store.addDownload(
-            Store.Download(uri.toString(), t.title, t.artist, t.thumb, false, t.url, "Music/Lecteur/$base.$ext")
-        )
     }
 
     /** Téléchargement par morceaux (YouTube bride les gros téléchargements d'un seul tenant). */
@@ -298,8 +275,7 @@ class DownloadService : Service() {
         try { nm.notify((System.currentTimeMillis() % 100000).toInt() + 100, n) } catch (_: Exception) {}
     }
 
-    private fun safeName(name: String) =
-        name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(120).ifEmpty { "video" }
+    private fun safeName(name: String) = DirectDownload.safeName(name)
 
     companion object {
         private const val TAG = "DownloadService"

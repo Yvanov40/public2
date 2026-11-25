@@ -149,6 +149,73 @@ class MainActivity : AppCompatActivity() {
     private var localFiles: List<LocalMedia.Item>? = null
     private var scanJob: Job? = null
     private var pendingDelete: OffItem? = null
+    private val ui = android.os.Handler(android.os.Looper.getMainLooper())
+    private val ticker = object : Runnable {
+        override fun run() {
+            updateChips()
+            if (Playback.sleepAt > 0) ui.postDelayed(this, 30_000)
+        }
+    }
+
+    private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) lifecycleScope.launch {
+            busy(true)
+            try {
+                val r = withContext(Dispatchers.IO) { Backup.importSubscriptions(applicationContext, uri) }
+                snack("Importé : ${r.podcasts.size} podcasts, ${r.channels.size} chaînes")
+                podFeed = null
+                subsFeed = null
+                renderAll()
+                // Récupère les pochettes des podcasts importés
+                withContext(Dispatchers.IO) {
+                    r.podcasts.forEach { p ->
+                        runCatching { Pod.feed(p.feedUrl).first }.getOrNull()?.let { info ->
+                            Store.subscribePodcast(info.copy(feedUrl = p.feedUrl))
+                        }
+                    }
+                }
+                renderAll()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snack("Import impossible : ${e.message}")
+            } finally {
+                busy(false)
+            }
+        }
+    }
+    private val backupLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) try {
+            Backup.export(this, uri)
+            snack("Sauvegarde enregistrée")
+        } catch (e: Exception) {
+            snack("Sauvegarde impossible : ${e.message}")
+        }
+    }
+    private val restoreLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) MaterialAlertDialogBuilder(this)
+            .setTitle("Restaurer ?")
+            .setMessage("Abonnements, historique, positions de lecture et réglages actuels seront remplacés.")
+            .setPositiveButton("Restaurer") { _, _ ->
+                try {
+                    Backup.restore(this, uri)
+                    Settings.applyNightMode()
+                    recreate()
+                } catch (e: Exception) {
+                    snack("Restauration impossible : ${e.message}")
+                }
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+    private val opmlLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/x-opml")) { uri ->
+        if (uri != null) try {
+            Backup.exportOpml(this, uri)
+            snack("${Store.podcasts().size} podcasts exportés")
+        } catch (e: Exception) {
+            snack("Export impossible : ${e.message}")
+        }
+    }
 
     /** Un fichier de Music/Lecteur ou Movies/Lecteur, avec les infos YouTube si on les connaît. */
     private class OffItem(
@@ -275,6 +342,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<Chip>(R.id.chipClose).setOnClickListener { stopPlayback() }
+        findViewById<Chip>(R.id.chipSleep).setOnClickListener { sleepMenu() }
+        findViewById<Chip>(R.id.chipInfo).setOnClickListener { infoSheet() }
+        findViewById<Chip>(R.id.chipQueue).setOnClickListener { queueSheet() }
+        miniPlayer.setOnLongClickListener { playerMenu(); true }
 
         // Mini-lecteur
         miniPlayer.setOnClickListener { setVideoMode(true) }
@@ -314,6 +385,7 @@ class MainActivity : AppCompatActivity() {
             this, SessionToken(this, ComponentName(this, PlaybackService::class.java))
         ).buildAsync()
 
+        Playback.listener = { refreshUi() }
         Store.onChange = { rescanLocal() }
         Downloads.onChange = { render(OFFLINE) }
         refreshUi()
@@ -321,12 +393,38 @@ class MainActivity : AppCompatActivity() {
         savedInstanceState?.getInt("page", -1)?.takeIf { it in 0 until PAGES }?.let {
             pager.setCurrentItem(it, false)
         }
-        if (savedInstanceState == null) handleIntent(intent)
+        if (savedInstanceState == null) {
+            handleIntent(intent)
+            autoUpdateCheck()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
+    }
+
+    // ——— Image dans l'image ———
+    private var inPip = false
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Settings.pip && player.isPlaying && PlayerHolder.videoMode && player.mediaItemCount > 0) {
+            try {
+                enterPictureInPictureMode(
+                    android.app.PictureInPictureParams.Builder()
+                        .setAspectRatio(android.util.Rational(16, 9)).build()
+                )
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        inPip = isInPictureInPictureMode
+        playerView.useController = !inPip
+        refreshUi()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -345,12 +443,14 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         // Appli en arrière-plan ou écran verrouillé : audio seul, la vidéo n'est plus téléchargée
-        if (!isChangingConfigurations) PlayerHolder.setVideoEnabled(player, false)
+        if (!isChangingConfigurations && !inPip) PlayerHolder.setVideoEnabled(player, false)
     }
 
     override fun onDestroy() {
         Store.onChange = null
         Downloads.onChange = null
+        Playback.listener = null
+        ui.removeCallbacks(ticker)
         player.removeListener(listener)
         playerView.player = null
         controllerFuture?.let { MediaController.releaseFuture(it) }
@@ -454,6 +554,11 @@ class MainActivity : AppCompatActivity() {
     // ——— Entrées : partage, lien, recherche ———
 
     private fun handleIntent(intent: Intent?) {
+        intent?.getIntExtra("page", -1)?.takeIf { it in 0 until PAGES }?.let {
+            if (it == SUBS) subsMode = "pod"
+            pager.setCurrentItem(it, false)
+            return
+        }
         val text = when (intent?.action) {
             Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
             Intent.ACTION_VIEW -> intent.dataString
@@ -527,23 +632,7 @@ class MainActivity : AppCompatActivity() {
         loadJob = lifecycleScope.launch {
             busy(true)
             try {
-                val (info, source) = withContext(Dispatchers.IO) {
-                    val i = Yt.info(url)
-                    i to Sources.build(i)
-                }
-                // En arrière-plan direct : la piste vidéo n'est jamais chargée
-                PlayerHolder.videoMode = !audioOnly
-                PlayerHolder.setVideoEnabled(player, !audioOnly)
-                // Reprise là où on s'était arrêté
-                player.setMediaSource(source, Store.position(info.url).coerceAtLeast(0))
-                player.prepare()
-                player.play()
-                val v = Vid(
-                    info.url, info.name, info.uploaderName, info.uploaderUrl,
-                    Sources.bestThumb(info.thumbnails, 300), info.duration
-                )
-                PlayerHolder.current = v
-                Store.addWatched(v)
+                Playback.playYoutube(url, audioOnly)
                 refreshUi()
                 if (searchQuery == null) render(HOME)
             } catch (e: CancellationException) {
@@ -561,7 +650,7 @@ class MainActivity : AppCompatActivity() {
         if (fullscreen) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         player.stop()
         player.clearMediaItems()
-        PlayerHolder.current = null
+        Playback.startedLocal()
         refreshUi()
     }
 
@@ -994,7 +1083,11 @@ class MainActivity : AppCompatActivity() {
         }
         val start = Store.position(Pod.mediaId(list[index])).coerceAtLeast(0)
         loadJob?.cancel()
-        PlayerHolder.current = null
+        Playback.startedLocal()
+        list.forEach { e ->
+            if (e.description != null || e.chapters.isNotEmpty())
+                Playback.setInfo(Pod.mediaId(e), Playback.Info(e.description, true, e.chapters))
+        }
         PlayerHolder.videoMode = false
         PlayerHolder.setVideoEnabled(player, false)
         player.setMediaItems(items, index, start)
@@ -1032,6 +1125,10 @@ class MainActivity : AppCompatActivity() {
                 Opt(R.drawable.ic_retry, "Écouter depuis le début") {
                     Store.setPosition(id, 0)
                     playEpisodes(list, i)
+                },
+                Opt(R.drawable.ic_queue, "Ajouter à la file d'attente") {
+                    Playback.addLast(Playback.QItem(e.title, e.podcastTitle, e.image ?: e.podcastArt, uri = e.audioUrl, mediaId = id))
+                    snack("Ajouté à la file (${Playback.queue.size})")
                 },
                 Opt(R.drawable.ic_download, "Télécharger l'épisode") { downloadEpisode(e) },
                 Opt(R.drawable.ic_play, if (done) "Marquer comme non écouté" else "Marquer comme écouté") {
@@ -1169,6 +1266,14 @@ class MainActivity : AppCompatActivity() {
                 Store.setPosition(v.url, 0)
                 play(v.url)
             },
+            Opt(R.drawable.ic_playnext, "Lire ensuite") {
+                Playback.addNext(Playback.QItem(v.title, v.uploader, v.thumb, ytUrl = v.url))
+                snack("Sera lu ensuite")
+            },
+            Opt(R.drawable.ic_queue, "Ajouter à la file d'attente") {
+                Playback.addLast(Playback.QItem(v.title, v.uploader, v.thumb, ytUrl = v.url))
+                snack("Ajouté à la file (${Playback.queue.size})")
+            },
             Opt(R.drawable.ic_audio, "Télécharger l'audio") { startDownload(v.url, false, v.title) },
             Opt(R.drawable.ic_download, "Télécharger la vidéo") { startDownload(v.url, true, v.title) }
         )
@@ -1203,7 +1308,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startLocal(items: List<MediaItem>, index: Int, audio: Boolean) {
         loadJob?.cancel()
-        PlayerHolder.current = null
+        Playback.startedLocal()
         PlayerHolder.videoMode = !audio
         PlayerHolder.setVideoEnabled(player, !audio)
         player.setMediaItems(items, index, Store.position(items[index].mediaId).coerceAtLeast(0))
@@ -1483,6 +1588,10 @@ class MainActivity : AppCompatActivity() {
             Opt(R.drawable.ic_play, "Lire") { playDownloads(list, i) }
         )
         if (d.video) opts += Opt(R.drawable.ic_headphones, "Écouter en arrière-plan") { playDownloads(list, i, true) }
+        opts += Opt(R.drawable.ic_queue, "Ajouter à la file d'attente") {
+            Playback.addLast(Playback.QItem(d.title, d.uploader, d.thumb, uri = d.uri.toString()))
+            snack("Ajouté à la file (${Playback.queue.size})")
+        }
         opts += Opt(R.drawable.ic_share, "Partager le fichier") { share(d) }
         opts += Opt(R.drawable.ic_delete, "Supprimer du téléphone") { confirmDelete(d) }
         sheet(d.title, "Mémoire interne › ${d.path}", opts)
@@ -1528,6 +1637,134 @@ class MainActivity : AppCompatActivity() {
                 pendingDelete = d
                 deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
             } else snack("Suppression impossible : utilise l'appli Fichiers")
+        }
+    }
+
+    // ——— Minuteur, infos, file d'attente ———
+
+    private fun updateChips() {
+        findViewById<Chip>(R.id.chipSleep).text = Playback.sleepLabel()?.let { "Minuteur · $it" } ?: getString(R.string.sleep)
+        val n = Playback.queue.size
+        findViewById<Chip>(R.id.chipQueue).text = if (n > 0) "File · $n" else getString(R.string.queue)
+        val info = Playback.currentInfo()
+        findViewById<Chip>(R.id.chipInfo).isVisible = info != null
+        if (Playback.sleepAt > 0) {
+            ui.removeCallbacks(ticker)
+            ui.postDelayed(ticker, 30_000)
+        }
+    }
+
+    private fun sleepMenu() {
+        val opts = mutableListOf<Opt>()
+        listOf(10, 15, 30, 45, 60, 90).forEach { m ->
+            opts += Opt(R.drawable.ic_timer, "$m minutes") { Playback.setSleep(m); snack("Arrêt dans $m min") }
+        }
+        opts += Opt(R.drawable.ic_timer, "À la fin de la vidéo / de l'épisode") {
+            Playback.setSleepEndOfItem()
+            snack("Arrêt à la fin de l'élément en cours")
+        }
+        if (Playback.sleepLabel() != null) opts += Opt(R.drawable.ic_close, "Désactiver le minuteur") { Playback.cancelSleep() }
+        sheet("Minuteur de sommeil", Playback.sleepLabel()?.let { "En cours : $it" }, opts)
+    }
+
+    private fun playerMenu() {
+        val opts = mutableListOf(
+            Opt(R.drawable.ic_timer, "Minuteur de sommeil") { sleepMenu() },
+            Opt(R.drawable.ic_queue, "File d'attente (${Playback.queue.size})") { queueSheet() }
+        )
+        if (Playback.currentInfo() != null) opts.add(1, Opt(R.drawable.ic_info, "Description et chapitres") { infoSheet() })
+        sheet(player.mediaMetadata.title?.toString(), player.mediaMetadata.artist?.toString(), opts)
+    }
+
+    /** Description et chapitres de l'élément en cours ; toucher un chapitre y saute. */
+    private fun infoSheet() {
+        val info = Playback.currentInfo() ?: return
+        val dlg = BottomSheetDialog(this)
+        val d = resources.displayMetrics.density
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, (4 * d).toInt(), 0, (24 * d).toInt())
+        }
+        fun text(t: CharSequence, attr: Int, top: Int = 8) = TextView(this).apply {
+            text = t
+            TextViewCompat.setTextAppearance(this, attrRes(attr))
+            setPadding((24 * d).toInt(), (top * d).toInt(), (24 * d).toInt(), (4 * d).toInt())
+        }
+        box.addView(text(player.mediaMetadata.title ?: "", com.google.android.material.R.attr.textAppearanceTitleMedium))
+        if (info.chapters.isNotEmpty()) {
+            box.addView(text("Chapitres", com.google.android.material.R.attr.textAppearanceLabelLarge, 16))
+            info.chapters.forEach { (ms, title) ->
+                val row = layoutInflater.inflate(R.layout.item_sheet_option, box, false)
+                row.findViewById<ImageView>(R.id.icon).setImageResource(R.drawable.ic_play)
+                row.findViewById<TextView>(R.id.label).text = Yt.formatDuration(ms / 1000).ifEmpty { "0:00" } + "  ·  " + title
+                row.setOnClickListener {
+                    player.seekTo(ms)
+                    player.play()
+                    dlg.dismiss()
+                }
+                box.addView(row)
+            }
+        }
+        info.description?.let { desc ->
+            box.addView(text("Description", com.google.android.material.R.attr.textAppearanceLabelLarge, 16))
+            val body = if (info.html || desc.contains("<")) androidx.core.text.HtmlCompat.fromHtml(desc, androidx.core.text.HtmlCompat.FROM_HTML_MODE_COMPACT) else desc
+            box.addView(text(body, com.google.android.material.R.attr.textAppearanceBodyMedium).apply {
+                setTextIsSelectable(true)
+                movementMethod = android.text.method.LinkMovementMethod.getInstance()
+                android.text.util.Linkify.addLinks(this, android.text.util.Linkify.WEB_URLS)
+            })
+        }
+        Ui.applyFont(box)
+        dlg.setContentView(androidx.core.widget.NestedScrollView(this).apply { addView(box) })
+        dlg.show()
+    }
+
+    private fun queueSheet() {
+        val q = Playback.queue
+        val opts = q.mapIndexed { i, item ->
+            Opt(R.drawable.ic_close, "${i + 1}. ${item.title}") {
+                Playback.removeFromQueue(i)
+                snack("Retiré de la file")
+            }
+        }.toMutableList()
+        if (q.isNotEmpty()) opts += Opt(R.drawable.ic_delete, "Vider la file") { Playback.clearQueue() }
+        sheet(
+            "File d'attente",
+            if (q.isEmpty()) "Vide. Appui long sur une vidéo ou un épisode → « Lire ensuite » ou « Ajouter à la file »."
+            else "Toucher un élément pour le retirer. La suite démarre à la fin de la lecture en cours.",
+            opts
+        )
+    }
+
+    // ——— Mises à jour ———
+
+    private fun autoUpdateCheck() {
+        if (System.currentTimeMillis() - Settings.lastUpdateCheck < 12 * 3600_000L) return
+        checkUpdate(manual = false)
+    }
+
+    private fun checkUpdate(manual: Boolean) {
+        lifecycleScope.launch {
+            try {
+                val u = Updates.check(applicationContext)
+                Settings.lastUpdateCheck = System.currentTimeMillis()
+                if (u == null) {
+                    if (manual) snack("Tu as la dernière version (v${Updates.current(this@MainActivity)})")
+                    return@launch
+                }
+                MaterialAlertDialogBuilder(this@MainActivity)
+                    .setTitle("Nouvelle version : v${u.version}")
+                    .setMessage("Tu as la v${Updates.current(this@MainActivity)}. Télécharger la nouvelle version ? Ouvre ensuite le fichier pour l'installer par-dessus.")
+                    .setPositiveButton("Télécharger") { _, _ ->
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u.url)))
+                    }
+                    .setNegativeButton("Plus tard", null)
+                    .show()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (manual) snack("Vérification impossible : ${e.message}")
+            }
         }
     }
 
@@ -1577,7 +1814,62 @@ class MainActivity : AppCompatActivity() {
             qualities.map { "${it}p" }, qualities.indexOf(Settings.maxHeight).let { if (it < 0) 3 else it }
         ) { i -> Settings.maxHeight = qualities[i]; render(SETTINGS) }
 
+        rows += Row.Toggle(
+            "Sauter les silences", "Raccourcit les blancs, surtout utile pour les podcasts", Settings.skipSilence
+        ) { on -> Settings.skipSilence = on; PlayerHolder.applySkipSilence() }
+        rows += Row.Toggle(
+            "Égaliser le volume", "Voix plus régulières, passages forts adoucis (Android 9 et plus)", Settings.normalize
+        ) { on -> Settings.normalize = on; PlayerHolder.applyNormalize() }
+        rows += Row.Toggle(
+            "Vidéo suivante automatique",
+            "À la fin d'une vidéo, enchaîne sur une suggestion si la file d'attente est vide", Settings.autoplay
+        ) { on -> Settings.autoplay = on }
+        rows += Row.Toggle(
+            "Image dans l'image",
+            "En quittant l'appli pendant une vidéo, elle continue dans une petite fenêtre (sinon : audio seul)",
+            Settings.pip
+        ) { on -> Settings.pip = on }
+
+        rows += Row.Header("SponsorBlock")
+        rows += Row.Toggle(
+            "Sauter les passages sponsorisés",
+            "Base collaborative SponsorBlock, vidéos YouTube uniquement", Settings.sponsorBlock
+        ) { on -> Settings.sponsorBlock = on; render(SETTINGS) }
+        if (Settings.sponsorBlock) {
+            Settings.sbCategories.forEach { (key, label) ->
+                rows += Row.Toggle(label, null, Settings.sbEnabled(key)) { on -> Settings.setSb(key, on) }
+            }
+        }
+
+        rows += Row.Header("Nouveautés")
+        rows += Row.Toggle(
+            "Vérifier les nouveautés", "Toutes les 6 h : notification des nouveaux épisodes et vidéos", Settings.checkNew
+        ) { on -> Settings.checkNew = on }
+        rows += Row.Toggle(
+            "Télécharger les nouveaux épisodes", "Automatiquement, en Wi-Fi seulement (5 au plus à chaque fois)",
+            Settings.autoDownload
+        ) { on -> Settings.autoDownload = on }
+
         rows += Row.Header("Données")
+        rows += Row.Entry(
+            "Importer des abonnements…", "Podcast Addict et autres (OPML), NewPipe (JSON), Google Takeout (CSV)",
+            null, R.drawable.ic_download, onClick = { importLauncher.launch(arrayOf("*/*")) }
+        )
+        rows += Row.Entry(
+            "Exporter mes podcasts (OPML)", "Pour les retrouver dans une autre appli", null, R.drawable.ic_upload,
+            onClick = { opmlLauncher.launch("lecteur-podcasts.opml") }
+        )
+        rows += Row.Entry(
+            "Sauvegarder tout…", "Abonnements, historique, positions de lecture, réglages", null, R.drawable.ic_upload,
+            onClick = {
+                val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.FRANCE).format(java.util.Date())
+                backupLauncher.launch("lecteur-sauvegarde-$day.json")
+            }
+        )
+        rows += Row.Entry(
+            "Restaurer une sauvegarde…", null, null, R.drawable.ic_download,
+            onClick = { restoreLauncher.launch(arrayOf("application/json", "*/*")) }
+        )
         rows += Row.Entry(
             "Effacer l'historique", "Recherches récentes et vidéos lues", null, R.drawable.ic_delete,
             onClick = {
@@ -1601,6 +1893,11 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {
             "?"
         }
+        rows += Row.Header("Application")
+        rows += Row.Entry(
+            "Rechercher une mise à jour", "Vérifie aussi automatiquement deux fois par jour", null, R.drawable.ic_update,
+            onClick = { checkUpdate(manual = true) }
+        )
         rows += Row.Note("Lecteur · version $version")
     }
 
@@ -1643,11 +1940,12 @@ class MainActivity : AppCompatActivity() {
         val has = player.mediaItemCount > 0
         val video = PlayerHolder.videoMode
         val land = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        fullscreen = has && video && land
+        fullscreen = has && video && (land || inPip)
         val yt = PlayerHolder.current != null
 
         playerView.isVisible = has && video
         nowPanel.isVisible = has && video && !fullscreen
+        updateChips()
         miniPlayer.isVisible = has && !video && !fullscreen
         chipDownload.isVisible = yt
         chipChannel.isVisible = yt && PlayerHolder.current?.uploaderUrl != null

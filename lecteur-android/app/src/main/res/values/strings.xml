@@ -15,4 +15,7 @@
     <string name="close">Fermer</string>
     <string name="show_video">Afficher la vidéo</string>
     <string name="tab_settings">Réglages</string>
+    <string name="sleep">Minuteur</string>
+    <string name="info">Infos</string>
+    <string name="queue">File</string>
 </resources>

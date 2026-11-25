@@ -128,6 +128,11 @@ object Store {
         prefs.edit().putString("positions", o.toString()).apply()
     }
 
+    /** Date (ms) de la dernière nouveauté vue pour un flux ou une chaîne. */
+    @Synchronized fun lastSeen(key: String): Long = prefs.getLong("seen_$key", 0)
+
+    @Synchronized fun setLastSeen(key: String, ms: Long) = prefs.edit().putLong("seen_$key", ms).apply()
+
     // ——— Téléchargements ———
     @Synchronized fun downloads(): List<Download> = objects("downloads").map {
         Download(
