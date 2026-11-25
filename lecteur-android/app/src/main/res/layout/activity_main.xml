@@ -40,6 +40,14 @@
             android:textSize="15sp" />
 
         <ImageButton
+            android:id="@+id/miniDownload"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/download"
+            android:src="@drawable/ic_download" />
+
+        <ImageButton
             android:id="@+id/miniPlay"
             android:layout_width="48dp"
             android:layout_height="48dp"
@@ -83,6 +91,37 @@
             android:contentDescription="@string/search"
             android:src="@android:drawable/ic_menu_search"
             app:tint="?android:textColorPrimary" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/tabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/tabHome"
+            style="?attr/borderlessButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/tab_home" />
+
+        <Button
+            android:id="@+id/tabOffline"
+            style="?attr/borderlessButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/tab_offline" />
+
+        <Button
+            android:id="@+id/tabFolders"
+            style="?attr/borderlessButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/tab_folders" />
     </LinearLayout>
 
     <TextView

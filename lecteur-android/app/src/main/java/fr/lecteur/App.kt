@@ -8,6 +8,7 @@ import org.schabi.newpipe.extractor.localization.Localization
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        Store.init(this)
         NewPipe.init(DownloaderImpl.instance, Localization("fr", "FR"), ContentCountry("FR"))
     }
 }

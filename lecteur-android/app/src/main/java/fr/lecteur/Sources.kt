@@ -81,7 +81,7 @@ object Sources {
         return if (parts.size == 1) parts[0] else MergingMediaSource(*parts.toTypedArray())
     }
 
-    private fun pickVideo(list: List<VideoStream>): VideoStream? {
+    fun pickVideo(list: List<VideoStream>): VideoStream? {
         val ok = list.filter {
             it.isUrl && it.itagItem != null &&
                 it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.height in 1..MAX_HEIGHT
@@ -92,7 +92,7 @@ object Sources {
             ?: best { true }
     }
 
-    private fun pickAudio(list: List<AudioStream>): AudioStream? {
+    fun pickAudio(list: List<AudioStream>): AudioStream? {
         val ok = list.filter {
             it.isUrl && it.itagItem != null && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP
         }
@@ -101,6 +101,12 @@ object Sources {
         return original.filter { it.format == MediaFormat.M4A }.maxByOrNull { it.averageBitrate }
             ?: original.maxByOrNull { it.averageBitrate }
     }
+
+    /** Vidéo pour téléchargement : H.264 (assemblable en MP4), 720p max pour rester léger. */
+    fun pickVideoForDownload(list: List<VideoStream>): VideoStream? = list.filter {
+        it.isUrl && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP &&
+            it.format == MediaFormat.MPEG_4 && it.codec?.startsWith("avc") == true && it.height in 1..720
+    }.maxByOrNull { it.height * 1000 + it.fps }
 
     private fun dash(s: Stream, durationSec: Long, item: MediaItem, ds: DataSource.Factory): MediaSource? {
         val itag = s.itagItem ?: return null
