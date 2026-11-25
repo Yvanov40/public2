@@ -34,8 +34,27 @@ final class FolderWheelView extends View {
 
     private static final long LONG_PRESS_MS = 550;
 
+    /** Styles d'ouverture d'un dossier. */
+    static final int CIRCLE = 0, COLUMN = 1, GRID = 2, LIST = 3;
+    static final String[] STYLES = {"Cercle", "Colonne (glisser vertical)", "Grille de tuiles", "Liste"};
+
+    private int style = CIRCLE;
+    private boolean showName = true;
+    private final android.graphics.RectF panel = new android.graphics.RectF();
+    private boolean panelUp;
+    private final TextPaint rowText = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+
+    void setStyle(int s) {
+        style = Math.max(0, Math.min(3, s));
+    }
+
+    void setShowName(boolean show) {
+        showName = show;
+    }
+
     private static final class Spot {
         float x, y;
+        float l, t, r, b; // case touchable (styles en panneau)
         AppRepository.AppEntry app;
     }
 
@@ -109,6 +128,8 @@ final class FolderWheelView extends View {
         small.setColor(Color.WHITE);
         small.setTextAlign(Paint.Align.CENTER);
         small.setTextSize(10 * getResources().getDisplayMetrics().scaledDensity);
+        rowText.setColor(Color.WHITE);
+        rowText.setTextSize(14 * getResources().getDisplayMetrics().scaledDensity);
         setHapticFeedbackEnabled(true);
     }
 
@@ -142,7 +163,11 @@ final class FolderWheelView extends View {
 
     /** {@code realFolder} = false pour les applis récentes (pas de « Retirer du dossier »). */
     void open(String folder, int color, List<AppRepository.AppEntry> apps, float x, float y, boolean realFolder) {
-        if (!realFolder) iconFactor = 1f;
+        if (!realFolder) {
+            iconFactor = 1f;
+            style = CIRCLE;
+            showName = true;
+        }
         this.realFolder = realFolder;
         this.folder = folder;
         this.color = color;
@@ -178,6 +203,10 @@ final class FolderWheelView extends View {
         arcs.clear();
         int n = apps.size();
         if (n == 0) return;
+        if (style != CIRCLE) {
+            layoutPanel(apps);
+            return;
+        }
         float scale = store.folderRadius() / 100f;
         float icon = iconPxBase();
         boolean labels = store.folderLabels();
@@ -205,6 +234,75 @@ final class FolderWheelView extends View {
             }
             arcs.add(full ? new float[]{r, 0f, 360f} : new float[]{r, first, da * (take - 1)});
             placed += take;
+        }
+    }
+
+    /**
+     * Colonne, grille ou liste : un panneau collé au dossier, au-dessus ou en dessous selon la
+     * place. La première appli est la plus proche du dossier (le doigt part de là).
+     */
+    private void layoutPanel(List<AppRepository.AppEntry> apps) {
+        int n = apps.size();
+        float icon = iconPxBase();
+        boolean labels = style != COLUMN || store.folderLabels();
+        float left = safe.left + 12 * dp, right = getWidth() - safe.right - 12 * dp;
+        float top = Math.max(safe.top, 24 * dp) + 12 * dp, bottom = getHeight() - Math.max(safe.bottom, 16 * dp) - 12 * dp;
+        float gap = 38 * dp, pad = 10 * dp;
+        float above = cy - gap - top, below = bottom - (cy + gap);
+        panelUp = above >= below;
+        float avail = Math.max(icon, panelUp ? above : below);
+        float cellW, cellH;
+        if (style == LIST) {
+            cellW = Math.min(250 * dp, right - left - 2 * pad);
+            cellH = Math.max(icon, 34 * dp) + 14 * dp;
+        } else if (style == GRID) {
+            cellW = Math.max(icon + 24 * dp, 78 * dp);
+            cellH = icon + 36 * dp;
+        } else {
+            cellW = icon + 18 * dp;
+            cellH = icon + (labels ? 32 : 14) * dp;
+        }
+        int maxCols = Math.max(1, (int) ((right - left - 2 * pad) / cellW));
+        int rowsFit = Math.max(1, (int) ((avail - 2 * pad) / cellH));
+        int cols, rows;
+        if (style == GRID) {
+            cols = Math.min(maxCols, Math.max(Math.min(4, n), (n + rowsFit - 1) / rowsFit));
+            rows = (n + cols - 1) / cols;
+        } else {
+            rows = Math.min(n, rowsFit);
+            cols = Math.min(maxCols, (n + rows - 1) / rows);
+        }
+        rows = Math.min(rows, rowsFit);
+        int count = Math.min(n, rows * cols);
+        float pw = cols * cellW + 2 * pad, ph = rows * cellH + 2 * pad;
+        float px = Math.max(left, Math.min(right - pw, cx - pw / 2f));
+        float py = panelUp ? cy - gap - ph : cy + gap;
+        py = Math.max(top, Math.min(bottom - ph, py));
+        panel.set(px, py, px + pw, py + ph);
+        for (int i = 0; i < count; i++) {
+            int c, r;
+            if (style == GRID) {
+                c = i % cols;
+                r = i / cols;
+            } else {
+                c = i / rows;
+                r = i % rows;
+            }
+            if (panelUp) r = rows - 1 - r; // la première appli au plus près du dossier
+            Spot s = new Spot();
+            s.l = px + pad + c * cellW;
+            s.t = py + pad + r * cellH;
+            s.r = s.l + cellW;
+            s.b = s.t + cellH;
+            if (style == LIST) {
+                s.x = s.l + 10 * dp + icon / 2f;
+                s.y = (s.t + s.b) / 2f;
+            } else {
+                s.x = (s.l + s.r) / 2f;
+                s.y = (s.t + s.b) / 2f - (labels ? 9 * dp : 0);
+            }
+            s.app = apps.get(i);
+            spots.add(s);
         }
     }
 
@@ -238,6 +336,12 @@ final class FolderWheelView extends View {
     }
 
     private int spotAt(float x, float y) {
+        if (style != CIRCLE) {
+            for (int i = 0; i < spots.size(); i++) {
+                Spot s = spots.get(i);
+                if (x >= s.l && x < s.r && y >= s.t && y < s.b) return i;
+            }
+        }
         int best = -1;
         double bestD = Math.max(26 * dp, iconPxBase() * 0.75f);
         for (int i = 0; i < spots.size(); i++) {
@@ -337,6 +441,12 @@ final class FolderWheelView extends View {
         band.setColor(0xFF000000 | store.folderBg());
         band.setAlpha((int) (255 * store.folderBgAlpha() / 100f * ease));
         band.setStrokeWidth(iconPx + (labels ? 34 : 16) * dp);
+        if (style != CIRCLE && !spots.isEmpty()) {
+            fill.setColor(0xFF000000 | store.folderBg());
+            fill.setAlpha((int) (255 * store.folderBgAlpha() / 100f * ease));
+            float rr = 22 * dp;
+            canvas.drawRoundRect(panel, rr, rr, fill);
+        }
         for (float[] arc : arcs) {
             float r = arc[0] * (0.5f + 0.5f * ease);
             if (arc[2] >= 360f) {
@@ -358,7 +468,12 @@ final class FolderWheelView extends View {
             if (h) {
                 fill.setColor(store.accent());
                 fill.setAlpha(110);
-                canvas.drawCircle(x, y, hh + 7 * dp, fill);
+                if (style == LIST || style == GRID) {
+                    oval.set(s.l + 3 * dp, s.t + 3 * dp, s.r - 3 * dp, s.b - 3 * dp);
+                    canvas.drawRoundRect(oval, 14 * dp, 14 * dp, fill);
+                } else {
+                    canvas.drawCircle(x, y, hh + 7 * dp, fill);
+                }
             }
             Drawable icon = s.app.icon;
             if (icon != null) {
@@ -369,10 +484,16 @@ final class FolderWheelView extends View {
             }
             Badges.draw(getContext(), canvas, x, y, hh, Badges.count(getContext(), s.app));
 
-            if (labels) {
+            if (style == LIST) {
+                rowText.setAlpha((int) (255 * k));
+                float tx = x + hh + 12 * dp;
+                CharSequence nm = TextUtils.ellipsize(s.app.label, rowText, s.r - tx - 10 * dp, TextUtils.TruncateAt.END);
+                canvas.drawText(nm, 0, nm.length(), tx, y + 5 * dp, rowText);
+            } else if (labels || style == GRID) {
                 small.setAlpha((int) (255 * k));
-                CharSequence nm = TextUtils.ellipsize(s.app.label, small, 64 * dp, TextUtils.TruncateAt.END);
-                canvas.drawText(nm, 0, nm.length(), x, y + hh + 12 * dp, small);
+                float w = style == GRID ? (s.r - s.l - 6 * dp) : 64 * dp;
+                CharSequence nm = TextUtils.ellipsize(s.app.label, small, w, TextUtils.TruncateAt.END);
+                canvas.drawText(nm, 0, nm.length(), x, y + hh + 14 * dp, small);
             }
         }
 
@@ -380,11 +501,18 @@ final class FolderWheelView extends View {
         fill.setColor(color);
         fill.setAlpha(255);
         canvas.drawCircle(cx, cy, 26 * dp * (0.6f + 0.4f * ease), fill);
-        String title = hover >= 0 ? spots.get(hover).app.label : folder;
+        // Grille et liste montrent déjà les noms ; nom du dossier seulement s'il est affiché.
+        boolean hoverName = hover >= 0 && (style == CIRCLE || style == COLUMN);
+        String title = hoverName ? spots.get(hover).app.label : showName ? folder : null;
+        if (title == null) {
+            if (t < 1f) postInvalidateOnAnimation();
+            return;
+        }
         CharSequence s = TextUtils.ellipsize(title, text, 220 * dp, TextUtils.TruncateAt.END);
         float tw = text.measureText(s, 0, s.length());
         float ty = cy - 40 * dp;
-        if (ty < Math.max(safe.top, 24 * dp) + 30 * dp) ty = cy + 52 * dp;
+        if (style != CIRCLE) ty = panelUp ? cy + 52 * dp : cy - 40 * dp;
+        else if (ty < Math.max(safe.top, 24 * dp) + 30 * dp) ty = cy + 52 * dp;
         fill.setColor(0xF01B1D26);
         oval.set(cx - tw / 2 - 12 * dp, ty - 20 * dp, cx + tw / 2 + 12 * dp, ty + 8 * dp);
         canvas.drawRoundRect(oval, 14 * dp, 14 * dp, fill);

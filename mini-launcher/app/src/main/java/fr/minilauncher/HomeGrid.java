@@ -280,6 +280,16 @@ final class HomeGrid extends FrameLayout {
         return g == null ? 1f : factors[Math.max(0, Math.min(4, g.iconSize))];
     }
 
+    int folderOpenStyle(String name) {
+        Store.Group g = Store.find(store.groups(), name);
+        return g == null ? 0 : g.openStyle;
+    }
+
+    boolean folderShowName(String name) {
+        Store.Group g = Store.find(store.groups(), name);
+        return g == null || g.showName;
+    }
+
     int folderColor(String name) {
         Store.Group g = Store.find(store.groups(), name);
         return g == null ? 0xFF8FA6FF : g.color;
@@ -849,7 +859,7 @@ final class HomeGrid extends FrameLayout {
                 }
             }
             Badges.draw(getContext(), canvas, cx, iy, half, Badges.count(getContext(), apps));
-            if (!showLabel) return;
+            if (!showLabel || !g.showName) return;
             CharSequence s = TextUtils.ellipsize(g.name, label, getWidth() - 8 * dp, TextUtils.TruncateAt.END);
             canvas.drawText(s, 0, s.length(), cx, iy + half + 18 * dp, label);
         }
@@ -906,7 +916,7 @@ final class HomeGrid extends FrameLayout {
             }
             Badges.draw(getContext(), canvas, box.right - 10 * dp, box.top + 10 * dp, 12 * dp,
                     Badges.count(getContext(), apps));
-            if (!showLabel) return;
+            if (!showLabel || !g.showName) return;
             CharSequence s = TextUtils.ellipsize(g.name, label, getWidth() - 8 * dp, TextUtils.TruncateAt.END);
             canvas.drawText(s, 0, s.length(), getWidth() / 2f, box.bottom + 17 * dp, label);
         }

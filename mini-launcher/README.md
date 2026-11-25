@@ -102,6 +102,9 @@ L'écran principal est une grille de tuiles ; chaque tuile ouvre sa page :
   dossier : de très petites à très grandes. Même cadre pour les widgets.
   « Toucher le dossier » : ouvre le cercle, ou icônes directes (toucher une mini-icône ouvre
   son appli ; ailleurs ou « +n », le cercle).
+  « Ouverture » : cercle, colonne (glisser vertical, au-dessus ou en dessous du dossier),
+  grille de tuiles ou liste (icône + nom). « Afficher le nom » : masque le nom du dossier
+  sous l'icône et dans l'ouverture (le nom de l'appli survolée reste affiché).
   Organiser : toucher une appli puis sa nouvelle place ; l'ordre est celui du cercle (en
   haut, puis sens horaire) et les premières sont celles visibles sur l'icône.
   Invisible : la case paraît vide mais reste un dossier (contour en pointillés pendant un

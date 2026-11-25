@@ -432,6 +432,8 @@ final class HomeView extends FrameLayout {
                     float[] c = grid.centerOf(touchedItem);
                     if (c != null) {
                         folderWheel.setIconFactor(grid.folderIconFactor(touchedItem.folder));
+                        folderWheel.setStyle(grid.folderOpenStyle(touchedItem.folder));
+                        folderWheel.setShowName(grid.folderShowName(touchedItem.folder));
                         folderWheel.open(touchedItem.folder, grid.folderColor(touchedItem.folder),
                                 grid.folderApps(touchedItem.folder), c[0] + grid.getLeft(), c[1] + grid.getTop());
                         folderForwarding = true;
@@ -525,6 +527,8 @@ final class HomeView extends FrameLayout {
                             float[] c = grid.centerOf(touchedItem);
                             if (c != null) {
                                 folderWheel.setIconFactor(grid.folderIconFactor(touchedItem.folder));
+                        folderWheel.setStyle(grid.folderOpenStyle(touchedItem.folder));
+                        folderWheel.setShowName(grid.folderShowName(touchedItem.folder));
                         folderWheel.open(touchedItem.folder, grid.folderColor(touchedItem.folder),
                                         grid.folderApps(touchedItem.folder), c[0] + grid.getLeft(), c[1] + grid.getTop());
                                 MotionEvent down = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN,

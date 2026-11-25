@@ -428,6 +428,15 @@ final class Menus {
             store.setFolderDirect(folder, i == 1);
             changed.run();
         })).subtitle = modes[g.direct ? 1 : 0];
+        b.add("Ouverture", () -> choose(a, "Ouverture du dossier", FolderWheelView.STYLES, g.openStyle, i -> {
+            store.setFolderOpenStyle(folder, i);
+            changed.run();
+        })).subtitle = FolderWheelView.STYLES[Math.max(0, Math.min(3, g.openStyle))];
+        String[] yesNo = {"Oui", "Non (seul le nom de l'appli survolée s'affiche)"};
+        b.add("Afficher le nom", () -> choose(a, "Afficher le nom du dossier", yesNo, g.showName ? 0 : 1, i -> {
+            store.setFolderShowName(folder, i == 0);
+            changed.run();
+        })).subtitle = g.showName ? "Oui" : "Non";
         b.add("Forme", () -> choose(a, "Forme", shapes, g.shape, i -> {
             store.customizeFolder(folder, -1, -1, i);
             changed.run();

@@ -27,6 +27,8 @@ final class Store {
         int style;  // icône : 0 grille de 4, 1 première appli, 2 initiale
         int shape;  // 0 carré arrondi, 1 rond
         boolean direct; // icônes directes : toucher une mini-icône ouvre son appli
+        int openStyle; // 0 cercle, 1 colonne, 2 grille, 3 liste
+        boolean showName = true;
         int iconSize = 2; // taille des icônes dans le dossier : 0 très petites … 4 très grandes
         final List<String> apps = new ArrayList<>();
 
@@ -291,6 +293,8 @@ final class Store {
                 g.shape = o.optInt("shape", 0);
                 g.direct = o.optBoolean("direct", false);
                 g.iconSize = o.optInt("iconSize", 2);
+                g.openStyle = o.optInt("openStyle", 0);
+                g.showName = o.optBoolean("showName", true);
                 JSONArray apps = o.getJSONArray("apps");
                 for (int j = 0; j < apps.length(); j++) g.apps.add(apps.getString(j));
                 out.add(g);
@@ -311,6 +315,8 @@ final class Store {
                 o.put("shape", g.shape);
                 o.put("direct", g.direct);
                 o.put("iconSize", g.iconSize);
+                o.put("openStyle", g.openStyle);
+                o.put("showName", g.showName);
                 o.put("apps", new JSONArray(g.apps));
                 a.put(o);
             }
@@ -428,6 +434,22 @@ final class Store {
         Group g = find(gs, name);
         if (g == null) return;
         g.iconSize = size;
+        setGroups(gs);
+    }
+
+    void setFolderOpenStyle(String name, int style) {
+        List<Group> gs = groups();
+        Group g = find(gs, name);
+        if (g == null) return;
+        g.openStyle = style;
+        setGroups(gs);
+    }
+
+    void setFolderShowName(String name, boolean show) {
+        List<Group> gs = groups();
+        Group g = find(gs, name);
+        if (g == null) return;
+        g.showName = show;
         setGroups(gs);
     }
 
