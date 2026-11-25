@@ -476,6 +476,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        Updates.resumePending(this)
         // Retour au premier plan : la vidéo revient si on était en mode vidéo
         PlayerHolder.setVideoEnabled(player, PlayerHolder.videoMode)
         refreshUi()
@@ -2286,10 +2287,8 @@ class MainActivity : AppCompatActivity() {
                 }
                 MaterialAlertDialogBuilder(this@MainActivity)
                     .setTitle("Nouvelle version : v${u.version}")
-                    .setMessage("Tu as la v${Updates.current(this@MainActivity)}. Télécharger la nouvelle version ? Ouvre ensuite le fichier pour l'installer par-dessus.")
-                    .setPositiveButton("Télécharger") { _, _ ->
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u.url)))
-                    }
+                    .setMessage("Tu as la v${Updates.current(this@MainActivity)}. La nouvelle version va se télécharger puis s'installer par-dessus (tes données sont gardées).")
+                    .setPositiveButton("Installer") { _, _ -> Updates.downloadAndInstall(this@MainActivity, u) }
                     .setNegativeButton("Plus tard", null)
                     .show()
             } catch (e: CancellationException) {
