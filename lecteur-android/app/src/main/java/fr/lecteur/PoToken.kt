@@ -51,12 +51,6 @@ object PoToken : PoTokenProvider {
 
     override fun getWebClientPoToken(videoId: String): PoTokenResult? = generate(videoId)
 
-    override fun getWebEmbedClientPoToken(videoId: String): PoTokenResult? = generate(videoId)
-
-    override fun getAndroidClientPoToken(videoId: String): PoTokenResult? = null
-
-    override fun getIosClientPoToken(videoId: String): PoTokenResult? = null
-
     private fun generate(videoId: String): PoTokenResult? {
         // Désactivé, ou trop d'échecs de suite : on laisse NewPipe se débrouiller sans
         if (!Settings.poToken || failures >= 3) return null
