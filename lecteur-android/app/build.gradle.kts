@@ -16,7 +16,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
-        versionName = "1.0"
+        versionName = (project.findProperty("versionName") as String?) ?: "1.0"
     }
 
     // Signature : clé fournie par la CI (secret GitHub) si présente, sinon clé de debug

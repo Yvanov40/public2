@@ -139,6 +139,9 @@ class MainActivity : AppCompatActivity() {
     private var podFeedTime = 0L
     private var podFeedJob: Job? = null
     private var subsMode = "yt"
+    private var podQuery: String? = null
+    private var podResults2: List<Podcast>? = null
+    private var podSearchJob: Job? = null
     private val folderStack = ArrayList<Pair<DocumentFile, String>>()
     private var folderFiles: List<FileEntry>? = null
     private var folderJob: Job? = null
@@ -297,6 +300,7 @@ class MainActivity : AppCompatActivity() {
                     fullscreen -> requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                     podPage?.page == page -> closePodcast()
                     channelPage?.page == page -> closeChannel()
+                    page == SUBS && podQuery != null -> clearPodSearch()
                     page == FOLDERS && folderStack.isNotEmpty() -> leaveFolder()
                     page == HOME && searchQuery != null -> clearSearch()
                     page != HOME -> pager.setCurrentItem(HOME, true)
@@ -476,7 +480,7 @@ class MainActivity : AppCompatActivity() {
     private fun openLink(url: String) {
         val host = Uri.parse(url).host.orEmpty()
         if (host.contains("youtu") || !url.startsWith("http")) play(url)
-        else openPodcast(Podcast(url, "Podcast", null, null))
+        else discoverAndOpen(url)
     }
 
     private fun search(q: String) {
@@ -728,9 +732,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun podcastSubsRows(rows: MutableList<Row>) {
         rows += Row.Entry(
-            "Ajouter un flux RSS…", "Acast, Ausha, Spotify for Podcasters, ou tout autre lien de flux",
-            null, R.drawable.ic_add, onClick = { askRssUrl() }
+            "Rechercher un podcast ou un flux RSS…",
+            "Mots-clés, adresse d'un flux, ou lien d'une page (Acast, site du podcast, Apple Podcasts…)",
+            null, R.drawable.ic_search, onClick = { askRssUrl() }
         )
+        val q = podQuery
+        if (q != null) {
+            rows += Row.Header("Résultats pour « $q »", "Fermer") { clearPodSearch() }
+            val res = podResults2
+            when {
+                res == null -> rows += Row.Note("Recherche…")
+                res.isEmpty() -> rows += Row.Note(
+                    "Aucun podcast ni flux trouvé.\nEssaie d'autres mots, ou colle directement l'adresse du flux RSS."
+                )
+                else -> res.forEach { rows += podRow(it) }
+            }
+            return
+        }
         val pods = Store.podcasts()
         if (pods.isEmpty()) {
             rows += Row.Note(
@@ -851,24 +869,94 @@ class MainActivity : AppCompatActivity() {
     private fun askRssUrl() {
         val d = resources.displayMetrics.density
         val input = EditText(this).apply {
-            hint = "https://feeds.acast.com/…"
-            inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
+            hint = "Nom du podcast, ou https://…"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
             setSingleLine()
         }
         val box = android.widget.FrameLayout(this).apply {
             setPadding((24 * d).toInt(), (8 * d).toInt(), (24 * d).toInt(), 0)
             addView(input)
         }
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Ajouter un flux RSS")
-            .setMessage("Colle l'adresse du flux du podcast.")
+        val dlg = MaterialAlertDialogBuilder(this)
+            .setTitle("Rechercher un podcast")
+            .setMessage("Des mots-clés (annuaires Apple Podcasts et fyyd), l'adresse d'un flux RSS, ou le lien d'une page web du podcast.")
             .setView(box)
-            .setPositiveButton("Ouvrir") { _, _ ->
-                val url = input.text.toString().trim()
-                if (url.isNotEmpty()) openPodcast(Podcast(if (url.startsWith("http")) url else "https://$url", "Podcast", null, null))
-            }
+            .setPositiveButton("Chercher") { _, _ -> runPodSearch(input.text.toString()) }
             .setNegativeButton("Annuler", null)
-            .show()
+            .create()
+        input.setOnEditorActionListener { _, id, _ ->
+            if (id == EditorInfo.IME_ACTION_SEARCH) { dlg.dismiss(); runPodSearch(input.text.toString()); true } else false
+        }
+        dlg.show()
+    }
+
+    private fun looksLikeLink(t: String) =
+        t.startsWith("http://") || t.startsWith("https://") || (!t.contains(' ') && Regex("^[\\w.-]+\\.[a-z]{2,}(/.*)?$").matches(t))
+
+    private fun runPodSearch(raw: String) {
+        val text = raw.trim()
+        if (text.isEmpty()) return
+        if (looksLikeLink(text)) {
+            discoverAndOpen(text)
+            return
+        }
+        podQuery = text
+        podResults2 = null
+        subsMode = "pod"
+        podPage?.takeIf { it.page == SUBS }?.let { podPage = null }
+        pager.setCurrentItem(SUBS, true)
+        render(SUBS)
+        podSearchJob?.cancel()
+        podSearchJob = lifecycleScope.launch {
+            busy(true)
+            podResults2 = try {
+                Pod.search(text)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snack("Recherche impossible : ${e.message}")
+                emptyList()
+            } finally {
+                busy(false)
+            }
+            render(SUBS)
+        }
+    }
+
+    private fun clearPodSearch() {
+        podQuery = null
+        podResults2 = null
+        podSearchJob?.cancel()
+        render(SUBS)
+    }
+
+    /** Ouvre le flux RSS trouvé derrière un lien (flux direct, page web, Apple Podcasts). */
+    private fun discoverAndOpen(raw: String) {
+        val url = if (raw.startsWith("http")) raw else "https://$raw"
+        lifecycleScope.launch {
+            busy(true)
+            try {
+                val feeds = Pod.discover(url)
+                when {
+                    feeds.isEmpty() -> snack("Aucun flux RSS trouvé à cette adresse")
+                    feeds.size == 1 -> openPodcast(Podcast(feeds[0], "Podcast", null, null))
+                    else -> {
+                        podQuery = url
+                        podResults2 = feeds.map { Podcast(it, it.substringAfter("://"), "Flux trouvé sur la page", null) }
+                        subsMode = "pod"
+                        pager.setCurrentItem(SUBS, true)
+                        render(SUBS)
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snack("Impossible d'ouvrir ce lien : ${e.message}")
+            } finally {
+                busy(false)
+            }
+        }
     }
 
     private fun playEpisodes(list: List<Episode>, index: Int) {

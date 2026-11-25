@@ -78,24 +78,36 @@ jobs:
 
       - name: Compilation
         run: |
-          ARGS="assembleRelease -PnpeVersion=${{ steps.npe.outputs.tag }} -PversionCode=${{ github.run_number }}"
+          ARGS="assembleRelease -PnpeVersion=${{ steps.npe.outputs.tag }} -PversionCode=${{ github.run_number }} -PversionName=1.${{ github.run_number }}"
           # Une nouvelle tentative si un dépôt de dépendances refuse temporairement (erreur 429…)
           gradle $ARGS || { echo "Nouvelle tentative dans 60 s"; sleep 60; gradle $ARGS; }
 
-      - name: Renommer l'APK
-        run: cp app/build/outputs/apk/release/app-release.apk lecteur.apk
+      - name: Nommer l'APK avec sa version
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk "lecteur-v${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk lecteur.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: lecteur-apk
-          path: lecteur-android/lecteur.apk
+          name: lecteur-v${{ github.run_number }}
+          path: lecteur-android/lecteur-v${{ github.run_number }}.apk
+
+      - name: Retirer les anciennes versions de la release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view lecteur -R "${{ github.repository }}" --json assets -q '.assets[].name' 2>/dev/null \
+            | grep -E '^lecteur-v[0-9]+\.apk$' \
+            | xargs -r -n1 gh release delete-asset lecteur -R "${{ github.repository }}" -y || true
 
       - name: Publier (release « lecteur »)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: lecteur
-          name: Lecteur (dernière compilation)
+          name: Lecteur v${{ github.run_number }}
           prerelease: true
           make_latest: false
-          body: "APK compilé depuis ${{ github.sha }} avec NewPipeExtractor ${{ steps.npe.outputs.tag }}."
-          files: lecteur-android/lecteur.apk
+          body: "Version 1.${{ github.run_number }} — compilée depuis ${{ github.sha }} avec NewPipeExtractor ${{ steps.npe.outputs.tag }}. `lecteur.apk` est toujours la dernière version."
+          files: |
+            lecteur-android/lecteur-v${{ github.run_number }}.apk
+            lecteur-android/lecteur.apk
