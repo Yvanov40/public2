@@ -28,7 +28,8 @@ dernière version de NewPipeExtractor. Réinstaller l'APK par-dessus.
 
 ## Signature
 
-Sans réglage, l'APK est signé avec une clé de debug gardée dans le cache de GitHub Actions
-(effacée après 7 jours sans compilation : il faut alors désinstaller avant de réinstaller).
-Pour une clé permanente, ajouter les secrets `LECTEUR_KEYSTORE_B64` (keystore en base64,
-alias `lecteur`) et `LECTEUR_KEYSTORE_PASSWORD` dans Settings → Secrets → Actions.
+La CI crée une clé de signature au premier passage et la garde dans le cache de GitHub
+Actions : chaque nouvel APK s'installe par-dessus le précédent. Le cache est effacé après
+7 jours sans compilation ; il faudrait alors désinstaller une fois. Pour une clé permanente,
+ajouter les secrets `LECTEUR_KEYSTORE_B64` (keystore en base64, alias `lecteur`) et
+`LECTEUR_KEYSTORE_PASSWORD` dans Settings → Secrets → Actions.

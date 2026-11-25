@@ -10,6 +10,11 @@ on:
 permissions:
   contents: write
 
+# Une compilation à la fois (la clé de signature est créée une seule fois)
+concurrency:
+  group: lecteur-apk
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,24 +44,37 @@ jobs:
           echo "NewPipeExtractor $TAG"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      # Clé de debug conservée en cache pour que les mises à jour s'installent par-dessus
+      # Clé de signature fixe, gardée d'une compilation à l'autre (sinon Android
+      # refuse d'installer la mise à jour par-dessus l'ancienne version)
       - uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: lecteur-debug-keystore
+          path: ~/.lecteur/signing.keystore
+          key: lecteur-signing-v1
 
-      - name: Clé de signature (secret facultatif)
+      - name: Clé de signature
         env:
           KS_B64: ${{ secrets.LECTEUR_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.LECTEUR_KEYSTORE_PASSWORD }}
         run: |
+          mkdir -p "$HOME/.lecteur"
           if [ -n "$KS_B64" ]; then
-            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/lecteur.keystore"
-            echo "LECTEUR_KEYSTORE=$RUNNER_TEMP/lecteur.keystore" >> "$GITHUB_ENV"
+            echo "$KS_B64" | base64 -d > "$HOME/.lecteur/secret.keystore"
+            echo "LECTEUR_KEYSTORE=$HOME/.lecteur/secret.keystore" >> "$GITHUB_ENV"
+            echo "LECTEUR_KEYSTORE_PASSWORD=$KS_PASS" >> "$GITHUB_ENV"
+          else
+            KS="$HOME/.lecteur/signing.keystore"
+            if [ ! -f "$KS" ]; then
+              echo "Création de la clé de signature"
+              keytool -genkeypair -keystore "$KS" -alias lecteur -keyalg RSA -keysize 2048 \
+                -validity 20000 -storepass lecteur-ci -keypass lecteur-ci -dname "CN=Lecteur"
+            else
+              echo "Clé de signature réutilisée"
+            fi
+            echo "LECTEUR_KEYSTORE=$KS" >> "$GITHUB_ENV"
+            echo "LECTEUR_KEYSTORE_PASSWORD=lecteur-ci" >> "$GITHUB_ENV"
           fi
 
       - name: Compilation
-        env:
-          LECTEUR_KEYSTORE_PASSWORD: ${{ secrets.LECTEUR_KEYSTORE_PASSWORD }}
         run: gradle assembleRelease --stacktrace -PnpeVersion=${{ steps.npe.outputs.tag }} -PversionCode=${{ github.run_number }}
 
       - name: Renommer l'APK
