@@ -18,7 +18,7 @@ Lecteur audio/vidéo YouTube léger pour Android (usage personnel).
   titres likés, playlists perso, mix, aléatoire / répétition, écran « en cours de lecture » aux couleurs de la pochette,
   paroles synchronisées (LRCLIB), musique du téléphone par album et artiste
 - Minuteur de sommeil, file d'attente (« Lire ensuite »), vidéo suivante automatique
-- SponsorBlock (saute sponsors, intros…), saut des silences, égaliseur de volume
+- SponsorBlock (saute sponsors, intros…), saut des silences
 - Description et chapitres (YouTube et podcasts), image dans l'image
 - Nouveautés vérifiées toutes les 6 h (notification, téléchargement auto en Wi-Fi)
 - Import OPML / NewPipe / Takeout, export OPML, sauvegarde et restauration complètes

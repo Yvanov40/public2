@@ -78,9 +78,10 @@ object Settings {
         get() = bool("skipSilence", false)
         set(v) = setBool("skipSilence", v)
 
+    /** Égaliseur de volume retiré (grésillements sur certains téléphones) : toujours désactivé. */
     var normalize: Boolean
-        get() = bool("normalize", false)
-        set(v) = setBool("normalize", v)
+        get() = false
+        set(v) = setBool("normalize", false)
 
     var autoplay: Boolean
         get() = bool("autoplay", false)
