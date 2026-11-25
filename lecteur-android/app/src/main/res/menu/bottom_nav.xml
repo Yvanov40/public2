@@ -3,4 +3,5 @@
     <item android:id="@+id/nav_subs" android:icon="@drawable/ic_subs" android:title="@string/tab_subs" />
     <item android:id="@+id/nav_offline" android:icon="@drawable/ic_download" android:title="@string/tab_offline" />
     <item android:id="@+id/nav_folders" android:icon="@drawable/ic_folder" android:title="@string/tab_folders" />
+    <item android:id="@+id/nav_settings" android:icon="@drawable/ic_settings" android:title="@string/tab_settings" />
 </menu>

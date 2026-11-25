@@ -9,7 +9,9 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
+import android.app.RecoverableSecurityException
 import android.os.Bundle
+import android.provider.MediaStore
 import android.util.Log
 import android.util.TypedValue
 import android.view.GestureDetector
@@ -25,6 +27,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
@@ -46,7 +49,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.viewpager2.widget.ViewPager2
@@ -107,7 +110,7 @@ class MainActivity : AppCompatActivity() {
     private val adapters = Array(PAGES) { RowAdapter() }
     private val lists = arrayOfNulls<RecyclerView>(PAGES)
     private val refreshers = arrayOfNulls<SwipeRefreshLayout>(PAGES)
-    private val navIds = intArrayOf(R.id.nav_home, R.id.nav_subs, R.id.nav_offline, R.id.nav_folders)
+    private val navIds = intArrayOf(R.id.nav_home, R.id.nav_subs, R.id.nav_offline, R.id.nav_folders, R.id.nav_settings)
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var loadJob: Job? = null
@@ -127,6 +130,31 @@ class MainActivity : AppCompatActivity() {
     private var folderFiles: List<FileEntry>? = null
     private var folderJob: Job? = null
     private var pendingDownload: Triple<String, Boolean, String?>? = null
+    private var localFiles: List<LocalMedia.Item>? = null
+    private var scanJob: Job? = null
+    private var pendingDelete: OffItem? = null
+
+    /** Un fichier de Music/Lecteur ou Movies/Lecteur, avec les infos YouTube si on les connaît. */
+    private class OffItem(
+        val uri: Uri, val title: String, val uploader: String?, val thumb: String?,
+        val video: Boolean, val path: String, val storeUri: String?
+    )
+
+    private val mediaPerm = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        rescanLocal()
+    }
+    private val deleteLauncher =
+        registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+            val item = pendingDelete
+            pendingDelete = null
+            if (res.resultCode == RESULT_OK && item != null) {
+                if (Build.VERSION.SDK_INT == 29) {
+                    try { contentResolver.delete(item.uri, null, null) } catch (_: Exception) {}
+                }
+                item.storeUri?.let { Store.removeDownload(it) }
+            }
+            rescanLocal()
+        }
 
     private val openFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) playSingleLocal(uri)
@@ -161,10 +189,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Ui.applyTheme(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         root = findViewById(R.id.root)
+        Ui.applyFont(root)
         playerView = findViewById(R.id.player)
         nowPanel = findViewById(R.id.nowPanel)
         nowTitle = findViewById(R.id.nowTitle)
@@ -208,7 +238,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageSelected(position: Int) {
                 if (bottomNav.selectedItemId != navIds[position]) bottomNav.selectedItemId = navIds[position]
                 if (position == SUBS) loadSubsFeed()
-                if (position == OFFLINE) render(OFFLINE)
+                if (position == OFFLINE) rescanLocal()
             }
         })
         bottomNav.setOnItemSelectedListener { item ->
@@ -266,11 +296,14 @@ class MainActivity : AppCompatActivity() {
             this, SessionToken(this, ComponentName(this, PlaybackService::class.java))
         ).buildAsync()
 
-        Store.onChange = { render(OFFLINE) }
+        Store.onChange = { rescanLocal() }
         Downloads.onChange = { render(OFFLINE) }
         refreshUi()
         renderAll()
-        handleIntent(intent)
+        savedInstanceState?.getInt("page", -1)?.takeIf { it in 0 until PAGES }?.let {
+            pager.setCurrentItem(it, false)
+        }
+        if (savedInstanceState == null) handleIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -278,12 +311,17 @@ class MainActivity : AppCompatActivity() {
         handleIntent(intent)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt("page", pager.currentItem)
+    }
+
     override fun onStart() {
         super.onStart()
         // Retour au premier plan : la vidéo revient si on était en mode vidéo
         PlayerHolder.setVideoEnabled(player, PlayerHolder.videoMode)
         refreshUi()
-        render(OFFLINE)
+        rescanLocal()
     }
 
     override fun onStop() {
@@ -320,13 +358,28 @@ class MainActivity : AppCompatActivity() {
             PageHolder(LayoutInflater.from(parent.context).inflate(R.layout.page, parent, false))
 
         override fun onBindViewHolder(h: PageHolder, position: Int) {
-            if (h.list.layoutManager == null) h.list.layoutManager = LinearLayoutManager(h.list.context)
+            if (h.list.layoutManager == null) {
+                val glm = GridLayoutManager(h.list.context, columns())
+                glm.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                    override fun getSpanSize(p: Int) = adapters[position].spanSize(p, glm.spanCount)
+                }
+                h.list.layoutManager = glm
+            }
             h.list.adapter = adapters[position]
+            applyGrid(h.list)
             lists[position] = h.list
             refreshers[position] = h.refresh
             h.refresh.isEnabled = position == HOME || position == SUBS
             h.refresh.setOnRefreshListener { onPullRefresh(position) }
         }
+    }
+
+    private fun columns() = if (Settings.cards) Settings.columns.coerceIn(1, 4) else 1
+
+    private fun applyGrid(list: RecyclerView) {
+        (list.layoutManager as? GridLayoutManager)?.spanCount = columns()
+        val pad = if (columns() > 1) (7 * resources.displayMetrics.density).toInt() else 0
+        list.setPadding(pad, list.paddingTop, pad, list.paddingBottom)
     }
 
     private fun onPullRefresh(page: Int) {
@@ -372,6 +425,7 @@ class MainActivity : AppCompatActivity() {
             SUBS -> subsRows(rows)
             OFFLINE -> offlineRows(rows)
             FOLDERS -> folderRows(rows)
+            SETTINGS -> settingsRows(rows)
         }
         adapters[page].submit(rows)
     }
@@ -701,6 +755,7 @@ class MainActivity : AppCompatActivity() {
             row.setOnClickListener { dlg.dismiss(); o.run() }
             box.addView(row)
         }
+        Ui.applyFont(box)
         dlg.setContentView(box)
         dlg.show()
     }
@@ -764,8 +819,8 @@ class MainActivity : AppCompatActivity() {
         startLocal(listOf(mediaItem(uri, name, null, null)), 0, isAudio(doc?.type, name))
     }
 
-    private fun playDownloads(list: List<Store.Download>, index: Int, audioOnly: Boolean = false) {
-        val items = list.map { mediaItem(Uri.parse(it.uri), it.title, it.uploader, it.thumb) }
+    private fun playDownloads(list: List<OffItem>, index: Int, audioOnly: Boolean = false) {
+        val items = list.map { mediaItem(it.uri, it.title, it.uploader, it.thumb?.takeIf { t -> t.startsWith("http") }) }
         startLocal(items, index, audioOnly || !list[index].video)
     }
 
@@ -910,6 +965,53 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun hasMediaPerm(): Boolean {
+        fun ok(p: String) = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
+        return if (Build.VERSION.SDK_INT >= 33) ok(Manifest.permission.READ_MEDIA_AUDIO) && ok(Manifest.permission.READ_MEDIA_VIDEO)
+        else ok(Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+
+    private fun askMediaPerm() {
+        mediaPerm.launch(
+            if (Build.VERSION.SDK_INT >= 33)
+                arrayOf(Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.READ_MEDIA_VIDEO)
+            else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        )
+    }
+
+    private fun rescanLocal() {
+        scanJob?.cancel()
+        scanJob = lifecycleScope.launch {
+            localFiles = withContext(Dispatchers.IO) { LocalMedia.scan(applicationContext) }
+            render(OFFLINE)
+        }
+    }
+
+    /** Contenu réel des dossiers, complété par ce que l'appli sait des téléchargements. */
+    private fun offlineItems(): List<OffItem> {
+        val store = Store.downloads()
+        fun idOf(u: String) = Uri.parse(u).takeIf { it.scheme == "content" }?.lastPathSegment?.toLongOrNull()
+        val out = (localFiles ?: emptyList()).map { f ->
+            val d = store.firstOrNull { it.video == f.video && idOf(it.uri) == f.id }
+            OffItem(
+                f.uri, d?.title ?: f.name.substringBeforeLast('.'), d?.uploader,
+                if (f.video) f.uri.toString() else (d?.thumb ?: f.uri.toString()),
+                f.video, f.path, d?.uri
+            )
+        }.toMutableList()
+        // Anciennes versions d'Android : fichiers enregistrés directement (file://)
+        store.filter { Uri.parse(it.uri).scheme == "file" }.forEach { d ->
+            val path = Uri.parse(d.uri).path
+            if (path != null && java.io.File(path).exists() && out.none { it.path == d.path }) {
+                out += OffItem(
+                    Uri.parse(d.uri), d.title, d.uploader, d.thumb, d.video,
+                    d.path ?: if (d.video) "Movies/Lecteur" else "Music/Lecteur", d.uri
+                )
+            }
+        }
+        return out
+    }
+
     private fun offlineRows(rows: MutableList<Row>) {
         val queue = Downloads.all()
         if (queue.isNotEmpty()) {
@@ -947,67 +1049,166 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val list = Store.downloads()
-        rows += Row.Header("Téléchargés")
+        val list = offlineItems()
+        if (hasMediaPerm()) rows += Row.Header("Téléchargés")
+        else {
+            rows += Row.Header("Téléchargés", "Tout retrouver") { askMediaPerm() }
+            rows += Row.Note(
+                "Pour afficher aussi les fichiers déjà présents dans Music/Lecteur et Movies/Lecteur " +
+                    "(par exemple ceux d'avant une réinstallation), touche « Tout retrouver » et autorise l'accès."
+            )
+        }
         if (list.isEmpty()) {
             rows += Row.Note(
                 "Rien pour l'instant.\nFais un appui long sur une vidéo, ou touche « Télécharger » " +
-                    "sous la vidéo en cours.\n\nLes fichiers vont dans la mémoire interne : " +
-                    "Music/Lecteur (audio) et Movies/Lecteur (vidéo).",
+                    "sous la vidéo en cours.",
                 R.drawable.ic_download
             )
-            return
         }
         list.forEachIndexed { i, d ->
-            val where = d.path ?: if (d.video) "Movies/Lecteur" else "Music/Lecteur"
             rows += Row.Entry(
                 d.title,
-                (if (d.video) "Vidéo" else "Audio") + " · " + where,
+                (if (d.video) "Vidéo" else "Audio") + " · " + (d.uploader?.let { "$it · " } ?: "") + d.path,
                 d.thumb,
                 if (d.video) R.drawable.ic_video else R.drawable.ic_audio,
                 onClick = { playDownloads(list, i) },
                 onLong = { downloadMenu(list, i) }
             )
         }
-        rows += Row.Note("Emplacement : mémoire interne › Music/Lecteur et Movies/Lecteur")
+        rows += Row.Note("Emplacement : mémoire interne › Music/Lecteur (audio) et Movies/Lecteur (vidéo)")
     }
 
-    private fun downloadMenu(list: List<Store.Download>, i: Int) {
+    private fun downloadMenu(list: List<OffItem>, i: Int) {
         val d = list[i]
-        val where = d.path ?: if (d.video) "Movies/Lecteur" else "Music/Lecteur"
         val opts = mutableListOf(
             Opt(R.drawable.ic_play, "Lire") { playDownloads(list, i) }
         )
         if (d.video) opts += Opt(R.drawable.ic_headphones, "Écouter en arrière-plan") { playDownloads(list, i, true) }
         opts += Opt(R.drawable.ic_share, "Partager le fichier") { share(d) }
         opts += Opt(R.drawable.ic_delete, "Supprimer du téléphone") { confirmDelete(d) }
-        sheet(d.title, "Mémoire interne › $where", opts)
+        sheet(d.title, "Mémoire interne › ${d.path}", opts)
     }
 
-    private fun share(d: Store.Download) {
-        val uri = Uri.parse(d.uri)
-        if (uri.scheme != "content") {
+    private fun share(d: OffItem) {
+        if (d.uri.scheme != "content") {
             snack("Partage possible depuis l'appli Fichiers")
             return
         }
         val send = Intent(Intent.ACTION_SEND)
             .setType(if (d.video) "video/mp4" else "audio/*")
-            .putExtra(Intent.EXTRA_STREAM, uri)
+            .putExtra(Intent.EXTRA_STREAM, d.uri)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         startActivity(Intent.createChooser(send, d.title))
     }
 
-    private fun confirmDelete(d: Store.Download) {
+    private fun confirmDelete(d: OffItem) {
         MaterialAlertDialogBuilder(this)
             .setTitle("Supprimer ?")
             .setMessage("« ${d.title} » sera supprimé du téléphone.")
-            .setPositiveButton("Supprimer") { _, _ ->
-                Saver.delete(this, Uri.parse(d.uri))
-                Store.removeDownload(d.uri)
-                render(OFFLINE)
-            }
+            .setPositiveButton("Supprimer") { _, _ -> deleteFile(d) }
             .setNegativeButton("Annuler", null)
             .show()
+    }
+
+    private fun deleteFile(d: OffItem) {
+        try {
+            if (d.uri.scheme == "file") d.uri.path?.let { java.io.File(it).delete() }
+            else contentResolver.delete(d.uri, null, null)
+            d.storeUri?.let { Store.removeDownload(it) }
+            rescanLocal()
+        } catch (e: SecurityException) {
+            // Fichier créé par une ancienne installation : Android demande la confirmation
+            val sender = when {
+                Build.VERSION.SDK_INT >= 30 ->
+                    MediaStore.createDeleteRequest(contentResolver, listOf(d.uri)).intentSender
+                Build.VERSION.SDK_INT == 29 && e is RecoverableSecurityException ->
+                    e.userAction.actionIntent.intentSender
+                else -> null
+            }
+            if (sender != null) {
+                pendingDelete = d
+                deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
+            } else snack("Suppression impossible : utilise l'appli Fichiers")
+        }
+    }
+
+    // ——— Réglages ———
+
+    private fun settingsRows(rows: MutableList<Row>) {
+        rows += Row.Header("Affichage des vidéos")
+        rows += Row.Choice(
+            "Disposition", "Grandes cartes, ou liste compacte avec la miniature à gauche",
+            listOf("Cartes", "Liste"), if (Settings.cards) 0 else 1
+        ) { i -> Settings.layout = if (i == 0) "cards" else "list"; relayout() }
+        if (Settings.cards) {
+            rows += Row.Slider(
+                "Colonnes", "Nombre de cartes par ligne", Settings.columns.toFloat(), 1f, 4f, 1f,
+                { it.toInt().toString() }
+            ) { v -> Settings.columns = v.toInt(); relayout() }
+        }
+        val pct = (Math.round(Settings.tileScale * 10) * 10).coerceIn(70, 140)
+        rows += Row.Slider(
+            "Taille des tuiles", "Taille du texte et des miniatures", pct.toFloat(), 70f, 140f, 10f,
+            { "${it.toInt()} %" }
+        ) { v -> Settings.tileScale = v.toInt() / 100f; relayout() }
+
+        rows += Row.Header("Apparence")
+        val colorIdx = Settings.colors.indexOfFirst { it.key == Settings.color }.coerceAtLeast(0)
+        rows += Row.Colors(
+            "Couleur", Settings.colors.map { it.label to it.seed }, colorIdx
+        ) { i -> Settings.color = Settings.colors[i].key; recreate() }
+        val modes = listOf("system", "light", "dark")
+        rows += Row.Choice(
+            "Thème", null, listOf("Comme le téléphone", "Clair", "Sombre"),
+            modes.indexOf(Settings.themeMode).coerceAtLeast(0)
+        ) { i -> Settings.themeMode = modes[i]; Settings.applyNightMode() }
+        rows += Row.Toggle(
+            "Noir pur", "En thème sombre, fond entièrement noir (économise la batterie sur écran OLED)",
+            Settings.black
+        ) { on -> Settings.black = on; recreate() }
+        rows += Row.Choice(
+            "Police", null, Settings.fonts.map { it.second },
+            Settings.fonts.indexOfFirst { it.first == Settings.font }.coerceAtLeast(0)
+        ) { i -> Settings.font = Settings.fonts[i].first; recreate() }
+
+        rows += Row.Header("Lecture")
+        val qualities = listOf(360, 480, 720, 1080)
+        rows += Row.Choice(
+            "Qualité vidéo maximale", "Aussi pour les téléchargements. Plus bas = moins de données.",
+            qualities.map { "${it}p" }, qualities.indexOf(Settings.maxHeight).let { if (it < 0) 3 else it }
+        ) { i -> Settings.maxHeight = qualities[i]; render(SETTINGS) }
+
+        rows += Row.Header("Données")
+        rows += Row.Entry(
+            "Effacer l'historique", "Recherches récentes et vidéos lues", null, R.drawable.ic_delete,
+            onClick = {
+                MaterialAlertDialogBuilder(this)
+                    .setMessage("Effacer les recherches récentes et les vidéos lues ?")
+                    .setPositiveButton("Effacer") { _, _ ->
+                        Store.clearSearches()
+                        Store.clearWatched()
+                        feed = emptyList()
+                        renderAll()
+                        snack("Historique effacé")
+                    }
+                    .setNegativeButton("Annuler", null)
+                    .show()
+            }
+        )
+        val version = try {
+            packageManager.getPackageInfo(packageName, 0).let {
+                "${it.versionName} (${androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(it)})"
+            }
+        } catch (_: Exception) {
+            "?"
+        }
+        rows += Row.Note("Lecteur · version $version")
+    }
+
+    /** Applique disposition, colonnes et taille sans redémarrer l'écran. */
+    private fun relayout() {
+        lists.forEach { it?.let(::applyGrid) }
+        renderAll()
     }
 
     // ——— Bascule vidéo ⇄ audio ———
@@ -1115,11 +1316,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val PAGES = 4
+        private const val PAGES = 5
         private const val HOME = 0
         private const val SUBS = 1
         private const val OFFLINE = 2
         private const val FOLDERS = 3
+        private const val SETTINGS = 4
         private val AUDIO_EXT = setOf("mp3", "m4a", "aac", "ogg", "oga", "opus", "flac", "wav", "wma", "amr")
         private val VIDEO_EXT = setOf("mp4", "mkv", "webm", "mov", "3gp", "avi", "m4v", "ts")
     }

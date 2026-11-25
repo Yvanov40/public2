@@ -1,0 +1,67 @@
+<resources>
+    <style name="ThemeOverlay.Lecteur.Red" parent="">
+        <item name="colorPrimary">@color/red_primary</item>
+        <item name="colorOnPrimary">@color/red_on_primary</item>
+        <item name="colorPrimaryContainer">@color/red_container</item>
+        <item name="colorOnPrimaryContainer">@color/red_on_container</item>
+        <item name="colorSecondaryContainer">@color/red_container</item>
+        <item name="colorOnSecondaryContainer">@color/red_on_container</item>
+    </style>
+    <style name="ThemeOverlay.Lecteur.Blue" parent="">
+        <item name="colorPrimary">@color/blue_primary</item>
+        <item name="colorOnPrimary">@color/blue_on_primary</item>
+        <item name="colorPrimaryContainer">@color/blue_container</item>
+        <item name="colorOnPrimaryContainer">@color/blue_on_container</item>
+        <item name="colorSecondaryContainer">@color/blue_container</item>
+        <item name="colorOnSecondaryContainer">@color/blue_on_container</item>
+    </style>
+    <style name="ThemeOverlay.Lecteur.Green" parent="">
+        <item name="colorPrimary">@color/green_primary</item>
+        <item name="colorOnPrimary">@color/green_on_primary</item>
+        <item name="colorPrimaryContainer">@color/green_container</item>
+        <item name="colorOnPrimaryContainer">@color/green_on_container</item>
+        <item name="colorSecondaryContainer">@color/green_container</item>
+        <item name="colorOnSecondaryContainer">@color/green_on_container</item>
+    </style>
+    <style name="ThemeOverlay.Lecteur.Purple" parent="">
+        <item name="colorPrimary">@color/purple_primary</item>
+        <item name="colorOnPrimary">@color/purple_on_primary</item>
+        <item name="colorPrimaryContainer">@color/purple_container</item>
+        <item name="colorOnPrimaryContainer">@color/purple_on_container</item>
+        <item name="colorSecondaryContainer">@color/purple_container</item>
+        <item name="colorOnSecondaryContainer">@color/purple_on_container</item>
+    </style>
+    <style name="ThemeOverlay.Lecteur.Orange" parent="">
+        <item name="colorPrimary">@color/orange_primary</item>
+        <item name="colorOnPrimary">@color/orange_on_primary</item>
+        <item name="colorPrimaryContainer">@color/orange_container</item>
+        <item name="colorOnPrimaryContainer">@color/orange_on_container</item>
+        <item name="colorSecondaryContainer">@color/orange_container</item>
+        <item name="colorOnSecondaryContainer">@color/orange_on_container</item>
+    </style>
+    <style name="ThemeOverlay.Lecteur.Pink" parent="">
+        <item name="colorPrimary">@color/pink_primary</item>
+        <item name="colorOnPrimary">@color/pink_on_primary</item>
+        <item name="colorPrimaryContainer">@color/pink_container</item>
+        <item name="colorOnPrimaryContainer">@color/pink_on_container</item>
+        <item name="colorSecondaryContainer">@color/pink_container</item>
+        <item name="colorOnSecondaryContainer">@color/pink_on_container</item>
+    </style>
+    <style name="ThemeOverlay.Lecteur.Teal" parent="">
+        <item name="colorPrimary">@color/teal_primary</item>
+        <item name="colorOnPrimary">@color/teal_on_primary</item>
+        <item name="colorPrimaryContainer">@color/teal_container</item>
+        <item name="colorOnPrimaryContainer">@color/teal_on_container</item>
+        <item name="colorSecondaryContainer">@color/teal_container</item>
+        <item name="colorOnSecondaryContainer">@color/teal_on_container</item>
+    </style>
+    <style name="ThemeOverlay.Lecteur.Black" parent="">
+        <item name="colorSurface">#000000</item>
+        <item name="colorSurfaceContainerLowest">#000000</item>
+        <item name="colorSurfaceContainerLow">#0B0B0B</item>
+        <item name="colorSurfaceContainer">#121212</item>
+        <item name="colorSurfaceContainerHigh">#1A1A1A</item>
+        <item name="colorSurfaceContainerHighest">#242424</item>
+        <item name="android:windowBackground">#000000</item>
+    </style>
+</resources>

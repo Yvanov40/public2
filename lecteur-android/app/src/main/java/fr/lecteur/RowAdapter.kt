@@ -12,6 +12,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipDrawable
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.progressindicator.LinearProgressIndicator
 
@@ -35,6 +36,13 @@ sealed class Row {
         val onClick: () -> Unit,
         val onLong: (() -> Unit)? = null
     ) : Row()
+    class Choice(val title: String, val sub: String?, val labels: List<String>, val selected: Int, val onSelect: (Int) -> Unit) : Row()
+    class Slider(
+        val title: String, val sub: String?, val value: Float, val from: Float, val to: Float, val step: Float,
+        val format: (Float) -> String, val onChange: (Float) -> Unit
+    ) : Row()
+    class Toggle(val title: String, val sub: String?, val checked: Boolean, val onChange: (Boolean) -> Unit) : Row()
+    class Colors(val title: String, val items: List<Pair<String, Int>>, val selected: Int, val onSelect: (Int) -> Unit) : Row()
     class Progress(
         val title: String,
         val state: String,
@@ -61,14 +69,22 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         is Row.Header -> 0
         is Row.Note -> 1
         is Row.Chips -> 2
-        is Row.Video -> 3
+        is Row.Video -> if (Settings.cards) 3 else 10
         is Row.Carousel -> 4
         is Row.Avatars -> 5
         is Row.Channel -> 6
         is Row.ChannelHeader -> 7
         is Row.Entry -> 8
         is Row.Progress -> 9
+        is Row.Choice -> 11
+        is Row.Slider -> 12
+        is Row.Toggle -> 13
+        is Row.Colors -> 14
     }
+
+    /** Nombre de colonnes occupées : seules les cartes vidéo se partagent la largeur. */
+    fun spanSize(position: Int, spanCount: Int): Int =
+        if (position in rows.indices && rows[position] is Row.Video && Settings.cards) 1 else spanCount
 
     private class H(v: View) : RecyclerView.ViewHolder(v)
 
@@ -76,8 +92,10 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inf = LayoutInflater.from(parent.context)
-        fun make(layout: Int) = H(inf.inflate(layout, parent, false))
+        fun make(layout: Int) = H(inf.inflate(layout, parent, false).also { Ui.applyFont(it) })
         return when (viewType) {
+            10 -> make(R.layout.item_video_row)
+            11, 12, 13, 14 -> make(R.layout.item_setting)
             0 -> make(R.layout.item_header)
             1 -> make(R.layout.item_note)
             2, 4, 5 -> {
@@ -133,6 +151,7 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                         ).apply { marginEnd = (8 * d).toInt() }
                         setOnClickListener { row.onClick(s) }
                         setOnLongClickListener { row.onLong(s); true }
+                        Ui.applyFont(this)
                     })
                 }
             }
@@ -147,6 +166,7 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     Thumbs.load(card.findViewById(R.id.thumb), item.thumb, R.drawable.ic_video)
                     card.setOnClickListener { row.onClick(item) }
                     card.setOnLongClickListener { row.onLong(item); true }
+                    Ui.applyFont(card)
                     box.addView(card)
                 }
             }
@@ -160,10 +180,30 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     Thumbs.load(a.findViewById(R.id.avatar), c.avatar, R.drawable.ic_person)
                     a.setOnClickListener { row.onClick(c) }
                     a.setOnLongClickListener { row.onLong(c); true }
+                    Ui.applyFont(a)
                     box.addView(a)
                 }
             }
             is Row.Video -> {
+                val scale = Settings.tileScale
+                val d = v.resources.displayMetrics.density
+                val title = v.findViewById<TextView>(R.id.title)
+                val sub = v.findViewById<TextView>(R.id.sub)
+                if (Settings.cards) {
+                    val cols = Settings.columns
+                    val f = scale * when (cols) { 1 -> 1f; 2 -> 0.9f; else -> 0.8f }
+                    title.textSize = 15f * f
+                    sub.textSize = 12.5f * f
+                    title.maxLines = if (cols >= 3) 3 else 2
+                    val ph = ((if (cols > 1) 5 else 12) * d).toInt()
+                    v.setPadding(ph, v.paddingTop, ph, v.paddingBottom)
+                } else {
+                    val box = v.findViewById<View>(R.id.thumbBox)
+                    val w = (150 * scale * d).toInt()
+                    box.layoutParams = box.layoutParams.apply { width = w; height = w * 9 / 16 }
+                    title.textSize = 14.5f * scale
+                    sub.textSize = 12f * scale
+                }
                 v.findViewById<TextView>(R.id.title).text = row.v.title
                 v.findViewById<TextView>(R.id.sub).text = row.v.meta ?: row.v.uploader
                 val dur = v.findViewById<TextView>(R.id.duration)
@@ -199,6 +239,98 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 val long = row.onLong
                 if (long != null) v.setOnLongClickListener { long(); true } else v.setOnLongClickListener(null)
             }
+            is Row.Choice -> {
+                val content = settingBase(v, row.title, row.sub, null)
+                val d = v.resources.displayMetrics.density
+                val box = LinearLayout(v.context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding((12 * d).toInt(), (4 * d).toInt(), (12 * d).toInt(), 0)
+                }
+                row.labels.forEachIndexed { i, label ->
+                    val chip = Chip(v.context)
+                    chip.setChipDrawable(
+                        ChipDrawable.createFromAttributes(
+                            v.context, null, 0, com.google.android.material.R.style.Widget_Material3_Chip_Filter
+                        )
+                    )
+                    chip.text = label
+                    chip.isCheckable = true
+                    chip.isChecked = i == row.selected
+                    chip.layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply { marginEnd = (8 * d).toInt() }
+                    chip.setOnClickListener { if (i != row.selected) row.onSelect(i) else chip.isChecked = true }
+                    Ui.applyFont(chip)
+                    box.addView(chip)
+                }
+                content.addView(NestedHScroll(v.context).apply {
+                    isHorizontalScrollBarEnabled = false
+                    addView(box)
+                })
+            }
+            is Row.Slider -> {
+                val valueView = v.findViewById<TextView>(R.id.value)
+                val content = settingBase(v, row.title, row.sub, row.format(row.value))
+                val d = v.resources.displayMetrics.density
+                val slider = com.google.android.material.slider.Slider(v.context).apply {
+                    valueFrom = row.from
+                    valueTo = row.to
+                    stepSize = row.step
+                    value = row.value.coerceIn(row.from, row.to)
+                    setLabelFormatter { row.format(it) }
+                    addOnChangeListener { _, value, _ -> valueView.text = row.format(value) }
+                    addOnSliderTouchListener(object : com.google.android.material.slider.Slider.OnSliderTouchListener {
+                        override fun onStartTrackingTouch(slider: com.google.android.material.slider.Slider) {}
+                        override fun onStopTrackingTouch(slider: com.google.android.material.slider.Slider) {
+                            row.onChange(slider.value)
+                        }
+                    })
+                }
+                slider.setPadding((4 * d).toInt(), 0, (4 * d).toInt(), 0)
+                content.addView(slider)
+            }
+            is Row.Toggle -> {
+                settingBase(v, row.title, row.sub, null)
+                val t = v.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.toggle)
+                t.visibility = View.VISIBLE
+                t.setOnCheckedChangeListener(null)
+                t.isChecked = row.checked
+                t.setOnCheckedChangeListener { _, c -> row.onChange(c) }
+                v.setOnClickListener { t.toggle() }
+            }
+            is Row.Colors -> {
+                val content = settingBase(v, row.title, null, row.items.getOrNull(row.selected)?.first)
+                val d = v.resources.displayMetrics.density
+                val box = LinearLayout(v.context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding((12 * d).toInt(), (8 * d).toInt(), (12 * d).toInt(), (4 * d).toInt())
+                }
+                val ring = MaterialColors.getColor(v, com.google.android.material.R.attr.colorOnSurface)
+                row.items.forEachIndexed { i, (_, color) ->
+                    val dot = View(v.context)
+                    val bg = android.graphics.drawable.GradientDrawable().apply {
+                        shape = android.graphics.drawable.GradientDrawable.OVAL
+                        if (color == 0) {
+                            gradientType = android.graphics.drawable.GradientDrawable.SWEEP_GRADIENT
+                            colors = intArrayOf(
+                                0xFFE53935.toInt(), 0xFFFDD835.toInt(), 0xFF43A047.toInt(),
+                                0xFF1E88E5.toInt(), 0xFF8E24AA.toInt(), 0xFFE53935.toInt()
+                            )
+                        } else setColor(color)
+                        if (i == row.selected) setStroke((3 * d).toInt(), ring)
+                    }
+                    dot.background = bg
+                    dot.contentDescription = row.items[i].first
+                    dot.layoutParams = LinearLayout.LayoutParams((40 * d).toInt(), (40 * d).toInt())
+                        .apply { marginEnd = (12 * d).toInt() }
+                    dot.setOnClickListener { row.onSelect(i) }
+                    box.addView(dot)
+                }
+                content.addView(NestedHScroll(v.context).apply {
+                    isHorizontalScrollBarEnabled = false
+                    addView(box)
+                })
+            }
             is Row.Progress -> {
                 v.findViewById<ImageView>(R.id.kind).setImageResource(row.icon)
                 v.findViewById<TextView>(R.id.title).text = row.title
@@ -223,6 +355,23 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 if (click != null) v.setOnClickListener { click() } else v.setOnClickListener(null)
             }
         }
+    }
+
+    /** Prépare une ligne de réglage et renvoie la zone où placer le contrôle. */
+    private fun settingBase(v: View, title: String, sub: String?, value: String?): ViewGroup {
+        v.findViewById<TextView>(R.id.title).text = title
+        val s = v.findViewById<TextView>(R.id.sub)
+        s.text = sub
+        s.visibility = if (sub == null) View.GONE else View.VISIBLE
+        val val_ = v.findViewById<TextView>(R.id.value)
+        val_.text = value
+        val_.visibility = if (value == null) View.GONE else View.VISIBLE
+        v.findViewById<View>(R.id.toggle).visibility = View.GONE
+        v.setOnClickListener(null)
+        v.isClickable = false
+        val content = v.findViewById<ViewGroup>(R.id.content)
+        content.removeAllViews()
+        return content
     }
 
     private fun styleSubscribe(b: MaterialButton, subscribed: Boolean, onToggle: () -> Unit) {

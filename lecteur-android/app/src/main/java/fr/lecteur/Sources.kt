@@ -39,7 +39,6 @@ import java.io.ByteArrayInputStream
 @OptIn(UnstableApi::class)
 object Sources {
     private const val TAG = "Sources"
-    private const val MAX_HEIGHT = 1080
 
     fun build(info: StreamInfo): MediaSource {
         val ds = YtDataSource.Factory()
@@ -84,7 +83,7 @@ object Sources {
     fun pickVideo(list: List<VideoStream>): VideoStream? {
         val ok = list.filter {
             it.isUrl && it.itagItem != null &&
-                it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.height in 1..MAX_HEIGHT
+                it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.height in 1..Settings.maxHeight
         }
         fun best(pred: (VideoStream) -> Boolean) = ok.filter(pred).maxByOrNull { it.height * 1000 + it.fps }
         return best { it.codec?.startsWith("avc") == true }
@@ -105,7 +104,8 @@ object Sources {
     /** Vidéo pour téléchargement : H.264 (assemblable en MP4), 720p max pour rester léger. */
     fun pickVideoForDownload(list: List<VideoStream>): VideoStream? = list.filter {
         it.isUrl && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP &&
-            it.format == MediaFormat.MPEG_4 && it.codec?.startsWith("avc") == true && it.height in 1..720
+            it.format == MediaFormat.MPEG_4 && it.codec?.startsWith("avc") == true &&
+            it.height in 1..Settings.maxHeight
     }.maxByOrNull { it.height * 1000 + it.fps }
 
     private fun dash(s: Stream, durationSec: Long, item: MediaItem, ds: DataSource.Factory): MediaSource? {

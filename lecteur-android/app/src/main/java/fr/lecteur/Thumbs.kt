@@ -2,9 +2,12 @@ package fr.lecteur
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.LruCache
+import android.util.Size
 import android.widget.ImageView
 import java.util.concurrent.Executors
 
@@ -22,8 +25,16 @@ object Thumbs {
         if (placeholder != 0) view.setImageResource(placeholder) else view.setImageDrawable(null)
         if (url == null) return
         cache.get(url)?.let { show(view, it); return }
+        val app = view.context.applicationContext
         pool.execute {
             try {
+                if (url.startsWith("content://")) {
+                    if (Build.VERSION.SDK_INT < 29) return@execute
+                    val bmp = app.contentResolver.loadThumbnail(Uri.parse(url), Size(480, 270), null)
+                    cache.put(url, bmp)
+                    main.post { if (view.tag == url) show(view, bmp) }
+                    return@execute
+                }
                 val req = okhttp3.Request.Builder().url(url).build()
                 val bytes = DownloaderImpl.instance.client.newCall(req).execute().use { it.body?.bytes() }
                     ?: return@execute

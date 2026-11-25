@@ -1,0 +1,30 @@
+<resources>
+    <color name="red_primary">#FFB4AA</color>
+    <color name="red_on_primary">#930F0B</color>
+    <color name="red_container">#930F0B</color>
+    <color name="red_on_container">#F5EFF7</color>
+    <color name="blue_primary">#A8C7FA</color>
+    <color name="blue_on_primary">#0842A0</color>
+    <color name="blue_container">#0842A0</color>
+    <color name="blue_on_container">#F5EFF7</color>
+    <color name="green_primary">#6DD58C</color>
+    <color name="green_on_primary">#0F5223</color>
+    <color name="green_container">#0F5223</color>
+    <color name="green_on_container">#F5EFF7</color>
+    <color name="purple_primary">#D0BCFF</color>
+    <color name="purple_on_primary">#4F378B</color>
+    <color name="purple_container">#4F378B</color>
+    <color name="purple_on_container">#F5EFF7</color>
+    <color name="orange_primary">#FFB870</color>
+    <color name="orange_on_primary">#6A3C00</color>
+    <color name="orange_container">#6A3C00</color>
+    <color name="orange_on_container">#F5EFF7</color>
+    <color name="pink_primary">#FFAFD7</color>
+    <color name="pink_on_primary">#7E2959</color>
+    <color name="pink_container">#7E2959</color>
+    <color name="pink_on_container">#F5EFF7</color>
+    <color name="teal_primary">#4CDADA</color>
+    <color name="teal_on_primary">#004F4F</color>
+    <color name="teal_container">#004F4F</color>
+    <color name="teal_on_container">#F5EFF7</color>
+</resources>

@@ -66,6 +66,8 @@ object Store {
 
     @Synchronized fun clearSearches() = put("searches", JSONArray())
 
+    @Synchronized fun clearWatched() = put("watched", JSONArray())
+
     // ——— Abonnements ———
     @Synchronized fun subs(): List<Chan> = objects("subs").map {
         Chan(it.optString("url"), it.optString("name"), it.str("avatar"))

@@ -1,0 +1,51 @@
+package fr.lecteur
+
+import android.app.Activity
+import android.content.res.Configuration
+import android.graphics.Typeface
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import com.google.android.material.color.DynamicColors
+import com.google.android.material.color.DynamicColorsOptions
+
+/** Thème (couleur, noir pur) et police choisis dans les réglages. */
+object Ui {
+    fun applyTheme(a: Activity) {
+        val opt = Settings.colors.firstOrNull { it.key == Settings.color } ?: Settings.colors[0]
+        if (opt.key == "auto") {
+            DynamicColors.applyToActivityIfAvailable(a)
+        } else if (DynamicColors.isDynamicColorAvailable()) {
+            // Palette Material complète calculée à partir de la couleur choisie
+            DynamicColors.applyToActivityIfAvailable(
+                a, DynamicColorsOptions.Builder().setContentBasedSource(opt.seed).build()
+            )
+        } else {
+            a.theme.applyStyle(opt.overlay, true)
+        }
+        val night = (a.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        if (night && Settings.black) a.theme.applyStyle(R.style.ThemeOverlay_Lecteur_Black, true)
+    }
+
+    private var cachedKey: String? = null
+    private var cachedFace: Typeface? = null
+
+    private fun family(): Typeface? {
+        val key = Settings.font
+        if (key != cachedKey) {
+            cachedKey = key
+            cachedFace = Settings.fonts.firstOrNull { it.first == key }?.third?.let { Typeface.create(it, Typeface.NORMAL) }
+        }
+        return cachedFace
+    }
+
+    /** Applique la police choisie à tous les textes d'une vue. */
+    fun applyFont(v: View) {
+        val face = family() ?: return
+        when (v) {
+            is TextView -> v.setTypeface(Typeface.create(face, v.typeface?.style ?: Typeface.NORMAL))
+            is ViewGroup -> for (i in 0 until v.childCount) applyFont(v.getChildAt(i))
+        }
+    }
+}
