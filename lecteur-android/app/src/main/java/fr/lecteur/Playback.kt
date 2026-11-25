@@ -13,7 +13,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.schabi.newpipe.extractor.stream.Description
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 
 /**
@@ -69,7 +68,7 @@ object Playback {
         Store.addWatched(v)
         val desc = info.description
         infos[info.url] = Info(
-            desc?.content?.ifBlank { null }, desc?.type == Description.HTML,
+            desc?.content?.ifBlank { null }, desc?.type == 1, // 1 = HTML
             info.streamSegments.map { it.startTimeSeconds * 1000L to it.title }
         )
         related = info.relatedItems.filterIsInstance<StreamInfoItem>().map(Yt::vid)
