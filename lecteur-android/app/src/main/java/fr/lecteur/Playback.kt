@@ -68,7 +68,7 @@ object Playback {
         Store.addWatched(v)
         val desc = info.description
         infos[info.url] = Info(
-            desc?.content?.ifBlank { null }, desc?.type == 1, // 1 = HTML
+            desc?.content?.ifBlank { null }, desc?.type?.toString()?.contains("HTML") == true,
             info.streamSegments.map { it.startTimeSeconds * 1000L to it.title }
         )
         related = info.relatedItems.filterIsInstance<StreamInfoItem>().map(Yt::vid)
