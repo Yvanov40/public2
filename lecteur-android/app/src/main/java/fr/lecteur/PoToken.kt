@@ -71,6 +71,22 @@ object PoToken : PoTokenProvider {
         }
     }
 
+    /** Diagnostic : génère un jeton de test et renvoie un résumé (lève une exception si échec). */
+    fun selfTest(): String {
+        val t0 = System.currentTimeMillis()
+        return try {
+            synchronized(this) {
+                ensureReady()
+                val tok = mint("jNQXAC9IVRw")
+                failures = 0
+                "OK (jeton de ${tok.length} caractères, ${System.currentTimeMillis() - t0} ms)"
+            }
+        } catch (e: Exception) {
+            reset()
+            throw e
+        }
+    }
+
     private fun reset() {
         ready = false
         expiresAt = 0

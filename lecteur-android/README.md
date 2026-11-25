@@ -31,7 +31,7 @@ Lecteur audio/vidéo YouTube léger pour Android (usage personnel).
 ## Protection contre les blocages de YouTube
 
 - Jeton anti-robot (« PO Token ») généré comme NewPipe, dans un navigateur caché
-- Serveurs relais Piped en secours si YouTube refuse une vidéo, une musique ou une recherche
+- Serveurs relais en secours (Piped et Invidious) ; écran « Diagnostic YouTube » dans Réglages si YouTube refuse une vidéo, une musique ou une recherche
 - Recompilation automatique chaque semaine (dernière version de NewPipeExtractor)
 
 ## Installer

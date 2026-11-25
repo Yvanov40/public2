@@ -17,6 +17,7 @@ android {
         targetSdk = 35
         versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
         versionName = (project.findProperty("versionName") as String?) ?: "1.0"
+        buildConfigField("String", "NPE_VERSION", "\"$npeVersion\"")
     }
 
     // Signature : clé fournie par la CI (secret GitHub) si présente, sinon clé de debug
@@ -45,6 +46,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+
+    buildFeatures { buildConfig = true }
 
     lint {
         checkReleaseBuilds = false

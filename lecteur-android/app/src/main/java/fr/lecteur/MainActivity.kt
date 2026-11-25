@@ -2269,6 +2269,39 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    // ——— Diagnostic ———
+
+    private fun runDiagnostic() {
+        val d = resources.displayMetrics.density
+        val text = TextView(this).apply {
+            typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 12f
+            setTextIsSelectable(true)
+            setPadding((20 * d).toInt(), (8 * d).toInt(), (20 * d).toInt(), (8 * d).toInt())
+            text = "Tests en cours…\n"
+        }
+        val scroll = android.widget.ScrollView(this).apply { addView(text) }
+        val log = StringBuilder()
+        val dlg = MaterialAlertDialogBuilder(this)
+            .setTitle("Diagnostic YouTube")
+            .setView(scroll)
+            .setPositiveButton("Copier") { _, _ ->
+                val cm = getSystemService(android.content.ClipboardManager::class.java)
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("Diagnostic Lecteur", log.toString()))
+                snack("Résultat copié : tu peux le coller dans un message")
+            }
+            .setNegativeButton("Fermer", null)
+            .show()
+        val job = lifecycleScope.launch {
+            Diagnostic.run(applicationContext) { line ->
+                log.append(line).append('\n')
+                text.text = log
+                scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+            }
+        }
+        dlg.setOnDismissListener { if (!job.isCompleted) job.cancel() }
+    }
+
     // ——— Mises à jour ———
 
     private fun autoUpdateCheck() {
@@ -2429,6 +2462,10 @@ class MainActivity : AppCompatActivity() {
             "?"
         }
         rows += Row.Header("Application")
+        rows += Row.Entry(
+            "Diagnostic YouTube", "Teste la lecture directe, le jeton et chaque serveur relais", null, R.drawable.ic_info,
+            onClick = { runDiagnostic() }
+        )
         rows += Row.Entry(
             "Rechercher une mise à jour", "Vérifie aussi automatiquement deux fois par jour", null, R.drawable.ic_update,
             onClick = { checkUpdate(manual = true) }

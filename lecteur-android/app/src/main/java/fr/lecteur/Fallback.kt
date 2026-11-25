@@ -18,20 +18,35 @@ import org.schabi.newpipe.extractor.stream.StreamType
 import java.io.IOException
 
 /**
- * Plan B : serveurs relais publics Piped. Ils récupèrent la vidéo chez YouTube à notre place
- * et la retransmettent. Utilisé seulement quand la lecture directe échoue.
+ * Plan B : serveurs relais publics. Deux familles indépendantes :
+ * Piped et Invidious. Ils récupèrent la vidéo chez YouTube à notre place et la retransmettent.
+ * Utilisé seulement quand la lecture directe échoue.
  */
 @OptIn(UnstableApi::class)
 object Fallback {
-    private val defaults = listOf(
+    /** Un serveur relais : famille (piped / invidious) + adresse. */
+    data class Relay(val kind: String, val url: String) {
+        val label get() = (if (kind == "piped") "Piped" else "Invidious") + " · " + Uri.parse(url).host
+    }
+
+    private val pipedDefaults = listOf(
         "https://pipedapi.kavin.rocks",
         "https://pipedapi.adminforge.de",
         "https://api.piped.private.coffee",
         "https://pipedapi.r4fo.com",
         "https://pipedapi.leptons.xyz"
     )
-    @Volatile private var instances: List<String>? = null
-    @Volatile private var lastGood: String? = null
+    private val invidiousDefaults = listOf(
+        "https://inv.nadeko.net",
+        "https://yewtu.be",
+        "https://invidious.nerdvpn.de",
+        "https://invidious.privacyredirect.com",
+        "https://iv.melmac.space"
+    )
+
+    @Volatile private var piped: List<String>? = null
+    @Volatile private var invidious: List<String>? = null
+    @Volatile private var lastGood: Relay? = null
 
     class Result(val source: MediaSource, val vid: Vid, val info: Playback.Info, val related: List<Vid>)
 
@@ -43,22 +58,40 @@ object Fallback {
         }
     }
 
-    /** Liste des serveurs : le dernier qui a marché d'abord, puis la liste publique. */
-    private fun apis(): List<String> {
-        val list = instances ?: (defaults + runCatching {
-            val arr = JSONArray(get("https://piped-instances.kavin.rocks/"))
-            (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.optString("api_url")?.trimEnd('/')?.ifEmpty { null } }
-        }.getOrDefault(emptyList())).distinct().also { instances = it }
-        return (listOfNotNull(lastGood) + list).distinct().take(8)
+    private fun pipedList(): List<String> = piped ?: (pipedDefaults + runCatching {
+        val arr = JSONArray(get("https://piped-instances.kavin.rocks/"))
+        (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.optString("api_url")?.trimEnd('/')?.ifEmpty { null } }
+    }.getOrDefault(emptyList())).distinct().also { piped = it }
+
+    /** Liste publique Invidious : seulement les serveurs https qui acceptent l'API. */
+    private fun invidiousList(): List<String> = invidious ?: (invidiousDefaults + runCatching {
+        val arr = JSONArray(get("https://api.invidious.io/instances.json?sort_by=health"))
+        (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONArray(i)?.optJSONObject(1) ?: return@mapNotNull null
+            if (o.optString("type") != "https" || !o.optBoolean("api")) null
+            else o.optString("uri").trimEnd('/').ifEmpty { null }
+        }
+    }.getOrDefault(emptyList())).distinct().also { invidious = it }
+
+    /** Tous les relais à essayer : le dernier qui a marché, puis Piped et Invidious en alternance. */
+    fun relays(max: Int = 10): List<Relay> {
+        val p = pipedList().map { Relay("piped", it) }
+        val v = invidiousList().map { Relay("invidious", it) }
+        val mixed = mutableListOf<Relay>()
+        for (i in 0 until maxOf(p.size, v.size)) {
+            p.getOrNull(i)?.let { mixed += it }
+            v.getOrNull(i)?.let { mixed += it }
+        }
+        return (listOfNotNull(lastGood) + mixed).distinct().take(max)
     }
 
-    private fun <T> firstWorking(block: (String) -> T): T {
+    private fun <T> firstWorking(block: (Relay) -> T): T {
         var last: Exception? = null
-        for (api in apis()) {
+        for (r in relays()) {
             try {
-                val r = block(api)
-                lastGood = api
-                return r
+                val res = block(r)
+                lastGood = r
+                return res
             } catch (e: Exception) {
                 last = e
             }
@@ -68,123 +101,213 @@ object Fallback {
 
     fun videoId(url: String) = SponsorBlock.videoId(url)
 
-    private fun abs(path: String?) = when {
+    private fun abs(base: String, path: String?) = when {
         path.isNullOrEmpty() -> null
         path.startsWith("http") -> path
-        else -> "https://www.youtube.com$path"
+        path.startsWith("//") -> "https:$path"
+        else -> base.trimEnd('/') + path
     }
 
-    private fun vidOf(o: JSONObject): Vid? {
-        val url = abs(o.optString("url")) ?: return null
-        return Vid(
-            url, o.optString("title"), o.optString("uploaderName").ifEmpty { null },
-            abs(o.optString("uploaderUrl")), o.optString("thumbnail").ifEmpty { null }, o.optLong("duration"),
-            listOfNotNull(o.optString("uploaderName").ifEmpty { null }, Yt.views(o.optLong("views", -1))).joinToString(" · ")
-        )
-    }
+    private fun yt(path: String?) = abs("https://www.youtube.com", path)
+
+    /** Description commune d'une vidéo, quelle que soit la famille de relais. */
+    private class Streams(
+        val title: String, val uploader: String?, val uploaderUrl: String?, val thumb: String?, val duration: Long,
+        val audio: String?, val video: String?, val muxed: String?, val hls: String?,
+        val subs: List<Triple<String, String, String>>, // url, langue, libellé (vtt)
+        val description: String?, val chapters: List<Pair<Long, String>>, val related: List<Vid>
+    )
 
     /** Construit la source de lecture d'une vidéo via un serveur relais. */
     fun build(
         videoId: String, mediaId: String, audioOnly: Boolean,
         title: String? = null, artist: String? = null, artwork: String? = null
     ): Result {
-        val o = firstWorking { api ->
-            JSONObject(get("$api/streams/$videoId")).also { if (it.has("error")) throw IOException(it.optString("error")) }
-        }
+        val s = firstWorking { r -> if (r.kind == "piped") piped(r.url, videoId) else invidious(r.url, videoId) }
+        return toResult(s, videoId, mediaId, audioOnly, title, artist, artwork)
+    }
+
+    private fun toResult(
+        s: Streams, videoId: String, mediaId: String, audioOnly: Boolean,
+        title: String?, artist: String?, artwork: String?
+    ): Result {
         val ds = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setUserAgent(DownloaderImpl.USER_AGENT)
-        val name = title ?: o.optString("title")
-        val uploader = artist ?: o.optString("uploader").ifEmpty { null }
-        val thumb = artwork ?: o.optString("thumbnailUrl").ifEmpty { null }
+        val name = title ?: s.title
+        val uploader = artist ?: s.uploader
+        val thumb = artwork ?: s.thumb
         val meta = MediaMetadata.Builder().setTitle(name).setArtist(uploader)
             .setArtworkUri(thumb?.let(Uri::parse)).build()
-        val item = MediaItem.Builder().setMediaId(mediaId).setMediaMetadata(meta)
+        fun item(url: String) = MediaItem.Builder().setMediaId(mediaId).setMediaMetadata(meta).setUri(url)
+        fun progressive(url: String) = ProgressiveMediaSource.Factory(ds).createMediaSource(item(url).build())
 
-        fun progressive(url: String) = ProgressiveMediaSource.Factory(ds).createMediaSource(item.setUri(url).build())
+        val parts = mutableListOf<MediaSource>()
+        when {
+            audioOnly && s.audio != null -> parts += progressive(s.audio)
+            s.video != null && s.audio != null -> {
+                parts += progressive(s.video)
+                parts += progressive(s.audio)
+            }
+            s.muxed != null -> parts += progressive(s.muxed)
+            s.audio != null -> parts += progressive(s.audio)
+            s.hls != null -> parts += androidx.media3.exoplayer.hls.HlsMediaSource.Factory(ds)
+                .createMediaSource(item(s.hls).setMimeType(MimeTypes.APPLICATION_M3U8).build())
+        }
+        if (parts.isEmpty()) throw IOException("aucun flux disponible sur le serveur relais")
+        if (!audioOnly) s.subs.forEach { (url, lang, label) ->
+            Sources.subtitleFrom(url, MimeTypes.TEXT_VTT, lang, label, ds)?.let { parts += it }
+        }
+        val source = if (parts.size == 1) parts[0] else MergingMediaSource(*parts.toTypedArray())
+        val vid = Vid("https://www.youtube.com/watch?v=$videoId", name, uploader, s.uploaderUrl, thumb, s.duration)
+        return Result(source, vid, Playback.Info(s.description, true, s.chapters), s.related)
+    }
 
+    // ——— Piped ———
+
+    private fun piped(api: String, videoId: String): Streams {
+        val o = JSONObject(get("$api/streams/$videoId"))
+        if (o.has("error")) throw IOException(o.optString("error"))
         val audios = o.optJSONArray("audioStreams") ?: JSONArray()
         val videos = o.optJSONArray("videoStreams") ?: JSONArray()
         val audio = (0 until audios.length()).mapNotNull { audios.optJSONObject(it) }
             .filter { it.optString("url").isNotEmpty() }
             .sortedWith(compareByDescending<JSONObject> { it.optString("mimeType").contains("mp4") }.thenByDescending { it.optInt("bitrate") })
-            .firstOrNull()
+            .firstOrNull()?.optString("url")
         val all = (0 until videos.length()).mapNotNull { videos.optJSONObject(it) }.filter { it.optString("url").isNotEmpty() }
-        fun height(v: JSONObject) = v.optInt("height").takeIf { it > 0 }
-            ?: v.optString("quality").substringBefore('p').toIntOrNull() ?: 0
-        val videoOnly = all.filter { it.optBoolean("videoOnly") && height(it) in 1..Settings.maxHeight }
-            .sortedWith(
-                compareByDescending<JSONObject> { it.optString("codec").startsWith("avc") }
-                    .thenByDescending { height(it) }
-            ).firstOrNull()
-        val muxed = all.filter { !it.optBoolean("videoOnly") }.maxByOrNull { height(it) }
-
-        val parts = mutableListOf<MediaSource>()
-        when {
-            audioOnly && audio != null -> parts += progressive(audio.getString("url"))
-            videoOnly != null && audio != null -> {
-                parts += progressive(videoOnly.getString("url"))
-                parts += progressive(audio.getString("url"))
-            }
-            muxed != null -> parts += progressive(muxed.getString("url"))
-            audio != null -> parts += progressive(audio.getString("url"))
-            else -> o.optString("hls").ifEmpty { null }?.let { hls ->
-                parts += androidx.media3.exoplayer.hls.HlsMediaSource.Factory(ds)
-                    .createMediaSource(item.setUri(hls).setMimeType(MimeTypes.APPLICATION_M3U8).build())
-            }
-        }
-        if (parts.isEmpty()) throw IOException("aucun flux disponible sur le serveur relais")
-
-        if (!audioOnly) {
-            val subs = o.optJSONArray("subtitles") ?: JSONArray()
-            for (i in 0 until subs.length()) {
-                val s = subs.optJSONObject(i) ?: continue
-                val url = s.optString("url").ifEmpty { null } ?: continue
-                val mime = when {
-                    s.optString("mimeType").contains("vtt") -> MimeTypes.TEXT_VTT
-                    s.optString("mimeType").contains("ttml") || s.optString("mimeType").contains("xml") -> MimeTypes.APPLICATION_TTML
-                    else -> continue
-                }
-                val label = s.optString("name").ifEmpty { s.optString("code") } + if (s.optBoolean("autoGenerated")) " (auto)" else ""
-                Sources.subtitleFrom(url, mime, s.optString("code").ifEmpty { null }, label, ds)?.let { parts += it }
-            }
-        }
-
-        val source = if (parts.size == 1) parts[0] else MergingMediaSource(*parts.toTypedArray())
-        val vid = Vid(
-            "https://www.youtube.com/watch?v=$videoId", name, uploader, abs(o.optString("uploaderUrl")),
-            thumb, o.optLong("duration")
-        )
+        fun height(v: JSONObject) = v.optInt("height").takeIf { it > 0 } ?: v.optString("quality").substringBefore('p').toIntOrNull() ?: 0
+        val video = all.filter { it.optBoolean("videoOnly") && height(it) in 1..Settings.maxHeight }
+            .sortedWith(compareByDescending<JSONObject> { it.optString("codec").startsWith("avc") }.thenByDescending { height(it) })
+            .firstOrNull()?.optString("url")
+        val muxed = all.filter { !it.optBoolean("videoOnly") }.maxByOrNull { height(it) }?.optString("url")
+        val subs = o.optJSONArray("subtitles")?.let { arr ->
+            (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }
+                .filter { it.optString("url").isNotEmpty() && it.optString("mimeType").contains("vtt") }
+                .map { Triple(it.optString("url"), it.optString("code"), it.optString("name") + if (it.optBoolean("autoGenerated")) " (auto)" else "") }
+        }.orEmpty()
         val chapters = o.optJSONArray("chapters")?.let { arr ->
             (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.map { it.optLong("start") * 1000 to it.optString("title") }
         }.orEmpty()
-        val info = Playback.Info(o.optString("description").ifEmpty { null }, true, chapters)
         val related = o.optJSONArray("relatedStreams")?.let { arr ->
-            (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.filter { it.optString("type", "stream") == "stream" }.mapNotNull(::vidOf)
+            (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.filter { it.optString("type", "stream") == "stream" }.mapNotNull { j ->
+                val url = yt(j.optString("url")) ?: return@mapNotNull null
+                Vid(url, j.optString("title"), j.optString("uploaderName").ifEmpty { null }, yt(j.optString("uploaderUrl")),
+                    j.optString("thumbnail").ifEmpty { null }, j.optLong("duration"),
+                    listOfNotNull(j.optString("uploaderName").ifEmpty { null }, Yt.views(j.optLong("views", -1))).joinToString(" · "))
+            }
         }.orEmpty()
-        return Result(source, vid, info, related)
+        return Streams(
+            o.optString("title"), o.optString("uploader").ifEmpty { null }, yt(o.optString("uploaderUrl")),
+            o.optString("thumbnailUrl").ifEmpty { null }, o.optLong("duration"),
+            audio, video, muxed, o.optString("hls").ifEmpty { null }, subs,
+            o.optString("description").ifEmpty { null }, chapters, related
+        )
     }
 
-    /** Recherche de vidéos via un serveur relais, au même format que NewPipe. */
-    fun search(q: String): List<StreamInfoItem> {
-        val o = firstWorking { api ->
-            JSONObject(get("$api/search?q=${Uri.encode(q)}&filter=videos"))
-        }
-        val items = o.optJSONArray("items") ?: return emptyList()
-        return (0 until items.length()).mapNotNull { items.optJSONObject(it) }
-            .filter { it.optString("type", "stream") == "stream" }
-            .mapNotNull { j ->
-                val url = abs(j.optString("url")) ?: return@mapNotNull null
-                StreamInfoItem(0, url, j.optString("title"), StreamType.VIDEO_STREAM).apply {
-                    uploaderName = j.optString("uploaderName")
-                    uploaderUrl = abs(j.optString("uploaderUrl"))
-                    duration = j.optLong("duration")
-                    viewCount = j.optLong("views", -1)
-                    j.optString("thumbnail").ifEmpty { null }?.let {
-                        thumbnails = listOf(Image(it, Image.HEIGHT_UNKNOWN, Image.WIDTH_UNKNOWN, Image.ResolutionLevel.UNKNOWN))
-                    }
-                    j.optString("uploadedDate").ifEmpty { null }?.let { textualUploadDate = it }
-                }
+    // ——— Invidious ———
+
+    private fun invThumb(base: String, arr: JSONArray?): String? {
+        if (arr == null) return null
+        val list = (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }
+        val best = list.firstOrNull { it.optString("quality") == "medium" || it.optString("quality") == "high" } ?: list.firstOrNull()
+        return abs(base, best?.optString("url"))
+    }
+
+    private fun invidious(base: String, videoId: String): Streams {
+        // local=true : les fichiers passent aussi par le serveur relais
+        val o = JSONObject(get("$base/api/v1/videos/$videoId?local=true"))
+        if (o.has("error")) throw IOException(o.optString("error"))
+        val adaptive = o.optJSONArray("adaptiveFormats")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) } }.orEmpty()
+            .filter { it.optString("url").isNotEmpty() }
+        val audio = adaptive.filter { it.optString("type").startsWith("audio/") }
+            .sortedWith(compareByDescending<JSONObject> { it.optString("type").contains("mp4") }.thenByDescending { it.optString("bitrate").toLongOrNull() ?: 0 })
+            .firstOrNull()?.let { abs(base, it.optString("url")) }
+        fun height(v: JSONObject) = v.optString("resolution").substringBefore('p').toIntOrNull()
+            ?: v.optString("qualityLabel").substringBefore('p').toIntOrNull() ?: 0
+        val video = adaptive.filter { it.optString("type").startsWith("video/") && height(it) in 1..Settings.maxHeight }
+            .sortedWith(compareByDescending<JSONObject> { it.optString("type").contains("avc1") }.thenByDescending { height(it) })
+            .firstOrNull()?.let { abs(base, it.optString("url")) }
+        val muxed = o.optJSONArray("formatStreams")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) } }.orEmpty()
+            .maxByOrNull { height(it) }?.let { abs(base, it.optString("url")) }
+        val subs = o.optJSONArray("captions")?.let { a ->
+            (0 until a.length()).mapNotNull { a.optJSONObject(it) }.mapNotNull { c ->
+                val url = abs(base, c.optString("url")) ?: return@mapNotNull null
+                Triple(url, c.optString("language_code"), c.optString("label"))
             }
+        }.orEmpty()
+        val related = o.optJSONArray("recommendedVideos")?.let { a ->
+            (0 until a.length()).mapNotNull { a.optJSONObject(it) }.mapNotNull { j ->
+                val id = j.optString("videoId").ifEmpty { null } ?: return@mapNotNull null
+                Vid("https://www.youtube.com/watch?v=$id", j.optString("title"), j.optString("author").ifEmpty { null },
+                    yt(j.optString("authorUrl")), invThumb(base, j.optJSONArray("videoThumbnails")), j.optLong("lengthSeconds"),
+                    listOfNotNull(j.optString("author").ifEmpty { null }, Yt.views(j.optLong("viewCount", -1))).joinToString(" · "))
+            }
+        }.orEmpty()
+        return Streams(
+            o.optString("title"), o.optString("author").ifEmpty { null }, yt(o.optString("authorUrl")),
+            invThumb(base, o.optJSONArray("videoThumbnails")), o.optLong("lengthSeconds"),
+            audio, video, muxed, o.optString("hlsUrl").ifEmpty { null }?.let { abs(base, it) }, subs,
+            o.optString("descriptionHtml").ifEmpty { o.optString("description") }.ifEmpty { null }, emptyList(), related
+        )
+    }
+
+    // ——— Recherche ———
+
+    /** Recherche de vidéos via un serveur relais, au même format que NewPipe. */
+    fun search(q: String): List<StreamInfoItem> = firstWorking { r ->
+        if (r.kind == "piped") {
+            val o = JSONObject(get("${r.url}/search?q=${Uri.encode(q)}&filter=videos"))
+            val items = o.optJSONArray("items") ?: JSONArray()
+            (0 until items.length()).mapNotNull { items.optJSONObject(it) }
+                .filter { it.optString("type", "stream") == "stream" }
+                .mapNotNull { j ->
+                    item(
+                        yt(j.optString("url")) ?: return@mapNotNull null, j.optString("title"), j.optString("uploaderName"),
+                        yt(j.optString("uploaderUrl")), j.optLong("duration"), j.optLong("views", -1),
+                        j.optString("thumbnail").ifEmpty { null }, j.optString("uploadedDate").ifEmpty { null }
+                    )
+                }
+        } else {
+            val arr = JSONArray(get("${r.url}/api/v1/search?q=${Uri.encode(q)}&type=video"))
+            (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }
+                .filter { it.optString("type") == "video" }
+                .mapNotNull { j ->
+                    val id = j.optString("videoId").ifEmpty { null } ?: return@mapNotNull null
+                    item(
+                        "https://www.youtube.com/watch?v=$id", j.optString("title"), j.optString("author"),
+                        yt(j.optString("authorUrl")), j.optLong("lengthSeconds"), j.optLong("viewCount", -1),
+                        invThumb(r.url, j.optJSONArray("videoThumbnails")), j.optString("publishedText").ifEmpty { null }
+                    )
+                }
+        }
+    }
+
+    private fun item(
+        url: String, title: String, uploader: String?, uploaderUrl: String?, duration: Long, views: Long,
+        thumb: String?, date: String?
+    ) = StreamInfoItem(0, url, title, StreamType.VIDEO_STREAM).apply {
+        uploaderName = uploader
+        this.uploaderUrl = uploaderUrl
+        this.duration = duration
+        viewCount = views
+        thumb?.let { thumbnails = listOf(Image(it, Image.HEIGHT_UNKNOWN, Image.WIDTH_UNKNOWN, Image.ResolutionLevel.UNKNOWN)) }
+        date?.let { textualUploadDate = it }
+    }
+
+    // ——— Diagnostic ———
+
+    /** Teste un relais précis : récupération des infos puis des premiers octets de l'audio. */
+    fun test(r: Relay, videoId: String): String {
+        val s = if (r.kind == "piped") piped(r.url, videoId) else invidious(r.url, videoId)
+        val url = s.audio ?: s.muxed ?: throw IOException("aucun flux")
+        val req = okhttp3.Request.Builder().url(url)
+            .header("User-Agent", DownloaderImpl.USER_AGENT)
+            .header("Range", "bytes=0-65535")
+            .build()
+        DownloaderImpl.instance.client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw IOException("fichier : HTTP ${resp.code}")
+            val n = resp.body?.bytes()?.size ?: 0
+            return "OK (${n / 1024} ko reçus)"
+        }
     }
 }
