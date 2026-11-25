@@ -145,8 +145,8 @@ object Sources {
         return ProgressiveMediaSource.Factory(ds, extractors).createMediaSource(MediaItem.fromUri(sub.content))
     }
 
-    fun bestThumb(images: List<Image>): String? {
+    fun bestThumb(images: List<Image>, minHeight: Int = 180): String? {
         val sorted = images.sortedBy { it.height }
-        return (sorted.firstOrNull { it.height >= 180 } ?: sorted.lastOrNull())?.url
+        return (sorted.firstOrNull { it.height >= minHeight } ?: sorted.lastOrNull())?.url
     }
 }

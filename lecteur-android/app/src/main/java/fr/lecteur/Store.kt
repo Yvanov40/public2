@@ -19,8 +19,6 @@ object Store {
         prefs = ctx.getSharedPreferences("store", Context.MODE_PRIVATE)
     }
 
-    class Video(val url: String, val title: String, val uploader: String?, val thumb: String?, val duration: Long)
-
     class Download(
         val uri: String, val title: String, val uploader: String?,
         val thumb: String?, val video: Boolean, val source: String, val path: String? = null
@@ -51,15 +49,40 @@ object Store {
     @Synchronized fun removeSearch(q: String) = put("searches", JSONArray(searches().filterNot { it == q }))
 
     // ——— Vidéos lues ———
-    @Synchronized fun watched(): List<Video> = objects("watched").map {
-        Video(it.optString("url"), it.optString("title"), it.str("uploader"), it.str("thumb"), it.optLong("duration"))
+    @Synchronized fun watched(): List<Vid> = objects("watched").map {
+        Vid(
+            it.optString("url"), it.optString("title"), it.str("uploader"), it.str("uploaderUrl"),
+            it.str("thumb"), it.optLong("duration")
+        )
     }
 
-    @Synchronized fun addWatched(v: Video) {
+    @Synchronized fun addWatched(v: Vid) {
         val list = listOf(v) + watched().filterNot { it.url == v.url }.take(49)
         put("watched", JSONArray(list.map {
             JSONObject().put("url", it.url).put("title", it.title).put("uploader", it.uploader)
-                .put("thumb", it.thumb).put("duration", it.duration)
+                .put("uploaderUrl", it.uploaderUrl).put("thumb", it.thumb).put("duration", it.duration)
+        }))
+    }
+
+    @Synchronized fun clearSearches() = put("searches", JSONArray())
+
+    // ——— Abonnements ———
+    @Synchronized fun subs(): List<Chan> = objects("subs").map {
+        Chan(it.optString("url"), it.optString("name"), it.str("avatar"))
+    }.sortedBy { it.name.lowercase() }
+
+    @Synchronized fun isSubscribed(url: String) = subs().any { it.url == url }
+
+    @Synchronized fun subscribe(c: Chan) {
+        val list = subs().filterNot { it.url == c.url } + c
+        put("subs", JSONArray(list.map {
+            JSONObject().put("url", it.url).put("name", it.name).put("avatar", it.avatar)
+        }))
+    }
+
+    @Synchronized fun unsubscribe(url: String) {
+        put("subs", JSONArray(subs().filterNot { it.url == url }.map {
+            JSONObject().put("url", it.url).put("name", it.name).put("avatar", it.avatar)
         }))
     }
 

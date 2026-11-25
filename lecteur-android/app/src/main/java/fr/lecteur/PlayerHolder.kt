@@ -17,6 +17,9 @@ object PlayerHolder {
     /** Ce que l'utilisateur veut : vidéo affichée (true) ou audio seul (false). */
     var videoMode = true
 
+    /** Vidéo YouTube en cours (null pour un fichier local). */
+    var current: Vid? = null
+
     fun get(ctx: Context): ExoPlayer {
         player?.let { return it }
         val app = ctx.applicationContext

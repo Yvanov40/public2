@@ -11,27 +11,30 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.util.TypedValue
 import android.view.GestureDetector
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
-import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.isVisible
+import androidx.core.widget.TextViewCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
@@ -45,6 +48,14 @@ import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import androidx.viewpager2.widget.ViewPager2
+import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.chip.Chip
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.google.android.material.snackbar.Snackbar
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -52,41 +63,66 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import org.schabi.newpipe.extractor.InfoItem
+import org.schabi.newpipe.extractor.channel.ChannelInfoItem
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import kotlin.math.abs
 
 @OptIn(UnstableApi::class)
 class MainActivity : AppCompatActivity() {
 
-    private enum class Tab { HOME, OFFLINE, FOLDERS }
-
     private class FileEntry(val doc: DocumentFile, val name: String, val dir: Boolean, val type: String?)
 
+    private class ChannelPage(val page: Int, var chan: Chan) {
+        var subs: String? = null
+        var videos: List<Vid>? = null
+        var error: String? = null
+    }
+
+    private class Opt(val icon: Int, val label: String, val run: () -> Unit)
+
+    private lateinit var root: View
     private lateinit var player: ExoPlayer
     private lateinit var playerView: PlayerView
-    private lateinit var miniBar: View
-    private lateinit var miniTitle: TextView
-    private lateinit var miniPlay: ImageButton
-    private lateinit var miniVideo: Button
-    private lateinit var miniDownload: ImageButton
-    private lateinit var searchRow: View
-    private lateinit var tabs: View
-    private lateinit var tabButtons: Map<Tab, Button>
+    private lateinit var nowPanel: View
+    private lateinit var nowTitle: TextView
+    private lateinit var nowSub: TextView
+    private lateinit var chipDownload: Chip
+    private lateinit var chipChannel: Chip
+    private lateinit var searchBar: View
     private lateinit var query: EditText
-    private lateinit var status: TextView
-    private lateinit var results: RecyclerView
+    private lateinit var clearBtn: ImageButton
+    private lateinit var loading: LinearProgressIndicator
+    private lateinit var pager: ViewPager2
+    private lateinit var miniPlayer: View
+    private lateinit var miniThumb: ImageView
+    private lateinit var miniTitle: TextView
+    private lateinit var miniSub: TextView
+    private lateinit var miniPlay: ImageButton
+    private lateinit var bottomNav: BottomNavigationView
 
-    private val adapter = RowAdapter()
+    private val adapters = Array(PAGES) { RowAdapter() }
+    private val lists = arrayOfNulls<RecyclerView>(PAGES)
+    private val refreshers = arrayOfNulls<SwipeRefreshLayout>(PAGES)
+    private val navIds = intArrayOf(R.id.nav_home, R.id.nav_subs, R.id.nav_offline, R.id.nav_folders)
+
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var loadJob: Job? = null
+    private var loadingCount = 0
     private var fullscreen = false
 
-    private var tab = Tab.HOME
     private var searchQuery: String? = null
-    private var searchResults: List<StreamInfoItem> = emptyList()
-    private var feed: List<StreamInfoItem>? = null
+    private var searchResults: List<InfoItem> = emptyList()
+    private var feed: List<Vid>? = null
     private var feedJob: Job? = null
+    private var subsFeed: List<Vid>? = null
+    private var subsFeedTime = 0L
+    private var subsJob: Job? = null
+    private var channelPage: ChannelPage? = null
+    private var channelJob: Job? = null
     private val folderStack = ArrayList<Pair<DocumentFile, String>>()
     private var folderFiles: List<FileEntry>? = null
     private var folderJob: Job? = null
@@ -102,7 +138,7 @@ class MainActivity : AppCompatActivity() {
             } catch (_: SecurityException) {
             }
             Store.addFolder(uri.toString())
-            render()
+            render(FOLDERS)
         }
     }
     private val notifPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -110,19 +146,17 @@ class MainActivity : AppCompatActivity() {
         val p = pendingDownload
         pendingDownload = null
         if (granted && p != null) startDownload(p.first, p.second, p.third)
-        else if (!granted) toast("Permission refusée : impossible d'enregistrer le fichier")
+        else if (!granted) snack("Permission refusée : impossible d'enregistrer le fichier")
     }
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) = updateMiniPlay()
         override fun onPlaybackStateChanged(state: Int) = updateMiniPlay()
-        override fun onMediaMetadataChanged(m: MediaMetadata) {
-            miniTitle.text = m.title
-        }
+        override fun onMediaMetadataChanged(m: MediaMetadata) = updateNowPlaying()
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = refreshUi()
         override fun onPlayerError(error: PlaybackException) {
             Log.e("Lecteur", "Erreur de lecture", error)
-            showStatus("Erreur de lecture (${error.errorCodeName}). Réessaie ou mets l'appli à jour.")
+            snack("Erreur de lecture (${error.errorCodeName}). Réessaie ou mets l'appli à jour.")
         }
     }
 
@@ -130,47 +164,81 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        root = findViewById(R.id.root)
         playerView = findViewById(R.id.player)
-        miniBar = findViewById(R.id.miniBar)
-        miniTitle = findViewById(R.id.miniTitle)
-        miniPlay = findViewById(R.id.miniPlay)
-        miniVideo = findViewById(R.id.miniVideo)
-        miniDownload = findViewById(R.id.miniDownload)
-        searchRow = findViewById(R.id.searchRow)
-        tabs = findViewById(R.id.tabs)
+        nowPanel = findViewById(R.id.nowPanel)
+        nowTitle = findViewById(R.id.nowTitle)
+        nowSub = findViewById(R.id.nowSub)
+        chipDownload = findViewById(R.id.chipDownload)
+        chipChannel = findViewById(R.id.chipChannel)
+        searchBar = findViewById(R.id.searchBar)
         query = findViewById(R.id.query)
-        status = findViewById(R.id.status)
-        results = findViewById(R.id.results)
-        tabButtons = mapOf(
-            Tab.HOME to findViewById(R.id.tabHome),
-            Tab.OFFLINE to findViewById(R.id.tabOffline),
-            Tab.FOLDERS to findViewById(R.id.tabFolders)
-        )
+        clearBtn = findViewById(R.id.clearBtn)
+        loading = findViewById(R.id.loading)
+        pager = findViewById(R.id.pager)
+        miniPlayer = findViewById(R.id.miniPlayer)
+        miniThumb = findViewById(R.id.miniThumb)
+        miniTitle = findViewById(R.id.miniTitle)
+        miniSub = findViewById(R.id.miniSub)
+        miniPlay = findViewById(R.id.miniPlay)
+        bottomNav = findViewById(R.id.bottomNav)
+
+        val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !night
+            isAppearanceLightNavigationBars = !night
+        }
 
         player = PlayerHolder.get(this)
         playerView.player = player
         player.addListener(listener)
-        miniTitle.text = player.mediaMetadata.title
 
-        results.layoutManager = LinearLayoutManager(this)
-        results.adapter = adapter
-
+        // Recherche
         query.setOnEditorActionListener { _, id, _ ->
             if (id == EditorInfo.IME_ACTION_SEARCH) { submit(); true } else false
         }
-        findViewById<ImageButton>(R.id.searchBtn).setOnClickListener { submit() }
-        tabButtons.forEach { (t, b) -> b.setOnClickListener { selectTab(t) } }
+        query.doAfterTextChanged { clearBtn.isVisible = !it.isNullOrEmpty() }
+        clearBtn.setOnClickListener { clearSearch() }
 
+        // Écrans : glisser à gauche / à droite, ou barre du bas
+        pager.adapter = PagesAdapter()
+        pager.offscreenPageLimit = PAGES - 1
+        pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                if (bottomNav.selectedItemId != navIds[position]) bottomNav.selectedItemId = navIds[position]
+                if (position == SUBS) loadSubsFeed()
+                if (position == OFFLINE) render(OFFLINE)
+            }
+        })
+        bottomNav.setOnItemSelectedListener { item ->
+            val i = navIds.indexOf(item.itemId)
+            if (i >= 0 && pager.currentItem != i) pager.setCurrentItem(i, true)
+            true
+        }
+        bottomNav.setOnItemReselectedListener { item -> onReselect(navIds.indexOf(item.itemId)) }
+
+        // Sous la vidéo
+        findViewById<Chip>(R.id.chipAudio).setOnClickListener { setVideoMode(false) }
+        chipDownload.setOnClickListener {
+            PlayerHolder.current?.let { askDownload(it.url, it.title) }
+        }
+        chipChannel.setOnClickListener {
+            PlayerHolder.current?.let { v ->
+                v.uploaderUrl?.let { openChannel(Chan(it, v.uploader ?: "Chaîne", null)) }
+            }
+        }
+        findViewById<Chip>(R.id.chipClose).setOnClickListener { stopPlayback() }
+
+        // Mini-lecteur
+        miniPlayer.setOnClickListener { setVideoMode(true) }
+        findViewById<ImageButton>(R.id.miniVideo).setOnClickListener { setVideoMode(true) }
+        findViewById<ImageButton>(R.id.miniClose).setOnClickListener { stopPlayback() }
         miniPlay.setOnClickListener {
             if (player.isPlaying) player.pause() else {
                 if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
                 player.play()
             }
-        }
-        miniVideo.setOnClickListener { setVideoMode(true) }
-        miniBar.setOnClickListener { if (!PlayerHolder.videoMode) setVideoMode(true) }
-        miniDownload.setOnClickListener {
-            currentYoutubeUrl()?.let { askDownload(it, player.mediaMetadata.title?.toString()) }
         }
 
         setupSwipeDown()
@@ -181,11 +249,13 @@ class MainActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                val page = pager.currentItem
                 when {
                     fullscreen -> requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                    tab == Tab.FOLDERS && folderStack.isNotEmpty() -> leaveFolder()
-                    tab == Tab.HOME && searchQuery != null -> clearSearch()
-                    tab != Tab.HOME -> selectTab(Tab.HOME)
+                    channelPage?.page == page -> closeChannel()
+                    page == FOLDERS && folderStack.isNotEmpty() -> leaveFolder()
+                    page == HOME && searchQuery != null -> clearSearch()
+                    page != HOME -> pager.setCurrentItem(HOME, true)
                     else -> moveTaskToBack(true) // l'audio continue
                 }
             }
@@ -196,10 +266,10 @@ class MainActivity : AppCompatActivity() {
             this, SessionToken(this, ComponentName(this, PlaybackService::class.java))
         ).buildAsync()
 
-        Store.onChange = { if (tab == Tab.OFFLINE) render() else updateTabs() }
-        Downloads.onChange = { if (tab == Tab.OFFLINE) render() else updateTabs() }
+        Store.onChange = { render(OFFLINE) }
+        Downloads.onChange = { render(OFFLINE) }
         refreshUi()
-        render()
+        renderAll()
         handleIntent(intent)
     }
 
@@ -212,8 +282,8 @@ class MainActivity : AppCompatActivity() {
         super.onStart()
         // Retour au premier plan : la vidéo revient si on était en mode vidéo
         PlayerHolder.setVideoEnabled(player, PlayerHolder.videoMode)
-        updateMiniPlay()
-        if (tab == Tab.OFFLINE) render()
+        refreshUi()
+        render(OFFLINE)
     }
 
     override fun onStop() {
@@ -236,6 +306,76 @@ class MainActivity : AppCompatActivity() {
         refreshUi()
     }
 
+    // ——— Pages ———
+
+    private inner class PagesAdapter : RecyclerView.Adapter<PagesAdapter.PageHolder>() {
+        inner class PageHolder(v: View) : RecyclerView.ViewHolder(v) {
+            val refresh: SwipeRefreshLayout = v.findViewById(R.id.refresh)
+            val list: RecyclerView = v.findViewById(R.id.list)
+        }
+
+        override fun getItemCount() = PAGES
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+            PageHolder(LayoutInflater.from(parent.context).inflate(R.layout.page, parent, false))
+
+        override fun onBindViewHolder(h: PageHolder, position: Int) {
+            if (h.list.layoutManager == null) h.list.layoutManager = LinearLayoutManager(h.list.context)
+            h.list.adapter = adapters[position]
+            lists[position] = h.list
+            refreshers[position] = h.refresh
+            h.refresh.isEnabled = position == HOME || position == SUBS
+            h.refresh.setOnRefreshListener { onPullRefresh(position) }
+        }
+    }
+
+    private fun onPullRefresh(page: Int) {
+        when (page) {
+            HOME -> if (searchQuery != null) {
+                refreshers[HOME]?.isRefreshing = false
+                searchQuery?.let { search(it) }
+            } else {
+                feed = null
+                loadFeed()
+            }
+            SUBS -> loadSubsFeed(force = true)
+        }
+    }
+
+    private fun onReselect(page: Int) {
+        when {
+            channelPage?.page == page -> closeChannel()
+            page == HOME && searchQuery != null -> clearSearch()
+            page == FOLDERS && folderStack.isNotEmpty() -> {
+                folderStack.clear()
+                folderFiles = null
+                render(FOLDERS)
+            }
+            else -> lists[page]?.smoothScrollToPosition(0)
+        }
+    }
+
+    private fun renderAll() = (0 until PAGES).forEach { render(it) }
+
+    private fun render(page: Int) {
+        if (page == OFFLINE) {
+            val n = Downloads.active()
+            val badge = bottomNav.getOrCreateBadge(R.id.nav_offline)
+            badge.isVisible = n > 0
+            if (n > 0) badge.number = n
+        }
+        val rows = mutableListOf<Row>()
+        val cp = channelPage
+        if (cp != null && cp.page == page) channelRows(cp, rows)
+        else when (page) {
+            HOME -> homeRows(rows)
+            SUBS -> subsRows(rows)
+            OFFLINE -> offlineRows(rows)
+            FOLDERS -> folderRows(rows)
+        }
+        adapters[page].submit(rows)
+    }
+
     // ——— Entrées : partage, lien, recherche ———
 
     private fun handleIntent(intent: Intent?) {
@@ -256,6 +396,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun hideKeyboard() {
+        query.clearFocus()
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(query.windowToken, 0)
     }
@@ -264,21 +405,26 @@ class MainActivity : AppCompatActivity() {
         hideKeyboard()
         Store.addSearch(q)
         feed = null
-        tab = Tab.HOME
+        if (channelPage?.page == HOME) channelPage = null
+        pager.setCurrentItem(HOME, true)
         lifecycleScope.launch {
-            showStatus("Recherche…")
+            busy(true)
             try {
-                val items = Yt.search(q)
+                val items = Yt.search(q, "all")
+                    .filter { it is StreamInfoItem || it is ChannelInfoItem }
                 searchQuery = q
                 searchResults = items
-                render()
-                results.scrollToPosition(0)
-                if (items.isEmpty()) showStatus("Aucun résultat") else hideStatus()
+                render(HOME)
+                lists[HOME]?.scrollToPosition(0)
+                if (items.isEmpty()) snack("Aucun résultat")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e("Lecteur", "Recherche", e)
-                showStatus("Erreur de recherche : ${e.message}")
+                snack("Erreur de recherche : ${e.message}")
+            } finally {
+                busy(false)
+                refreshers[HOME]?.isRefreshing = false
             }
         }
     }
@@ -287,35 +433,303 @@ class MainActivity : AppCompatActivity() {
         searchQuery = null
         searchResults = emptyList()
         query.setText("")
-        hideStatus()
-        render()
+        hideKeyboard()
+        render(HOME)
     }
 
-    private fun play(url: String) {
+    private fun play(url: String, audioOnly: Boolean = false) {
         loadJob?.cancel()
         loadJob = lifecycleScope.launch {
-            showStatus("Chargement…")
+            busy(true)
             try {
                 val (info, source) = withContext(Dispatchers.IO) {
                     val i = Yt.info(url)
                     i to Sources.build(i)
                 }
+                // En arrière-plan direct : la piste vidéo n'est jamais chargée
+                PlayerHolder.videoMode = !audioOnly
+                PlayerHolder.setVideoEnabled(player, !audioOnly)
                 player.setMediaSource(source)
                 player.prepare()
                 player.play()
-                hideStatus()
-                Store.addWatched(
-                    Store.Video(info.url, info.name, info.uploaderName, Sources.bestThumb(info.thumbnails), info.duration)
+                val v = Vid(
+                    info.url, info.name, info.uploaderName, info.uploaderUrl,
+                    Sources.bestThumb(info.thumbnails, 300), info.duration
                 )
-                setVideoMode(true)
-                if (tab == Tab.HOME && searchQuery == null) render()
+                PlayerHolder.current = v
+                Store.addWatched(v)
+                refreshUi()
+                if (searchQuery == null) render(HOME)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e("Lecteur", "Chargement", e)
-                showStatus("Impossible de lire cette vidéo : ${e.message}")
+                snack("Impossible de lire cette vidéo : ${e.message}")
+            } finally {
+                busy(false)
             }
         }
+    }
+
+    private fun stopPlayback() {
+        if (fullscreen) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        player.stop()
+        player.clearMediaItems()
+        PlayerHolder.current = null
+        refreshUi()
+    }
+
+    // ——— Accueil ———
+
+    private fun videoRow(v: Vid) = Row.Video(v, onClick = { play(v.url) }, onLong = { videoMenu(v) })
+
+    private fun searchRow(item: InfoItem): Row? = when (item) {
+        is StreamInfoItem -> videoRow(Yt.vid(item))
+        is ChannelInfoItem -> {
+            val c = Chan(item.url, item.name, Sources.bestThumb(item.thumbnails, 88))
+            Row.Channel(
+                c, Yt.subs(item.subscriberCount), Store.isSubscribed(c.url),
+                onClick = { openChannel(c) }, onToggle = { toggleSub(c) }
+            )
+        }
+        else -> null
+    }
+
+    private fun homeRows(rows: MutableList<Row>) {
+        val q = searchQuery
+        if (q != null) {
+            rows += Row.Header("Résultats pour « $q »")
+            searchResults.forEach { item -> searchRow(item)?.let { rows += it } }
+            return
+        }
+        val searches = Store.searches()
+        val watched = Store.watched()
+        if (searches.isNotEmpty()) {
+            rows += Row.Header("Recherches récentes", "Effacer") {
+                Store.clearSearches()
+                feed = emptyList()
+                render(HOME)
+            }
+            rows += Row.Chips(
+                searches.take(15),
+                onClick = { s -> query.setText(s); search(s) },
+                onLong = { s -> Store.removeSearch(s); feed = null; render(HOME) }
+            )
+        }
+        if (watched.isNotEmpty()) {
+            rows += Row.Header("Reprendre")
+            rows += Row.Carousel(watched.take(12), onClick = { play(it.url) }, onLong = { videoMenu(it) })
+        }
+        if (searches.isNotEmpty()) {
+            rows += Row.Header("Pour toi")
+            val f = feed
+            if (f == null) {
+                rows += Row.Note("Chargement…")
+                loadFeed()
+            } else f.forEach { rows += videoRow(it) }
+        }
+        if (searches.isEmpty() && watched.isEmpty()) {
+            rows += Row.Note(
+                "Cherche une vidéo ou une chaîne, ou colle un lien YouTube.\n" +
+                    "L'accueil se remplira d'après tes recherches.",
+                R.drawable.ic_search
+            )
+        }
+    }
+
+    /** Fil d'accueil : résultats des 3 dernières recherches, entremêlés. */
+    private fun loadFeed() {
+        if (feedJob?.isActive == true) return
+        feedJob = lifecycleScope.launch {
+            val qs = Store.searches().take(3)
+            val lists = qs.map { q ->
+                async {
+                    runCatching { Yt.search(q, "videos").filterIsInstance<StreamInfoItem>().map(Yt::vid) }
+                        .getOrDefault(emptyList())
+                }
+            }.awaitAll()
+            val out = LinkedHashMap<String, Vid>()
+            val max = lists.maxOfOrNull { it.size } ?: 0
+            for (i in 0 until max) for (l in lists) l.getOrNull(i)?.let { out.putIfAbsent(it.url, it) }
+            feed = out.values.take(45)
+            refreshers[HOME]?.isRefreshing = false
+            render(HOME)
+        }
+    }
+
+    // ——— Abonnements et chaînes ———
+
+    private fun subsRows(rows: MutableList<Row>) {
+        val subs = Store.subs()
+        if (subs.isEmpty()) {
+            rows += Row.Note(
+                "Aucun abonnement pour l'instant.\nCherche une chaîne et touche « S'abonner », " +
+                    "ou fais un appui long sur une vidéo puis « Voir la chaîne ».",
+                R.drawable.ic_subs
+            )
+            return
+        }
+        rows += Row.Header("Mes chaînes")
+        rows += Row.Avatars(subs, onClick = { openChannel(it) }, onLong = { confirmUnsubscribe(it) })
+        rows += Row.Header("Nouveautés")
+        val f = subsFeed
+        when {
+            f == null -> rows += Row.Note("Chargement…")
+            f.isEmpty() -> rows += Row.Note("Rien de nouveau pour l'instant. Tire vers le bas pour actualiser.")
+            else -> f.forEach { rows += videoRow(it) }
+        }
+    }
+
+    private fun loadSubsFeed(force: Boolean = false) {
+        if (subsJob?.isActive == true) return
+        if (!force && subsFeed != null && System.currentTimeMillis() - subsFeedTime < 15 * 60_000) return
+        val subs = Store.subs()
+        if (subs.isEmpty()) {
+            subsFeed = emptyList()
+            refreshers[SUBS]?.isRefreshing = false
+            render(SUBS)
+            return
+        }
+        subsJob = lifecycleScope.launch {
+            val sem = Semaphore(4)
+            val all = subs.map { c ->
+                async { sem.withPermit { runCatching { Yt.latest(c.url) }.getOrDefault(emptyList()) } }
+            }.awaitAll()
+            subsFeed = all.flatten().distinctBy { it.url }.sortedByDescending { it.date }.take(150)
+            subsFeedTime = System.currentTimeMillis()
+            refreshers[SUBS]?.isRefreshing = false
+            render(SUBS)
+        }
+    }
+
+    private fun openChannel(c: Chan) {
+        val page = pager.currentItem
+        val cp = ChannelPage(page, c)
+        channelPage = cp
+        render(page)
+        lists[page]?.scrollToPosition(0)
+        channelJob?.cancel()
+        channelJob = lifecycleScope.launch {
+            try {
+                val d = Yt.channel(c.url)
+                cp.chan = d.chan
+                cp.subs = d.subs
+                cp.videos = d.videos
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("Lecteur", "Chaîne", e)
+                cp.error = e.message ?: "erreur"
+            }
+            if (channelPage === cp) render(cp.page)
+        }
+    }
+
+    private fun closeChannel() {
+        val p = channelPage?.page ?: return
+        channelPage = null
+        channelJob?.cancel()
+        render(p)
+    }
+
+    private fun channelRows(cp: ChannelPage, rows: MutableList<Row>) {
+        rows += Row.Entry("Retour", null, null, R.drawable.ic_back, onClick = { closeChannel() })
+        rows += Row.ChannelHeader(cp.chan, cp.subs, Store.isSubscribed(cp.chan.url)) { toggleSub(cp.chan) }
+        val vids = cp.videos
+        when {
+            cp.error != null -> rows += Row.Note("Impossible de charger la chaîne : ${cp.error}")
+            vids == null -> rows += Row.Note("Chargement…")
+            vids.isEmpty() -> rows += Row.Note("Aucune vidéo.")
+            else -> {
+                rows += Row.Header("Vidéos")
+                vids.forEach { rows += videoRow(it) }
+            }
+        }
+    }
+
+    private fun toggleSub(c: Chan) {
+        if (Store.isSubscribed(c.url)) {
+            Store.unsubscribe(c.url)
+            snack("Désabonné de ${c.name}")
+        } else {
+            val best = channelPage?.chan?.takeIf { it.url == c.url && it.avatar != null } ?: c
+            Store.subscribe(best)
+            snack("Abonné à ${c.name}")
+        }
+        subsFeed = null
+        renderAll()
+        if (pager.currentItem == SUBS) loadSubsFeed()
+    }
+
+    private fun confirmUnsubscribe(c: Chan) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(c.name)
+            .setMessage("Se désabonner de cette chaîne ?")
+            .setPositiveButton("Se désabonner") { _, _ -> toggleSub(c) }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    // ——— Menus (appui long) ———
+
+    private fun sheet(title: String?, subtitle: String?, opts: List<Opt>) {
+        val dlg = BottomSheetDialog(this)
+        val d = resources.displayMetrics.density
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, (4 * d).toInt(), 0, (20 * d).toInt())
+        }
+        if (title != null) {
+            box.addView(TextView(this).apply {
+                text = title
+                maxLines = 2
+                TextViewCompat.setTextAppearance(this, attrRes(com.google.android.material.R.attr.textAppearanceTitleMedium))
+                setPadding((24 * d).toInt(), (8 * d).toInt(), (24 * d).toInt(), (2 * d).toInt())
+            })
+        }
+        if (subtitle != null) {
+            box.addView(TextView(this).apply {
+                text = subtitle
+                TextViewCompat.setTextAppearance(this, attrRes(com.google.android.material.R.attr.textAppearanceBodySmall))
+                setPadding((24 * d).toInt(), 0, (24 * d).toInt(), (8 * d).toInt())
+            })
+        }
+        opts.forEach { o ->
+            val row = layoutInflater.inflate(R.layout.item_sheet_option, box, false)
+            row.findViewById<ImageView>(R.id.icon).setImageResource(o.icon)
+            row.findViewById<TextView>(R.id.label).text = o.label
+            row.setOnClickListener { dlg.dismiss(); o.run() }
+            box.addView(row)
+        }
+        dlg.setContentView(box)
+        dlg.show()
+    }
+
+    private fun attrRes(attr: Int): Int {
+        val tv = TypedValue()
+        theme.resolveAttribute(attr, tv, true)
+        return tv.resourceId
+    }
+
+    private fun videoMenu(v: Vid) {
+        val opts = mutableListOf(
+            Opt(R.drawable.ic_headphones, "Écouter en arrière-plan") { play(v.url, audioOnly = true) },
+            Opt(R.drawable.ic_play, "Lire la vidéo") { play(v.url) },
+            Opt(R.drawable.ic_audio, "Télécharger l'audio") { startDownload(v.url, false, v.title) },
+            Opt(R.drawable.ic_download, "Télécharger la vidéo") { startDownload(v.url, true, v.title) }
+        )
+        v.uploaderUrl?.let { u ->
+            opts += Opt(R.drawable.ic_person, "Voir la chaîne") { openChannel(Chan(u, v.uploader ?: "Chaîne", null)) }
+        }
+        opts += Opt(R.drawable.ic_share, "Partager le lien") {
+            startActivity(
+                Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, v.url),
+                    v.title
+                )
+            )
+        }
+        sheet(v.title, v.uploader, opts)
     }
 
     // ——— Fichiers locaux ———
@@ -335,11 +749,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun startLocal(items: List<MediaItem>, index: Int, audio: Boolean) {
         loadJob?.cancel()
-        hideStatus()
+        PlayerHolder.current = null
+        PlayerHolder.videoMode = !audio
+        PlayerHolder.setVideoEnabled(player, !audio)
         player.setMediaItems(items, index, 0L)
         player.prepare()
         player.play()
-        setVideoMode(!audio)
+        refreshUi()
     }
 
     private fun playSingleLocal(uri: Uri) {
@@ -348,9 +764,9 @@ class MainActivity : AppCompatActivity() {
         startLocal(listOf(mediaItem(uri, name, null, null)), 0, isAudio(doc?.type, name))
     }
 
-    private fun playDownloads(list: List<Store.Download>, index: Int) {
+    private fun playDownloads(list: List<Store.Download>, index: Int, audioOnly: Boolean = false) {
         val items = list.map { mediaItem(Uri.parse(it.uri), it.title, it.uploader, it.thumb) }
-        startLocal(items, index, !list[index].video)
+        startLocal(items, index, audioOnly || !list[index].video)
     }
 
     private fun playFolder(media: List<FileEntry>, index: Int) {
@@ -375,14 +791,14 @@ class MainActivity : AppCompatActivity() {
         if (folderStack.isNotEmpty()) folderStack.removeAt(folderStack.size - 1)
         if (folderStack.isEmpty()) {
             folderFiles = null
-            render()
+            render(FOLDERS)
         } else loadFolder()
     }
 
     private fun loadFolder() {
         val doc = folderStack.lastOrNull()?.first ?: return
         folderFiles = null
-        render()
+        render(FOLDERS)
         folderJob?.cancel()
         folderJob = lifecycleScope.launch {
             val list = withContext(Dispatchers.IO) {
@@ -394,279 +810,19 @@ class MainActivity : AppCompatActivity() {
                 }.sortedWith(compareBy<FileEntry>({ !it.dir }, { it.name.lowercase() }))
             }
             folderFiles = list
-            render()
+            render(FOLDERS)
         }
-    }
-
-    // ——— Téléchargements ———
-
-    private fun currentYoutubeUrl(): String? =
-        player.currentMediaItem?.mediaId?.takeIf { it.startsWith("http") }
-
-    private fun askDownload(url: String, title: String?) {
-        AlertDialog.Builder(this)
-            .setTitle("Télécharger")
-            .setItems(arrayOf("Audio seul (écoute hors ligne)", "Vidéo (720p max)")) { _, w ->
-                startDownload(url, w == 1, title)
-            }
-            .show()
-    }
-
-    private fun ytMenu(url: String, title: String?) {
-        AlertDialog.Builder(this)
-            .setTitle(title)
-            .setItems(arrayOf("Lire", "Télécharger l'audio", "Télécharger la vidéo")) { _, w ->
-                when (w) {
-                    0 -> play(url)
-                    1 -> startDownload(url, false, title)
-                    else -> startDownload(url, true, title)
-                }
-            }
-            .show()
-    }
-
-    private fun startDownload(url: String, video: Boolean, title: String?) {
-        if (Build.VERSION.SDK_INT < 29 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            pendingDownload = Triple(url, video, title)
-            storagePerm.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            return
-        }
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
-        DownloadService.start(this, url, video, title)
-        toast("Téléchargement ajouté : voir l'onglet Hors ligne")
-    }
-
-    private fun confirmDelete(d: Store.Download) {
-        AlertDialog.Builder(this)
-            .setMessage("Supprimer « ${d.title} » du téléphone ?")
-            .setPositiveButton("Supprimer") { _, _ ->
-                Saver.delete(this, Uri.parse(d.uri))
-                Store.removeDownload(d.uri)
-                render()
-            }
-            .setNegativeButton("Annuler", null)
-            .show()
-    }
-
-    private fun confirmRemoveFolder(uri: String) {
-        AlertDialog.Builder(this)
-            .setMessage("Retirer ce dossier de la liste ? (les fichiers ne sont pas supprimés)")
-            .setPositiveButton("Retirer") { _, _ ->
-                try {
-                    contentResolver.releasePersistableUriPermission(
-                        Uri.parse(uri), Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                } catch (_: Exception) {
-                }
-                Store.removeFolder(uri)
-                render()
-            }
-            .setNegativeButton("Annuler", null)
-            .show()
-    }
-
-    // ——— Onglets et listes ———
-
-    private fun selectTab(t: Tab) {
-        if (t == Tab.HOME && tab == Tab.HOME && searchQuery != null) clearSearch()
-        tab = t
-        hideStatus()
-        render()
-        results.scrollToPosition(0)
-    }
-
-    private fun updateTabs() {
-        tabButtons.forEach { (t, b) -> b.alpha = if (t == tab) 1f else 0.5f }
-        val n = Downloads.active()
-        tabButtons[Tab.OFFLINE]?.text = if (n > 0) "Hors ligne ($n)" else getString(R.string.tab_offline)
-    }
-
-    private fun render() {
-        updateTabs()
-        val rows = mutableListOf<Row>()
-        when (tab) {
-            Tab.HOME -> homeRows(rows)
-            Tab.OFFLINE -> offlineRows(rows)
-            Tab.FOLDERS -> folderRows(rows)
-        }
-        adapter.submit(rows)
-    }
-
-    private fun ytRow(url: String, title: String, uploader: String?, thumb: String?, duration: Long) =
-        Row.Entry(
-            title,
-            listOfNotNull(uploader?.ifEmpty { null }, Yt.formatDuration(duration).ifEmpty { null })
-                .joinToString(" · "),
-            thumb, R.drawable.ic_video,
-            onClick = { play(url) },
-            onLong = { ytMenu(url, title) }
-        )
-
-    private fun itemRow(it: StreamInfoItem) =
-        ytRow(it.url, it.name, it.uploaderName, Sources.bestThumb(it.thumbnails), it.duration)
-
-    private fun homeRows(rows: MutableList<Row>) {
-        val q = searchQuery
-        if (q != null) {
-            rows += Row.Header("Résultats pour « $q »")
-            searchResults.forEach { rows += itemRow(it) }
-            return
-        }
-        val searches = Store.searches()
-        val watched = Store.watched()
-        if (searches.isNotEmpty()) {
-            rows += Row.Header("Recherches récentes")
-            rows += Row.Chips(
-                searches.take(15),
-                onClick = { s -> query.setText(s); search(s) },
-                onLong = { s -> Store.removeSearch(s); feed = null; render() }
-            )
-        }
-        if (watched.isNotEmpty()) {
-            rows += Row.Header("Récemment lus")
-            watched.take(6).forEach { rows += ytRow(it.url, it.title, it.uploader, it.thumb, it.duration) }
-        }
-        if (searches.isNotEmpty()) {
-            rows += Row.Header("D'après tes recherches")
-            val f = feed
-            if (f == null) {
-                rows += Row.Header("Chargement…", small = true)
-                loadFeed()
-            } else {
-                f.forEach { rows += itemRow(it) }
-            }
-        }
-        if (searches.isEmpty() && watched.isEmpty()) {
-            rows += Row.Header(
-                "Cherche une vidéo ou colle un lien YouTube. L'accueil se remplira avec tes recherches.",
-                small = true
-            )
-        }
-    }
-
-    /** Fil d'accueil : résultats des 3 dernières recherches, entremêlés. */
-    private fun loadFeed() {
-        if (feedJob?.isActive == true) return
-        feedJob = lifecycleScope.launch {
-            val qs = Store.searches().take(3)
-            val lists = qs.map { q ->
-                async { runCatching { Yt.search(q) }.getOrDefault(emptyList()) }
-            }.awaitAll()
-            val out = LinkedHashMap<String, StreamInfoItem>()
-            val max = lists.maxOfOrNull { it.size } ?: 0
-            for (i in 0 until max) for (l in lists) l.getOrNull(i)?.let { out.putIfAbsent(it.url, it) }
-            feed = out.values.take(45)
-            if (tab == Tab.HOME && searchQuery == null) render()
-        }
-    }
-
-    private fun offlineRows(rows: MutableList<Row>) {
-        rows += Row.Header(
-            "Emplacement : mémoire interne du téléphone, dossier Music/Lecteur pour l'audio " +
-                "et Movies/Lecteur pour la vidéo (visibles dans l'appli Fichiers, la galerie " +
-                "et les lecteurs de musique).",
-            small = true
-        )
-
-        val queue = Downloads.all()
-        if (queue.isNotEmpty()) {
-            rows += Row.Header("En cours")
-            queue.forEach { d ->
-                val kind = if (d.video) "Vidéo" else "Audio"
-                rows += when (d.state) {
-                    Downloads.State.WAITING, Downloads.State.RUNNING -> Row.Progress(
-                        d.title,
-                        "$kind · " + d.stage + if (d.pct >= 0) " · ${d.pct} %" else "",
-                        if (d.state == Downloads.State.WAITING) 0 else d.pct,
-                        if (d.video) R.drawable.ic_video else R.drawable.ic_audio,
-                        R.drawable.ic_close,
-                        onAction = { Downloads.cancel(d) }
-                    )
-                    else -> Row.Progress(
-                        d.title, "$kind · ${d.stage}", null,
-                        if (d.video) R.drawable.ic_video else R.drawable.ic_audio,
-                        R.drawable.ic_retry,
-                        onAction = {
-                            Downloads.remove(d)
-                            startDownload(d.url, d.video, d.title)
-                        },
-                        onClick = {
-                            AlertDialog.Builder(this)
-                                .setTitle(d.title)
-                                .setMessage(d.stage)
-                                .setPositiveButton("Relancer") { _, _ ->
-                                    Downloads.remove(d)
-                                    startDownload(d.url, d.video, d.title)
-                                }
-                                .setNegativeButton("Retirer") { _, _ -> Downloads.remove(d) }
-                                .show()
-                        }
-                    )
-                }
-            }
-        }
-
-        val list = Store.downloads()
-        rows += Row.Header("Téléchargés")
-        if (list.isEmpty()) {
-            rows += Row.Header(
-                "Rien pour l'instant. Pendant une lecture YouTube, touche ⬇, " +
-                    "ou fais un appui long sur une vidéo.",
-                small = true
-            )
-            return
-        }
-        list.forEachIndexed { i, d ->
-            val where = d.path ?: if (d.video) "Movies/Lecteur" else "Music/Lecteur"
-            rows += Row.Entry(
-                d.title,
-                (if (d.video) "Vidéo" else "Audio") + " · " + where,
-                d.thumb,
-                if (d.video) R.drawable.ic_video else R.drawable.ic_audio,
-                onClick = { playDownloads(list, i) },
-                onLong = { downloadMenu(d) }
-            )
-        }
-    }
-
-    private fun downloadMenu(d: Store.Download) {
-        val where = d.path ?: if (d.video) "Movies/Lecteur" else "Music/Lecteur"
-        AlertDialog.Builder(this)
-            .setTitle(d.title)
-            .setMessage("Fichier : mémoire interne › $where")
-            .setPositiveButton("Partager") { _, _ -> share(d) }
-            .setNegativeButton("Supprimer") { _, _ -> confirmDelete(d) }
-            .setNeutralButton("Fermer", null)
-            .show()
-    }
-
-    private fun share(d: Store.Download) {
-        val uri = Uri.parse(d.uri)
-        if (uri.scheme != "content") {
-            toast("Partage possible depuis l'appli Fichiers")
-            return
-        }
-        val send = Intent(Intent.ACTION_SEND)
-            .setType(if (d.video) "video/mp4" else "audio/*")
-            .putExtra(Intent.EXTRA_STREAM, uri)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        startActivity(Intent.createChooser(send, d.title))
     }
 
     private fun folderRows(rows: MutableList<Row>) {
         if (folderStack.isEmpty()) {
+            rows += Row.Header("Sur ce téléphone")
             rows += Row.Entry(
-                "Ouvrir un fichier…", "Audio ou vidéo du téléphone", null, R.drawable.ic_file,
+                "Ouvrir un fichier…", "Audio ou vidéo", null, R.drawable.ic_file,
                 onClick = { openFile.launch(arrayOf("audio/*", "video/*")) }
             )
             rows += Row.Entry(
-                "Ajouter un dossier…", "Il restera dans la liste ci-dessous", null, R.drawable.ic_add,
+                "Ajouter un dossier…", "Il restera dans la liste", null, R.drawable.ic_add,
                 onClick = { openTree.launch(null) }
             )
             val folders = Store.folders()
@@ -687,14 +843,14 @@ class MainActivity : AppCompatActivity() {
         rows += Row.Header(folderStack.last().second)
         val files = folderFiles
         if (files == null) {
-            rows += Row.Header("Chargement…", small = true)
+            rows += Row.Note("Chargement…")
             return
         }
-        if (files.isEmpty()) rows += Row.Header("Aucun fichier audio ou vidéo ici.", small = true)
+        if (files.isEmpty()) rows += Row.Note("Aucun fichier audio ou vidéo ici.", R.drawable.ic_folder)
         val media = files.filter { !it.dir }
         files.forEach { f ->
             rows += if (f.dir) {
-                Row.Entry(f.name, null, null, R.drawable.ic_folder, onClick = { enterFolder(f.doc, f.name) })
+                Row.Entry(f.name, "Dossier", null, R.drawable.ic_folder, onClick = { enterFolder(f.doc, f.name) })
             } else {
                 val audio = isAudio(f.type, f.name)
                 Row.Entry(
@@ -704,6 +860,154 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         }
+    }
+
+    private fun confirmRemoveFolder(uri: String) {
+        MaterialAlertDialogBuilder(this)
+            .setMessage("Retirer ce dossier de la liste ? Les fichiers ne sont pas supprimés.")
+            .setPositiveButton("Retirer") { _, _ ->
+                try {
+                    contentResolver.releasePersistableUriPermission(
+                        Uri.parse(uri), Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (_: Exception) {
+                }
+                Store.removeFolder(uri)
+                render(FOLDERS)
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    // ——— Téléchargements ———
+
+    private fun askDownload(url: String, title: String?) {
+        sheet(
+            "Télécharger", title, listOf(
+                Opt(R.drawable.ic_audio, "Audio seul (écoute hors ligne)") { startDownload(url, false, title) },
+                Opt(R.drawable.ic_video, "Vidéo (720p max)") { startDownload(url, true, title) }
+            )
+        )
+    }
+
+    private fun startDownload(url: String, video: Boolean, title: String?) {
+        if (Build.VERSION.SDK_INT < 29 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingDownload = Triple(url, video, title)
+            storagePerm.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
+        DownloadService.start(this, url, video, title)
+        Snackbar.make(root, "Téléchargement ajouté", Snackbar.LENGTH_LONG)
+            .setAnchorView(if (bottomNav.isVisible) bottomNav else null)
+            .setAction("Voir") { pager.setCurrentItem(OFFLINE, true) }
+            .show()
+    }
+
+    private fun offlineRows(rows: MutableList<Row>) {
+        val queue = Downloads.all()
+        if (queue.isNotEmpty()) {
+            rows += Row.Header("En cours")
+            queue.forEach { d ->
+                val kind = if (d.video) "Vidéo" else "Audio"
+                val icon = if (d.video) R.drawable.ic_video else R.drawable.ic_audio
+                rows += when (d.state) {
+                    Downloads.State.WAITING, Downloads.State.RUNNING -> Row.Progress(
+                        d.title,
+                        "$kind · " + d.stage + if (d.pct >= 0) " · ${d.pct} %" else "",
+                        if (d.state == Downloads.State.WAITING) 0 else d.pct,
+                        icon, R.drawable.ic_close,
+                        onAction = { Downloads.cancel(d) }
+                    )
+                    else -> Row.Progress(
+                        d.title, "$kind · ${d.stage}", null, icon, R.drawable.ic_retry,
+                        onAction = {
+                            Downloads.remove(d)
+                            startDownload(d.url, d.video, d.title)
+                        },
+                        onClick = {
+                            MaterialAlertDialogBuilder(this)
+                                .setTitle(d.title)
+                                .setMessage(d.stage)
+                                .setPositiveButton("Relancer") { _, _ ->
+                                    Downloads.remove(d)
+                                    startDownload(d.url, d.video, d.title)
+                                }
+                                .setNegativeButton("Retirer") { _, _ -> Downloads.remove(d) }
+                                .show()
+                        }
+                    )
+                }
+            }
+        }
+
+        val list = Store.downloads()
+        rows += Row.Header("Téléchargés")
+        if (list.isEmpty()) {
+            rows += Row.Note(
+                "Rien pour l'instant.\nFais un appui long sur une vidéo, ou touche « Télécharger » " +
+                    "sous la vidéo en cours.\n\nLes fichiers vont dans la mémoire interne : " +
+                    "Music/Lecteur (audio) et Movies/Lecteur (vidéo).",
+                R.drawable.ic_download
+            )
+            return
+        }
+        list.forEachIndexed { i, d ->
+            val where = d.path ?: if (d.video) "Movies/Lecteur" else "Music/Lecteur"
+            rows += Row.Entry(
+                d.title,
+                (if (d.video) "Vidéo" else "Audio") + " · " + where,
+                d.thumb,
+                if (d.video) R.drawable.ic_video else R.drawable.ic_audio,
+                onClick = { playDownloads(list, i) },
+                onLong = { downloadMenu(list, i) }
+            )
+        }
+        rows += Row.Note("Emplacement : mémoire interne › Music/Lecteur et Movies/Lecteur")
+    }
+
+    private fun downloadMenu(list: List<Store.Download>, i: Int) {
+        val d = list[i]
+        val where = d.path ?: if (d.video) "Movies/Lecteur" else "Music/Lecteur"
+        val opts = mutableListOf(
+            Opt(R.drawable.ic_play, "Lire") { playDownloads(list, i) }
+        )
+        if (d.video) opts += Opt(R.drawable.ic_headphones, "Écouter en arrière-plan") { playDownloads(list, i, true) }
+        opts += Opt(R.drawable.ic_share, "Partager le fichier") { share(d) }
+        opts += Opt(R.drawable.ic_delete, "Supprimer du téléphone") { confirmDelete(d) }
+        sheet(d.title, "Mémoire interne › $where", opts)
+    }
+
+    private fun share(d: Store.Download) {
+        val uri = Uri.parse(d.uri)
+        if (uri.scheme != "content") {
+            snack("Partage possible depuis l'appli Fichiers")
+            return
+        }
+        val send = Intent(Intent.ACTION_SEND)
+            .setType(if (d.video) "video/mp4" else "audio/*")
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        startActivity(Intent.createChooser(send, d.title))
+    }
+
+    private fun confirmDelete(d: Store.Download) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Supprimer ?")
+            .setMessage("« ${d.title} » sera supprimé du téléphone.")
+            .setPositiveButton("Supprimer") { _, _ ->
+                Saver.delete(this, Uri.parse(d.uri))
+                Store.removeDownload(d.uri)
+                render(OFFLINE)
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
     }
 
     // ——— Bascule vidéo ⇄ audio ———
@@ -740,16 +1044,17 @@ class MainActivity : AppCompatActivity() {
         val video = PlayerHolder.videoMode
         val land = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         fullscreen = has && video && land
+        val yt = PlayerHolder.current != null
 
         playerView.isVisible = has && video
-        miniBar.isVisible = has && !fullscreen
-        miniPlay.isVisible = !video
-        miniVideo.isVisible = !video
-        miniDownload.isVisible = currentYoutubeUrl() != null
-        searchRow.isVisible = !fullscreen
-        tabs.isVisible = !fullscreen
-        results.isVisible = !fullscreen
-        if (fullscreen) status.isVisible = false
+        nowPanel.isVisible = has && video && !fullscreen
+        miniPlayer.isVisible = has && !video && !fullscreen
+        chipDownload.isVisible = yt
+        chipChannel.isVisible = yt && PlayerHolder.current?.uploaderUrl != null
+        searchBar.isVisible = !fullscreen
+        pager.isVisible = !fullscreen
+        bottomNav.isVisible = !fullscreen
+        if (fullscreen) loading.visibility = View.INVISIBLE
 
         val lp = playerView.layoutParams as LinearLayout.LayoutParams
         if (fullscreen) {
@@ -768,29 +1073,53 @@ class MainActivity : AppCompatActivity() {
         } else {
             insets.show(WindowInsetsCompat.Type.systemBars())
         }
+        updateNowPlaying()
         updateMiniPlay()
+    }
+
+    private fun updateNowPlaying() {
+        val m = player.mediaMetadata
+        nowTitle.text = m.title
+        nowSub.text = m.artist
+        nowSub.isVisible = !m.artist.isNullOrEmpty()
+        miniTitle.text = m.title
+        miniSub.text = m.artist
+        miniSub.isVisible = !m.artist.isNullOrEmpty()
+        val art = m.artworkUri?.toString()
+        if (miniThumb.tag != art || art == null) Thumbs.load(miniThumb, art, R.drawable.ic_audio)
     }
 
     private fun updateMiniPlay() {
         miniPlay.setImageResource(
             if (player.isPlaying || (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING))
-                android.R.drawable.ic_media_pause
-            else android.R.drawable.ic_media_play
+                R.drawable.ic_pause
+            else R.drawable.ic_play
         )
     }
 
-    private fun showStatus(text: String) {
-        status.text = text
-        status.isVisible = !fullscreen
+    private fun busy(on: Boolean) {
+        loadingCount = (loadingCount + if (on) 1 else -1).coerceAtLeast(0)
+        loading.visibility = if (loadingCount > 0 && !fullscreen) View.VISIBLE else View.INVISIBLE
     }
 
-    private fun hideStatus() {
-        status.isVisible = false
+    private fun snack(text: String) {
+        Snackbar.make(root, text, Snackbar.LENGTH_LONG)
+            .setAnchorView(
+                when {
+                    miniPlayer.isVisible -> miniPlayer
+                    bottomNav.isVisible -> bottomNav
+                    else -> null
+                }
+            )
+            .show()
     }
-
-    private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
 
     companion object {
+        private const val PAGES = 4
+        private const val HOME = 0
+        private const val SUBS = 1
+        private const val OFFLINE = 2
+        private const val FOLDERS = 3
         private val AUDIO_EXT = setOf("mp3", "m4a", "aac", "ogg", "oga", "opus", "flac", "wav", "wma", "amr")
         private val VIDEO_EXT = setOf("mp4", "mkv", "webm", "mov", "3gp", "avi", "m4v", "ts")
     }

@@ -8,9 +8,11 @@ import android.util.LruCache
 import android.widget.ImageView
 import java.util.concurrent.Executors
 
-/** Chargeur de miniatures minimal (pas de bibliothèque d'images). */
+/** Chargeur d'images minimal, cache limité en mémoire. */
 object Thumbs {
-    private val cache = LruCache<String, Bitmap>(100)
+    private val cache = object : LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 8).toInt()) {
+        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+    }
     private val pool = Executors.newFixedThreadPool(4)
     private val main = Handler(Looper.getMainLooper())
 
@@ -25,7 +27,15 @@ object Thumbs {
                 val req = okhttp3.Request.Builder().url(url).build()
                 val bytes = DownloaderImpl.instance.client.newCall(req).execute().use { it.body?.bytes() }
                     ?: return@execute
-                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@execute
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                var sample = 1
+                while (bounds.outWidth / (sample * 2) >= 640) sample *= 2
+                val opts = BitmapFactory.Options().apply {
+                    inSampleSize = sample
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                }
+                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return@execute
                 cache.put(url, bmp)
                 main.post { if (view.tag == url) show(view, bmp) }
             } catch (_: Exception) {

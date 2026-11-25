@@ -1,22 +1,32 @@
 package fr.lecteur
 
-import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.Typeface
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.HorizontalScrollView
+import android.widget.Button
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
+import com.google.android.material.color.MaterialColors
+import com.google.android.material.progressindicator.LinearProgressIndicator
 
 sealed class Row {
-    class Header(val text: String, val small: Boolean = false) : Row()
+    class Header(val text: String, val action: String? = null, val onAction: (() -> Unit)? = null) : Row()
+    class Note(val text: String, val icon: Int = 0) : Row()
     class Chips(val items: List<String>, val onClick: (String) -> Unit, val onLong: (String) -> Unit) : Row()
+    class Video(val v: Vid, val onClick: () -> Unit, val onLong: () -> Unit) : Row()
+    class Carousel(val items: List<Vid>, val onClick: (Vid) -> Unit, val onLong: (Vid) -> Unit) : Row()
+    class Avatars(val items: List<Chan>, val onClick: (Chan) -> Unit, val onLong: (Chan) -> Unit) : Row()
+    class Channel(
+        val c: Chan, val subs: String?, val subscribed: Boolean,
+        val onClick: () -> Unit, val onToggle: () -> Unit
+    ) : Row()
+    class ChannelHeader(val c: Chan, val subs: String?, val subscribed: Boolean, val onToggle: () -> Unit) : Row()
     class Entry(
         val title: String,
         val subtitle: String?,
@@ -36,7 +46,7 @@ sealed class Row {
     ) : Row()
 }
 
-/** Une seule liste pour tout : titres, recherches récentes, vidéos, fichiers, dossiers. */
+/** Une liste pour tout : titres, recherches, cartes vidéo, chaînes, fichiers, téléchargements. */
 class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private var rows: List<Row> = emptyList()
 
@@ -49,83 +59,75 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     override fun getItemViewType(position: Int) = when (rows[position]) {
         is Row.Header -> 0
-        is Row.Chips -> 1
-        is Row.Entry -> 2
-        is Row.Progress -> 3
+        is Row.Note -> 1
+        is Row.Chips -> 2
+        is Row.Video -> 3
+        is Row.Carousel -> 4
+        is Row.Avatars -> 5
+        is Row.Channel -> 6
+        is Row.ChannelHeader -> 7
+        is Row.Entry -> 8
+        is Row.Progress -> 9
     }
 
-    private class HeaderHolder(val text: TextView) : RecyclerView.ViewHolder(text)
-    private class ChipsHolder(scroll: View, val box: LinearLayout) : RecyclerView.ViewHolder(scroll)
-    private class EntryHolder(v: View) : RecyclerView.ViewHolder(v) {
-        val thumb: ImageView = v.findViewById(R.id.thumb)
-        val title: TextView = v.findViewById(R.id.title)
-        val sub: TextView = v.findViewById(R.id.sub)
-    }
+    private class H(v: View) : RecyclerView.ViewHolder(v)
 
-    private class ProgressHolder(v: View) : RecyclerView.ViewHolder(v) {
-        val kind: ImageView = v.findViewById(R.id.kind)
-        val title: TextView = v.findViewById(R.id.title)
-        val state: TextView = v.findViewById(R.id.state)
-        val bar: android.widget.ProgressBar = v.findViewById(R.id.progress)
-        val action: android.widget.ImageButton = v.findViewById(R.id.action)
-    }
+    private class StripHolder(v: View, val box: LinearLayout) : RecyclerView.ViewHolder(v)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-        val ctx = parent.context
-        val d = ctx.resources.displayMetrics.density
+        val inf = LayoutInflater.from(parent.context)
+        fun make(layout: Int) = H(inf.inflate(layout, parent, false))
         return when (viewType) {
-            0 -> HeaderHolder(TextView(ctx).apply {
-                layoutParams = RecyclerView.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-                setPadding((12 * d).toInt(), (14 * d).toInt(), (12 * d).toInt(), (6 * d).toInt())
-            })
-            1 -> {
+            0 -> make(R.layout.item_header)
+            1 -> make(R.layout.item_note)
+            2, 4, 5 -> {
+                val ctx = parent.context
+                val d = ctx.resources.displayMetrics.density
                 val box = LinearLayout(ctx).apply {
                     orientation = LinearLayout.HORIZONTAL
-                    setPadding((8 * d).toInt(), (2 * d).toInt(), (8 * d).toInt(), (4 * d).toInt())
+                    setPadding((12 * d).toInt(), (4 * d).toInt(), (12 * d).toInt(), (4 * d).toInt())
                 }
-                val scroll = HorizontalScrollView(ctx).apply {
+                val scroll = NestedHScroll(ctx).apply {
                     layoutParams = RecyclerView.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
                     )
                     isHorizontalScrollBarEnabled = false
                     addView(box)
                 }
-                ChipsHolder(scroll, box)
+                StripHolder(scroll, box)
             }
-            3 -> ProgressHolder(LayoutInflater.from(ctx).inflate(R.layout.item_download, parent, false))
-            else -> EntryHolder(LayoutInflater.from(ctx).inflate(R.layout.item_video, parent, false))
+            3 -> make(R.layout.item_video_card)
+            6 -> make(R.layout.item_channel)
+            7 -> make(R.layout.item_channel_header)
+            8 -> make(R.layout.item_entry)
+            else -> make(R.layout.item_download)
         }
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        val v = holder.itemView
         when (val row = rows[position]) {
-            is Row.Header -> (holder as HeaderHolder).text.apply {
-                text = row.text
-                if (row.small) {
-                    textSize = 14f
-                    setTypeface(null, Typeface.NORMAL)
-                    setTextColor(attrColor(context, android.R.attr.textColorSecondary))
-                } else {
-                    textSize = 16f
-                    setTypeface(null, Typeface.BOLD)
-                    setTextColor(attrColor(context, android.R.attr.textColorPrimary))
-                }
+            is Row.Header -> {
+                v.findViewById<TextView>(R.id.text).text = row.text
+                val b = v.findViewById<Button>(R.id.action)
+                b.visibility = if (row.action != null) View.VISIBLE else View.GONE
+                b.text = row.action
+                b.setOnClickListener { row.onAction?.invoke() }
+            }
+            is Row.Note -> {
+                v.findViewById<TextView>(R.id.text).text = row.text
+                val icon = v.findViewById<ImageView>(R.id.icon)
+                icon.visibility = if (row.icon != 0) View.VISIBLE else View.GONE
+                if (row.icon != 0) icon.setImageResource(row.icon)
             }
             is Row.Chips -> {
-                val box = (holder as ChipsHolder).box
-                val ctx = box.context
-                val d = ctx.resources.displayMetrics.density
+                val box = (holder as StripHolder).box
                 box.removeAllViews()
+                val d = box.resources.displayMetrics.density
                 row.items.forEach { s ->
-                    box.addView(TextView(ctx).apply {
+                    box.addView(Chip(box.context).apply {
                         text = s
-                        textSize = 14f
-                        maxLines = 1
-                        background = ContextCompat.getDrawable(ctx, R.drawable.chip_bg)
-                        setTextColor(attrColor(ctx, android.R.attr.textColorPrimary))
-                        setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
+                        isCheckable = false
                         layoutParams = LinearLayout.LayoutParams(
                             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
                         ).apply { marginEnd = (8 * d).toInt() }
@@ -134,43 +136,107 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     })
                 }
             }
-            is Row.Progress -> {
-                val h = holder as ProgressHolder
-                h.kind.setImageResource(row.icon)
-                h.title.text = row.title
-                h.state.text = row.state
-                val pct = row.pct
-                if (pct == null) {
-                    h.bar.visibility = View.GONE
-                } else {
-                    h.bar.visibility = View.VISIBLE
-                    h.bar.isIndeterminate = pct < 0
-                    if (pct >= 0) h.bar.progress = pct
+            is Row.Carousel -> {
+                val box = (holder as StripHolder).box
+                box.removeAllViews()
+                val inf = LayoutInflater.from(box.context)
+                row.items.forEach { item ->
+                    val card = inf.inflate(R.layout.item_small_card, box, false)
+                    card.findViewById<TextView>(R.id.title).text = item.title
+                    card.findViewById<TextView>(R.id.sub).text = item.uploader
+                    Thumbs.load(card.findViewById(R.id.thumb), item.thumb, R.drawable.ic_video)
+                    card.setOnClickListener { row.onClick(item) }
+                    card.setOnLongClickListener { row.onLong(item); true }
+                    box.addView(card)
                 }
-                h.action.setImageResource(row.actionIcon)
-                h.action.setOnClickListener { row.onAction() }
-                val click = row.onClick
-                if (click != null) h.itemView.setOnClickListener { click() }
-                else h.itemView.setOnClickListener(null)
+            }
+            is Row.Avatars -> {
+                val box = (holder as StripHolder).box
+                box.removeAllViews()
+                val inf = LayoutInflater.from(box.context)
+                row.items.forEach { c ->
+                    val a = inf.inflate(R.layout.item_avatar, box, false)
+                    a.findViewById<TextView>(R.id.name).text = c.name
+                    Thumbs.load(a.findViewById(R.id.avatar), c.avatar, R.drawable.ic_person)
+                    a.setOnClickListener { row.onClick(c) }
+                    a.setOnLongClickListener { row.onLong(c); true }
+                    box.addView(a)
+                }
+            }
+            is Row.Video -> {
+                v.findViewById<TextView>(R.id.title).text = row.v.title
+                v.findViewById<TextView>(R.id.sub).text = row.v.meta ?: row.v.uploader
+                val dur = v.findViewById<TextView>(R.id.duration)
+                val ds = Yt.formatDuration(row.v.duration)
+                dur.text = ds
+                dur.visibility = if (ds.isEmpty()) View.GONE else View.VISIBLE
+                Thumbs.load(v.findViewById(R.id.thumb), row.v.thumb, R.drawable.ic_video)
+                v.setOnClickListener { row.onClick() }
+                v.setOnLongClickListener { row.onLong(); true }
+            }
+            is Row.Channel -> {
+                v.findViewById<TextView>(R.id.name).text = row.c.name
+                v.findViewById<TextView>(R.id.sub).text = listOfNotNull("Chaîne", row.subs).joinToString(" · ")
+                Thumbs.load(v.findViewById(R.id.avatar), row.c.avatar, R.drawable.ic_person)
+                styleSubscribe(v.findViewById(R.id.subscribe), row.subscribed, row.onToggle)
+                v.setOnClickListener { row.onClick() }
+            }
+            is Row.ChannelHeader -> {
+                v.findViewById<TextView>(R.id.name).text = row.c.name
+                val sub = v.findViewById<TextView>(R.id.sub)
+                sub.text = row.subs
+                sub.visibility = if (row.subs == null) View.GONE else View.VISIBLE
+                Thumbs.load(v.findViewById(R.id.avatar), row.c.avatar, R.drawable.ic_person)
+                styleSubscribe(v.findViewById(R.id.subscribe), row.subscribed, row.onToggle)
             }
             is Row.Entry -> {
-                val h = holder as EntryHolder
-                h.title.text = row.title
-                h.sub.text = row.subtitle
-                h.sub.visibility = if (row.subtitle.isNullOrEmpty()) View.GONE else View.VISIBLE
-                Thumbs.load(h.thumb, row.thumb, row.icon)
-                h.itemView.setOnClickListener { row.onClick() }
+                v.findViewById<TextView>(R.id.title).text = row.title
+                val sub = v.findViewById<TextView>(R.id.sub)
+                sub.text = row.subtitle
+                sub.visibility = if (row.subtitle.isNullOrEmpty()) View.GONE else View.VISIBLE
+                Thumbs.load(v.findViewById(R.id.thumb), row.thumb, row.icon)
+                v.setOnClickListener { row.onClick() }
                 val long = row.onLong
-                if (long != null) h.itemView.setOnLongClickListener { long(); true }
-                else h.itemView.setOnLongClickListener(null)
+                if (long != null) v.setOnLongClickListener { long(); true } else v.setOnLongClickListener(null)
+            }
+            is Row.Progress -> {
+                v.findViewById<ImageView>(R.id.kind).setImageResource(row.icon)
+                v.findViewById<TextView>(R.id.title).text = row.title
+                v.findViewById<TextView>(R.id.state).text = row.state
+                val bar = v.findViewById<LinearProgressIndicator>(R.id.progress)
+                val pct = row.pct
+                if (pct == null) {
+                    bar.visibility = View.GONE
+                } else {
+                    val indeterminate = pct < 0
+                    if (bar.isIndeterminate != indeterminate) {
+                        bar.visibility = View.INVISIBLE
+                        bar.isIndeterminate = indeterminate
+                    }
+                    if (!indeterminate) bar.setProgressCompat(pct, true)
+                    bar.visibility = View.VISIBLE
+                }
+                val action = v.findViewById<ImageButton>(R.id.action)
+                action.setImageResource(row.actionIcon)
+                action.setOnClickListener { row.onAction() }
+                val click = row.onClick
+                if (click != null) v.setOnClickListener { click() } else v.setOnClickListener(null)
             }
         }
     }
 
-    private fun attrColor(ctx: Context, attr: Int): ColorStateList? {
-        val tv = TypedValue()
-        if (!ctx.theme.resolveAttribute(attr, tv, true)) return null
-        return if (tv.resourceId != 0) ContextCompat.getColorStateList(ctx, tv.resourceId)
-        else ColorStateList.valueOf(tv.data)
+    private fun styleSubscribe(b: MaterialButton, subscribed: Boolean, onToggle: () -> Unit) {
+        val bg = MaterialColors.getColor(
+            b, if (subscribed) com.google.android.material.R.attr.colorSurfaceContainerHighest
+            else com.google.android.material.R.attr.colorPrimary
+        )
+        val fg = MaterialColors.getColor(
+            b, if (subscribed) com.google.android.material.R.attr.colorOnSurface
+            else com.google.android.material.R.attr.colorOnPrimary
+        )
+        b.text = if (subscribed) "Abonné" else "S'abonner"
+        b.backgroundTintList = ColorStateList.valueOf(bg)
+        b.setTextColor(fg)
+        b.setOnClickListener { onToggle() }
     }
 }

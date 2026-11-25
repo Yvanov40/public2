@@ -1,12 +1,17 @@
 <resources>
     <string name="app_name">Lecteur</string>
-    <string name="hint">Rechercher ou coller un lien YouTube</string>
-    <string name="video">Vidéo</string>
+    <string name="hint">Rechercher sur YouTube</string>
     <string name="play_pause">Lecture / pause</string>
     <string name="search">Rechercher</string>
+    <string name="clear">Effacer</string>
     <string name="download">Télécharger</string>
     <string name="tab_home">Accueil</string>
+    <string name="tab_subs">Abonnements</string>
     <string name="tab_offline">Hors ligne</string>
     <string name="tab_folders">Dossiers</string>
     <string name="action">Annuler ou relancer</string>
+    <string name="background">Arrière-plan</string>
+    <string name="channel">Chaîne</string>
+    <string name="close">Fermer</string>
+    <string name="show_video">Afficher la vidéo</string>
 </resources>
