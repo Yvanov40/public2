@@ -88,6 +88,33 @@ object Store {
         }))
     }
 
+    // ——— Podcasts ———
+    @Synchronized fun podcasts(): List<Podcast> = objects("podcasts").map {
+        Podcast(it.optString("feed"), it.optString("title"), it.str("author"), it.str("art"))
+    }.sortedBy { it.title.lowercase() }
+
+    @Synchronized fun isPodSubscribed(feed: String) = podcasts().any { it.feedUrl == feed }
+
+    private fun savePodcasts(list: List<Podcast>) = put("podcasts", JSONArray(list.map {
+        JSONObject().put("feed", it.feedUrl).put("title", it.title).put("author", it.author).put("art", it.artwork)
+    }))
+
+    @Synchronized fun subscribePodcast(p: Podcast) = savePodcasts(podcasts().filterNot { it.feedUrl == p.feedUrl } + p)
+
+    @Synchronized fun unsubscribePodcast(feed: String) = savePodcasts(podcasts().filterNot { it.feedUrl == feed })
+
+    /** Position de reprise d'un épisode (ms) ; -1 = écouté jusqu'au bout. */
+    @Synchronized fun position(id: String): Long =
+        (try { JSONObject(prefs.getString("positions", "{}")!!) } catch (_: Exception) { JSONObject() }).optLong(id, 0)
+
+    @Synchronized fun setPosition(id: String, ms: Long) {
+        val o = try { JSONObject(prefs.getString("positions", "{}")!!) } catch (_: Exception) { JSONObject() }
+        if (ms == 0L) o.remove(id) else o.put(id, ms)
+        // Limite la taille : on garde les 400 dernières entrées
+        if (o.length() > 400) o.keys().asSequence().take(o.length() - 400).toList().forEach { o.remove(it) }
+        prefs.edit().putString("positions", o.toString()).apply()
+    }
+
     // ——— Téléchargements ———
     @Synchronized fun downloads(): List<Download> = objects("downloads").map {
         Download(

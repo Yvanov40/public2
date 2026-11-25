@@ -94,6 +94,12 @@ class DownloadService : Service() {
         var title = t.title
         val work = File(cacheDir, "telechargement").apply { deleteRecursively(); mkdirs() }
         try {
+            if (t.direct) {
+                downloadDirect(t, work)
+                Downloads.remove(t)
+                notifyEnd("Téléchargé", title)
+                return
+            }
             update(t, "Analyse…", -1)
             val info = StreamInfo.getInfo(t.url)
             title = info.name
@@ -153,6 +159,42 @@ class DownloadService : Service() {
         } finally {
             work.deleteRecursively()
         }
+    }
+
+    /** Épisode de podcast : simple fichier audio. */
+    private fun downloadDirect(t: Downloads.Item, work: File) {
+        t.state = Downloads.State.RUNNING
+        val f = File(work, "episode")
+        update(t, "Audio", 0)
+        val req = okhttp3.Request.Builder().url(t.url).header("User-Agent", DownloaderImpl.USER_AGENT).build()
+        val r = DownloaderImpl.instance.client.newCall(req).execute()
+        r.use { resp ->
+            if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
+            val body = resp.body ?: throw IOException("réponse vide")
+            val total = body.contentLength()
+            body.byteStream().use { input ->
+                f.outputStream().buffered().use { out ->
+                    val buf = ByteArray(64 * 1024)
+                    var done = 0L
+                    while (true) {
+                        if (t.cancel) throw Cancelled()
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        done += n
+                        if (total > 0) update(t, "Audio", (done * 100 / total).toInt())
+                    }
+                }
+            }
+        }
+        val path = Uri.parse(t.url).lastPathSegment.orEmpty()
+        val ext = path.substringAfterLast('.', "mp3").lowercase().takeIf { it.length in 2..4 } ?: "mp3"
+        val mime = when (ext) { "m4a", "mp4", "aac" -> "audio/mp4"; "ogg", "oga", "opus" -> "audio/ogg"; else -> "audio/mpeg" }
+        val base = safeName(t.title)
+        val uri = Saver.save(this, f, "$base.$ext", mime, false, t.title)
+        Store.addDownload(
+            Store.Download(uri.toString(), t.title, t.artist, t.thumb, false, t.url, "Music/Lecteur/$base.$ext")
+        )
     }
 
     /** Téléchargement par morceaux (YouTube bride les gros téléchargements d'un seul tenant). */
@@ -267,7 +309,14 @@ class DownloadService : Service() {
         private const val EXTRA_ID = "id"
 
         fun start(ctx: Context, url: String, video: Boolean, title: String?) {
-            val item = Downloads.add(url, video, title)
+            launch(ctx, Downloads.add(url, video, title))
+        }
+
+        fun startDirect(ctx: Context, url: String, title: String, artist: String?, thumb: String?) {
+            launch(ctx, Downloads.addDirect(url, title, artist, thumb))
+        }
+
+        private fun launch(ctx: Context, item: Downloads.Item) {
             ContextCompat.startForegroundService(
                 ctx, Intent(ctx, DownloadService::class.java).putExtra(EXTRA_ID, item.id)
             )

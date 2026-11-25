@@ -25,7 +25,7 @@ sealed class Row {
     class Avatars(val items: List<Chan>, val onClick: (Chan) -> Unit, val onLong: (Chan) -> Unit) : Row()
     class Channel(
         val c: Chan, val subs: String?, val subscribed: Boolean,
-        val onClick: () -> Unit, val onToggle: () -> Unit
+        val onClick: () -> Unit, val onToggle: () -> Unit, val kind: String = "Chaîne"
     ) : Row()
     class ChannelHeader(val c: Chan, val subs: String?, val subscribed: Boolean, val onToggle: () -> Unit) : Row()
     class Entry(
@@ -216,7 +216,7 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             }
             is Row.Channel -> {
                 v.findViewById<TextView>(R.id.name).text = row.c.name
-                v.findViewById<TextView>(R.id.sub).text = listOfNotNull("Chaîne", row.subs).joinToString(" · ")
+                v.findViewById<TextView>(R.id.sub).text = listOfNotNull(row.kind, row.subs).joinToString(" · ")
                 Thumbs.load(v.findViewById(R.id.avatar), row.c.avatar, R.drawable.ic_person)
                 styleSubscribe(v.findViewById(R.id.subscribe), row.subscribed, row.onToggle)
                 v.setOnClickListener { row.onClick() }
@@ -359,7 +359,9 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     /** Prépare une ligne de réglage et renvoie la zone où placer le contrôle. */
     private fun settingBase(v: View, title: String, sub: String?, value: String?): ViewGroup {
-        v.findViewById<TextView>(R.id.title).text = title
+        val t = v.findViewById<TextView>(R.id.title)
+        t.text = title
+        t.visibility = if (title.isEmpty()) View.GONE else View.VISIBLE
         val s = v.findViewById<TextView>(R.id.sub)
         s.text = sub
         s.visibility = if (sub == null) View.GONE else View.VISIBLE

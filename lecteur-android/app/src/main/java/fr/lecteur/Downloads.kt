@@ -9,7 +9,10 @@ import java.util.concurrent.atomic.AtomicInteger
 object Downloads {
     enum class State { WAITING, RUNNING, FAILED, CANCELLED }
 
-    class Item(val id: Int, val url: String, val video: Boolean, title: String?) {
+    class Item(
+        val id: Int, val url: String, val video: Boolean, title: String?,
+        val direct: Boolean = false, val artist: String? = null, val thumb: String? = null
+    ) {
         @Volatile var title: String = title ?: "Vidéo"
         @Volatile var state = State.WAITING
         @Volatile var pct = -1
@@ -33,6 +36,10 @@ object Downloads {
 
     fun add(url: String, video: Boolean, title: String?): Item =
         Item(nextId.getAndIncrement(), url, video, title).also { items += it; changed() }
+
+    /** Fichier audio direct (épisode de podcast). */
+    fun addDirect(url: String, title: String, artist: String?, thumb: String?): Item =
+        Item(nextId.getAndIncrement(), url, false, title, true, artist, thumb).also { items += it; changed() }
 
     fun remove(item: Item) {
         items.remove(item)

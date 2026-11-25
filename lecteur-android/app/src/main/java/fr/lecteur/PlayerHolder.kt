@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -28,7 +29,15 @@ object PlayerHolder {
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
+        // Redirections http ⇄ https autorisées (fréquentes pour les épisodes de podcast)
+        val http = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setUserAgent(DownloaderImpl.USER_AGENT)
+        val sources = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+            androidx.media3.datasource.DefaultDataSource.Factory(app, http)
+        )
         val p = ExoPlayer.Builder(app)
+            .setMediaSourceFactory(sources)
             .setAudioAttributes(attrs, true)
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
@@ -41,9 +50,45 @@ object PlayerHolder {
             override fun onPlaybackParametersChanged(pp: PlaybackParameters) {
                 prefs.edit().putFloat("speed", pp.speed).apply()
             }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isPlaying) handler.postDelayed(saver, 15_000) else {
+                    handler.removeCallbacks(saver)
+                    savePosition(p)
+                }
+            }
+
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // Épisode précédent terminé : marqué comme écouté
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) lastId?.let { Store.setPosition(it, -1) }
+                lastId = mediaItem?.mediaId?.takeIf { it.startsWith("pod:") }
+            }
+
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_ENDED) lastId?.let { Store.setPosition(it, -1) }
+            }
         })
+        saver = object : Runnable {
+            override fun run() {
+                savePosition(p)
+                if (p.isPlaying) handler.postDelayed(this, 15_000)
+            }
+        }
         player = p
         return p
+    }
+
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var saver: Runnable = Runnable { }
+    private var lastId: String? = null
+
+    /** Mémorise où on en est dans un épisode de podcast, pour reprendre plus tard. */
+    private fun savePosition(p: Player) {
+        val id = p.currentMediaItem?.mediaId?.takeIf { it.startsWith("pod:") } ?: return
+        val pos = p.currentPosition
+        val dur = p.duration
+        if (dur > 0 && pos > dur - 30_000) Store.setPosition(id, -1)
+        else if (pos > 5_000) Store.setPosition(id, pos)
     }
 
     fun setVideoEnabled(p: Player, on: Boolean) {

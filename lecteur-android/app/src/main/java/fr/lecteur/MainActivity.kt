@@ -126,6 +126,19 @@ class MainActivity : AppCompatActivity() {
     private var subsJob: Job? = null
     private var channelPage: ChannelPage? = null
     private var channelJob: Job? = null
+
+    // Podcasts
+    private class PodPage(val page: Int, var podcast: Podcast) {
+        var episodes: List<Episode>? = null
+        var error: String? = null
+    }
+    private var podPage: PodPage? = null
+    private var podJob: Job? = null
+    private var podResults: List<Podcast> = emptyList()
+    private var podFeed: List<Episode>? = null
+    private var podFeedTime = 0L
+    private var podFeedJob: Job? = null
+    private var subsMode = "yt"
     private val folderStack = ArrayList<Pair<DocumentFile, String>>()
     private var folderFiles: List<FileEntry>? = null
     private var folderJob: Job? = null
@@ -237,7 +250,7 @@ class MainActivity : AppCompatActivity() {
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 if (bottomNav.selectedItemId != navIds[position]) bottomNav.selectedItemId = navIds[position]
-                if (position == SUBS) loadSubsFeed()
+                if (position == SUBS) { if (subsMode == "pod") loadPodFeed() else loadSubsFeed() }
                 if (position == OFFLINE) rescanLocal()
             }
         })
@@ -282,6 +295,7 @@ class MainActivity : AppCompatActivity() {
                 val page = pager.currentItem
                 when {
                     fullscreen -> requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    podPage?.page == page -> closePodcast()
                     channelPage?.page == page -> closeChannel()
                     page == FOLDERS && folderStack.isNotEmpty() -> leaveFolder()
                     page == HOME && searchQuery != null -> clearSearch()
@@ -391,12 +405,13 @@ class MainActivity : AppCompatActivity() {
                 feed = null
                 loadFeed()
             }
-            SUBS -> loadSubsFeed(force = true)
+            SUBS -> if (subsMode == "pod") loadPodFeed(force = true) else loadSubsFeed(force = true)
         }
     }
 
     private fun onReselect(page: Int) {
         when {
+            podPage?.page == page -> closePodcast()
             channelPage?.page == page -> closeChannel()
             page == HOME && searchQuery != null -> clearSearch()
             page == FOLDERS && folderStack.isNotEmpty() -> {
@@ -419,7 +434,9 @@ class MainActivity : AppCompatActivity() {
         }
         val rows = mutableListOf<Row>()
         val cp = channelPage
-        if (cp != null && cp.page == page) channelRows(cp, rows)
+        val pp = podPage
+        if (pp != null && pp.page == page) podcastRows(pp, rows)
+        else if (cp != null && cp.page == page) channelRows(cp, rows)
         else when (page) {
             HOME -> homeRows(rows)
             SUBS -> subsRows(rows)
@@ -439,20 +456,27 @@ class MainActivity : AppCompatActivity() {
             else -> null
         } ?: return
         val url = Regex("https?://\\S+").find(text)?.value ?: return
-        play(url)
+        openLink(url)
     }
 
     private fun submit() {
         val text = query.text.toString().trim()
         if (text.isEmpty()) return
         hideKeyboard()
-        if (Yt.looksLikeUrl(text)) play(text) else search(text)
+        if (Yt.looksLikeUrl(text)) openLink(text) else search(text)
     }
 
     private fun hideKeyboard() {
         query.clearFocus()
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(query.windowToken, 0)
+    }
+
+    /** Lien YouTube → lecture ; autre lien → flux RSS de podcast. */
+    private fun openLink(url: String) {
+        val host = Uri.parse(url).host.orEmpty()
+        if (host.contains("youtu") || !url.startsWith("http")) play(url)
+        else openPodcast(Podcast(url, "Podcast", null, null))
     }
 
     private fun search(q: String) {
@@ -464,8 +488,10 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             busy(true)
             try {
+                val pods = async { runCatching { Pod.search(q) }.getOrDefault(emptyList()) }
                 val items = Yt.search(q, "all")
                     .filter { it is StreamInfoItem || it is ChannelInfoItem }
+                podResults = pods.await()
                 searchQuery = q
                 searchResults = items
                 render(HOME)
@@ -486,6 +512,7 @@ class MainActivity : AppCompatActivity() {
     private fun clearSearch() {
         searchQuery = null
         searchResults = emptyList()
+        podResults = emptyList()
         query.setText("")
         hideKeyboard()
         render(HOME)
@@ -553,7 +580,16 @@ class MainActivity : AppCompatActivity() {
         val q = searchQuery
         if (q != null) {
             rows += Row.Header("Résultats pour « $q »")
-            searchResults.forEach { item -> searchRow(item)?.let { rows += it } }
+            val pods = podResults
+            val ytRows = searchResults.mapNotNull { searchRow(it) }
+            // Chaînes et premières vidéos, puis les podcasts, puis le reste
+            ytRows.take(4).forEach { rows += it }
+            if (pods.isNotEmpty()) {
+                rows += Row.Header("Podcasts")
+                pods.take(4).forEach { rows += podRow(it) }
+                rows += Row.Header("Vidéos")
+            }
+            ytRows.drop(4).forEach { rows += it }
             return
         }
         val searches = Store.searches()
@@ -614,6 +650,15 @@ class MainActivity : AppCompatActivity() {
     // ——— Abonnements et chaînes ———
 
     private fun subsRows(rows: MutableList<Row>) {
+        rows += Row.Choice("", null, listOf("YouTube", "Podcasts"), if (subsMode == "pod") 1 else 0) { i ->
+            subsMode = if (i == 1) "pod" else "yt"
+            render(SUBS)
+            if (subsMode == "pod") loadPodFeed() else loadSubsFeed()
+        }
+        if (subsMode == "pod") {
+            podcastSubsRows(rows)
+            return
+        }
         val subs = Store.subs()
         if (subs.isEmpty()) {
             rows += Row.Note(
@@ -656,8 +701,251 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ——— Podcasts ———
+
+    private fun podRow(p: Podcast) = Row.Channel(
+        Chan(p.feedUrl, p.title, p.artwork), p.author, Store.isPodSubscribed(p.feedUrl),
+        onClick = { openPodcast(p) }, onToggle = { togglePodcast(p) }, kind = "Podcast"
+    )
+
+    private fun episodeRow(list: List<Episode>, i: Int, showPodcast: Boolean): Row {
+        val e = list[i]
+        val pos = Store.position(Pod.mediaId(e))
+        val state = when {
+            pos < 0 -> "Écouté"
+            pos > 0 -> "Reprendre à " + Yt.formatDuration(pos / 1000)
+            else -> null
+        }
+        val sub = listOfNotNull(
+            if (showPodcast) e.podcastTitle else null, Pod.ago(e.date),
+            Yt.formatDuration(e.duration).ifEmpty { null }, state
+        ).joinToString(" · ")
+        return Row.Entry(
+            e.title, sub, e.image ?: e.podcastArt, R.drawable.ic_audio,
+            onClick = { playEpisodes(list, i) }, onLong = { episodeMenu(list, i) }
+        )
+    }
+
+    private fun podcastSubsRows(rows: MutableList<Row>) {
+        rows += Row.Entry(
+            "Ajouter un flux RSS…", "Acast, Ausha, Spotify for Podcasters, ou tout autre lien de flux",
+            null, R.drawable.ic_add, onClick = { askRssUrl() }
+        )
+        val pods = Store.podcasts()
+        if (pods.isEmpty()) {
+            rows += Row.Note(
+                "Aucun podcast pour l'instant.
+Cherche un podcast avec la barre de recherche, " +
+                    "ou ajoute directement l'adresse de son flux RSS.",
+                R.drawable.ic_headphones
+            )
+            return
+        }
+        rows += Row.Header("Mes podcasts")
+        rows += Row.Avatars(
+            pods.map { Chan(it.feedUrl, it.title, it.artwork) },
+            onClick = { c -> pods.firstOrNull { it.feedUrl == c.url }?.let { openPodcast(it) } },
+            onLong = { c -> pods.firstOrNull { it.feedUrl == c.url }?.let { confirmUnsubscribePodcast(it) } }
+        )
+        rows += Row.Header("Nouveaux épisodes")
+        val f = podFeed
+        when {
+            f == null -> rows += Row.Note("Chargement…")
+            f.isEmpty() -> rows += Row.Note("Aucun épisode trouvé. Tire vers le bas pour actualiser.")
+            else -> f.indices.forEach { rows += episodeRow(f, it, true) }
+        }
+    }
+
+    private fun loadPodFeed(force: Boolean = false) {
+        if (podFeedJob?.isActive == true) return
+        if (!force && podFeed != null && System.currentTimeMillis() - podFeedTime < 15 * 60_000) return
+        val pods = Store.podcasts()
+        if (pods.isEmpty()) {
+            podFeed = emptyList()
+            refreshers[SUBS]?.isRefreshing = false
+            render(SUBS)
+            return
+        }
+        podFeedJob = lifecycleScope.launch {
+            val sem = Semaphore(4)
+            val all = pods.map { p ->
+                async { sem.withPermit { runCatching { Pod.feed(p.feedUrl).second.take(30) }.getOrDefault(emptyList()) } }
+            }.awaitAll()
+            podFeed = all.flatten().sortedByDescending { it.date }.take(150)
+            podFeedTime = System.currentTimeMillis()
+            refreshers[SUBS]?.isRefreshing = false
+            render(SUBS)
+        }
+    }
+
+    private fun openPodcast(p: Podcast) {
+        val page = pager.currentItem
+        if (channelPage?.page == page) channelPage = null
+        val pp = PodPage(page, p)
+        podPage = pp
+        render(page)
+        lists[page]?.scrollToPosition(0)
+        podJob?.cancel()
+        podJob = lifecycleScope.launch {
+            try {
+                val (info, eps) = Pod.feed(p.feedUrl)
+                pp.podcast = info.copy(artwork = info.artwork ?: p.artwork, author = info.author ?: p.author)
+                pp.episodes = eps
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("Lecteur", "Podcast", e)
+                pp.error = e.message ?: "flux illisible"
+            }
+            if (podPage === pp) render(pp.page)
+        }
+    }
+
+    private fun closePodcast() {
+        val p = podPage?.page ?: return
+        podPage = null
+        podJob?.cancel()
+        render(p)
+    }
+
+    private fun podcastRows(pp: PodPage, rows: MutableList<Row>) {
+        rows += Row.Entry("Retour", null, null, R.drawable.ic_back, onClick = { closePodcast() })
+        val p = pp.podcast
+        rows += Row.ChannelHeader(Chan(p.feedUrl, p.title, p.artwork), p.author, Store.isPodSubscribed(p.feedUrl)) {
+            togglePodcast(pp.podcast)
+        }
+        val eps = pp.episodes
+        when {
+            pp.error != null -> rows += Row.Note("Impossible de lire ce flux : ${pp.error}
+Vérifie que c'est bien l'adresse d'un flux RSS.")
+            eps == null -> rows += Row.Note("Chargement…")
+            eps.isEmpty() -> rows += Row.Note("Aucun épisode.")
+            else -> {
+                rows += Row.Header("${eps.size} épisodes")
+                eps.indices.forEach { rows += episodeRow(eps, it, false) }
+            }
+        }
+    }
+
+    private fun togglePodcast(p: Podcast) {
+        if (Store.isPodSubscribed(p.feedUrl)) {
+            Store.unsubscribePodcast(p.feedUrl)
+            snack("Désabonné de ${p.title}")
+        } else {
+            val best = podPage?.podcast?.takeIf { it.feedUrl == p.feedUrl } ?: p
+            Store.subscribePodcast(best)
+            snack("Abonné à ${best.title}")
+        }
+        podFeed = null
+        renderAll()
+        if (pager.currentItem == SUBS && subsMode == "pod") loadPodFeed()
+    }
+
+    private fun confirmUnsubscribePodcast(p: Podcast) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(p.title)
+            .setMessage("Se désabonner de ce podcast ?")
+            .setPositiveButton("Se désabonner") { _, _ -> togglePodcast(p) }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    private fun askRssUrl() {
+        val d = resources.displayMetrics.density
+        val input = EditText(this).apply {
+            hint = "https://feeds.acast.com/…"
+            inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine()
+        }
+        val box = android.widget.FrameLayout(this).apply {
+            setPadding((24 * d).toInt(), (8 * d).toInt(), (24 * d).toInt(), 0)
+            addView(input)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Ajouter un flux RSS")
+            .setMessage("Colle l'adresse du flux du podcast.")
+            .setView(box)
+            .setPositiveButton("Ouvrir") { _, _ ->
+                val url = input.text.toString().trim()
+                if (url.isNotEmpty()) openPodcast(Podcast(if (url.startsWith("http")) url else "https://$url", "Podcast", null, null))
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    private fun playEpisodes(list: List<Episode>, index: Int) {
+        val items = list.map { e ->
+            MediaItem.Builder()
+                .setUri(e.audioUrl)
+                .setMediaId(Pod.mediaId(e))
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(e.title)
+                        .setArtist(e.podcastTitle)
+                        .setArtworkUri((e.image ?: e.podcastArt)?.let(Uri::parse))
+                        .build()
+                )
+                .build()
+        }
+        val start = Store.position(Pod.mediaId(list[index])).coerceAtLeast(0)
+        loadJob?.cancel()
+        PlayerHolder.current = null
+        PlayerHolder.videoMode = false
+        PlayerHolder.setVideoEnabled(player, false)
+        player.setMediaItems(items, index, start)
+        player.prepare()
+        player.play()
+        refreshUi()
+    }
+
+    private fun episodeMenu(list: List<Episode>, i: Int) {
+        val e = list[i]
+        val id = Pod.mediaId(e)
+        val done = Store.position(id) < 0
+        sheet(
+            e.title, e.podcastTitle, listOf(
+                Opt(R.drawable.ic_headphones, "Écouter") { playEpisodes(list, i) },
+                Opt(R.drawable.ic_retry, "Écouter depuis le début") {
+                    Store.setPosition(id, 0)
+                    playEpisodes(list, i)
+                },
+                Opt(R.drawable.ic_download, "Télécharger l'épisode") {
+                    if (Build.VERSION.SDK_INT < 29 &&
+                        ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+                        PackageManager.PERMISSION_GRANTED
+                    ) {
+                        storagePerm.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        return@Opt
+                    }
+                    if (Build.VERSION.SDK_INT >= 33 &&
+                        ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+                        PackageManager.PERMISSION_GRANTED
+                    ) notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    DownloadService.startDirect(this, e.audioUrl, e.title, e.podcastTitle, e.image ?: e.podcastArt)
+                    Snackbar.make(root, "Téléchargement ajouté", Snackbar.LENGTH_LONG)
+                        .setAnchorView(if (bottomNav.isVisible) bottomNav else null)
+                        .setAction("Voir") { pager.setCurrentItem(OFFLINE, true) }
+                        .show()
+                },
+                Opt(R.drawable.ic_play, if (done) "Marquer comme non écouté" else "Marquer comme écouté") {
+                    Store.setPosition(id, if (done) 0 else -1)
+                    renderAll()
+                },
+                Opt(R.drawable.ic_share, "Partager le lien") {
+                    startActivity(
+                        Intent.createChooser(
+                            Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, e.audioUrl),
+                            e.title
+                        )
+                    )
+                }
+            )
+        )
+    }
+
     private fun openChannel(c: Chan) {
         val page = pager.currentItem
+        if (podPage?.page == page) podPage = null
         val cp = ChannelPage(page, c)
         channelPage = cp
         render(page)
