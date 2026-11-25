@@ -162,7 +162,7 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 row.items.forEach { item ->
                     val card = inf.inflate(R.layout.item_small_card, box, false)
                     card.findViewById<TextView>(R.id.title).text = item.title
-                    card.findViewById<TextView>(R.id.sub).text = item.uploader
+                    card.findViewById<TextView>(R.id.sub).text = item.meta ?: item.uploader
                     Thumbs.load(card.findViewById(R.id.thumb), item.thumb, R.drawable.ic_video)
                     card.setOnClickListener { row.onClick(item) }
                     card.setOnLongClickListener { row.onLong(item); true }

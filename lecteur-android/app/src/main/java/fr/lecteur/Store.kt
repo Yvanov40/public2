@@ -103,15 +103,28 @@ object Store {
 
     @Synchronized fun unsubscribePodcast(feed: String) = savePodcasts(podcasts().filterNot { it.feedUrl == feed })
 
-    /** Position de reprise d'un épisode (ms) ; -1 = écouté jusqu'au bout. */
-    @Synchronized fun position(id: String): Long =
-        (try { JSONObject(prefs.getString("positions", "{}")!!) } catch (_: Exception) { JSONObject() }).optLong(id, 0)
+    private var positions: LinkedHashMap<String, Long>? = null
+
+    private fun positionsMap(): LinkedHashMap<String, Long> = positions ?: LinkedHashMap<String, Long>().also { m ->
+        try {
+            val o = JSONObject(prefs.getString("positions", "{}")!!)
+            o.keys().forEach { k -> m[k] = o.optLong(k) }
+        } catch (_: Exception) {
+        }
+        positions = m
+    }
+
+    /** Où en était la lecture (ms) ; 0 = jamais commencé ; -1 = vu / écouté jusqu'au bout. */
+    @Synchronized fun position(id: String): Long = positionsMap()[id] ?: 0
 
     @Synchronized fun setPosition(id: String, ms: Long) {
-        val o = try { JSONObject(prefs.getString("positions", "{}")!!) } catch (_: Exception) { JSONObject() }
-        if (ms == 0L) o.remove(id) else o.put(id, ms)
-        // Limite la taille : on garde les 400 dernières entrées
-        if (o.length() > 400) o.keys().asSequence().take(o.length() - 400).toList().forEach { o.remove(it) }
+        val m = positionsMap()
+        m.remove(id)
+        if (ms != 0L) m[id] = ms // les plus récents à la fin
+        // Limite la taille : on garde les 600 dernières entrées
+        while (m.size > 600) m.remove(m.keys.first())
+        val o = JSONObject()
+        m.forEach { (k, v) -> o.put(k, v) }
         prefs.edit().putString("positions", o.toString()).apply()
     }
 

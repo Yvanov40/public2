@@ -12,7 +12,8 @@ Lecteur audio/vidéo YouTube léger pour Android (usage personnel).
 - Interface Material You (couleurs du fond d'écran), glisser entre les écrans, mini-lecteur
 - Abonnements : chaînes suivies et leurs nouveautés ; chaînes dans la recherche
 - Appui long sur une vidéo : écouter directement en arrière-plan, télécharger, voir la chaîne, partager
-- Podcasts : recherche (annuaires Apple Podcasts et fyyd), flux trouvé à partir d'un lien de page ou Apple Podcasts, ajout d'un flux RSS (Acast…), nouveaux épisodes, reprise là où on s'est arrêté, téléchargement des épisodes
+- Podcasts : recherche (annuaires Apple Podcasts et fyyd), flux trouvé à partir d'un lien de page ou Apple Podcasts, ajout d'un flux RSS (Acast…), nouveaux épisodes, téléchargement des épisodes
+- Reprise de lecture partout (vidéos, épisodes, fichiers) là où on s’était arrêté
 - Réglages : disposition cartes/liste, colonnes, taille des tuiles, couleur, thème clair/sombre/noir, police, qualité max
 - Accueil : recherches récentes (appui long pour en retirer une), vidéos lues récemment, fil « D'après tes recherches »
 - Hors ligne : téléchargement audio (m4a) ou vidéo (mp4 720p max) dans Music/Lecteur et Movies/Lecteur (mémoire interne) ; suivi en direct, annulation, relance des échecs ; la liste reprend tout le contenu de ces dossiers

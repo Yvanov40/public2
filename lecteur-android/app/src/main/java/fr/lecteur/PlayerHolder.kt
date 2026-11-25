@@ -59,9 +59,14 @@ object PlayerHolder {
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                // Épisode précédent terminé : marqué comme écouté
+                // Élément précédent terminé : marqué comme vu / écouté
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) lastId?.let { Store.setPosition(it, -1) }
-                lastId = mediaItem?.mediaId?.takeIf { it.startsWith("pod:") }
+                lastId = mediaItem?.mediaId?.ifEmpty { null }
+                // Élément suivant d'une liste : reprise là où on s'était arrêté
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
+                    val pos = lastId?.let { Store.position(it) } ?: 0
+                    if (pos > 0) p.seekTo(pos)
+                }
             }
 
             override fun onPlaybackStateChanged(state: Int) {
@@ -82,13 +87,18 @@ object PlayerHolder {
     private var saver: Runnable = Runnable { }
     private var lastId: String? = null
 
-    /** Mémorise où on en est dans un épisode de podcast, pour reprendre plus tard. */
+    /** Mémorise où on en est (vidéo, épisode, fichier) pour reprendre plus tard. */
     private fun savePosition(p: Player) {
-        val id = p.currentMediaItem?.mediaId?.takeIf { it.startsWith("pod:") } ?: return
-        val pos = p.currentPosition
+        val id = p.currentMediaItem?.mediaId?.ifEmpty { null } ?: return
+        if (p.isCurrentMediaItemLive) return
         val dur = p.duration
-        if (dur > 0 && pos > dur - 30_000) Store.setPosition(id, -1)
-        else if (pos > 5_000) Store.setPosition(id, pos)
+        if (dur == C.TIME_UNSET || dur <= 0) return
+        val pos = p.currentPosition
+        val end = if (dur > 120_000) dur - 30_000 else dur - 2_000
+        when {
+            pos >= end -> Store.setPosition(id, -1)
+            pos > 5_000 -> Store.setPosition(id, pos)
+        }
     }
 
     fun setVideoEnabled(p: Player, on: Boolean) {

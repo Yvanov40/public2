@@ -534,7 +534,8 @@ class MainActivity : AppCompatActivity() {
                 // En arrière-plan direct : la piste vidéo n'est jamais chargée
                 PlayerHolder.videoMode = !audioOnly
                 PlayerHolder.setVideoEnabled(player, !audioOnly)
-                player.setMediaSource(source)
+                // Reprise là où on s'était arrêté
+                player.setMediaSource(source, Store.position(info.url).coerceAtLeast(0))
                 player.prepare()
                 player.play()
                 val v = Vid(
@@ -566,7 +567,22 @@ class MainActivity : AppCompatActivity() {
 
     // ——— Accueil ———
 
-    private fun videoRow(v: Vid) = Row.Video(v, onClick = { play(v.url) }, onLong = { videoMenu(v) })
+    private fun resumeText(id: String): String? {
+        val pos = Store.position(id)
+        return when {
+            pos < 0 -> "Vu"
+            pos > 0 -> "Reprise à " + Yt.formatDuration(pos / 1000)
+            else -> null
+        }
+    }
+
+    /** Ajoute « Reprise à 12:34 » ou « Vu » aux infos de la vidéo. */
+    private fun withResume(v: Vid): Vid {
+        val r = resumeText(v.url) ?: return v
+        return v.copy(meta = listOfNotNull((v.meta ?: v.uploader)?.ifEmpty { null }, r).joinToString(" · "))
+    }
+
+    private fun videoRow(v: Vid) = Row.Video(withResume(v), onClick = { play(v.url) }, onLong = { videoMenu(v) })
 
     private fun searchRow(item: InfoItem): Row? = when (item) {
         is StreamInfoItem -> videoRow(Yt.vid(item))
@@ -612,7 +628,10 @@ class MainActivity : AppCompatActivity() {
         }
         if (watched.isNotEmpty()) {
             rows += Row.Header("Reprendre")
-            rows += Row.Carousel(watched.take(12), onClick = { play(it.url) }, onLong = { videoMenu(it) })
+            rows += Row.Carousel(
+                watched.take(12).map { v -> v.copy(meta = listOfNotNull(v.uploader, resumeText(v.url)).joinToString(" · ")) },
+                onClick = { play(it.url) }, onLong = { videoMenu(it) }
+            )
         }
         if (searches.isNotEmpty()) {
             rows += Row.Header("Pour toi")
@@ -1146,6 +1165,10 @@ class MainActivity : AppCompatActivity() {
         val opts = mutableListOf(
             Opt(R.drawable.ic_headphones, "Écouter en arrière-plan") { play(v.url, audioOnly = true) },
             Opt(R.drawable.ic_play, "Lire la vidéo") { play(v.url) },
+            Opt(R.drawable.ic_retry, "Lire depuis le début") {
+                Store.setPosition(v.url, 0)
+                play(v.url)
+            },
             Opt(R.drawable.ic_audio, "Télécharger l'audio") { startDownload(v.url, false, v.title) },
             Opt(R.drawable.ic_download, "Télécharger la vidéo") { startDownload(v.url, true, v.title) }
         )
@@ -1183,7 +1206,7 @@ class MainActivity : AppCompatActivity() {
         PlayerHolder.current = null
         PlayerHolder.videoMode = !audio
         PlayerHolder.setVideoEnabled(player, !audio)
-        player.setMediaItems(items, index, 0L)
+        player.setMediaItems(items, index, Store.position(items[index].mediaId).coerceAtLeast(0))
         player.prepare()
         player.play()
         refreshUi()
