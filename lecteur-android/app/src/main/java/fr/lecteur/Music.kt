@@ -341,6 +341,18 @@ object Music {
 
     fun retryWithFallback() = recover(viaFallback = true)
 
+    /** Abandonne le titre en échec et lance celui d'après. */
+    fun skipFailing() {
+        if (!active) return
+        val i = failingIndex()
+        val n = when {
+            i + 1 < tracks.size -> i + 1
+            repeat == Repeat.ALL && tracks.isNotEmpty() -> 0
+            else -> return
+        }
+        load(n, now = true)
+    }
+
     /** Prépare le titre [i] : tout de suite (now) ou à la suite de la liste du lecteur. */
     private fun load(i: Int, now: Boolean, viaFallback: Boolean = false, startAt: Long = 0) {
         if (i !in tracks.indices || i in resolving) return

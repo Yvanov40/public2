@@ -19,7 +19,32 @@ class YtDataSource(private val upstream: HttpDataSource) : DataSource by upstrea
 
     private var rn = 0
 
+    /** Morceau demandé au-delà de la fin réelle du fichier : on le traite comme la fin. */
+    private var pastEnd = false
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+        if (pastEnd) C.RESULT_END_OF_INPUT else upstream.read(buffer, offset, length)
+
+    override fun close() {
+        if (pastEnd) pastEnd = false else upstream.close()
+    }
+
     override fun open(dataSpec: DataSpec): Long {
+        pastEnd = false
+        try {
+            return openInternal(dataSpec)
+        } catch (e: HttpDataSource.InvalidResponseCodeException) {
+            // YouTube annonce parfois une durée un peu plus longue que le vrai fichier :
+            // la fin demandée n'existe pas (416). Ce n'est pas une erreur, c'est la fin.
+            if (e.responseCode == 416 && dataSpec.position > 0) {
+                pastEnd = true
+                return 0
+            }
+            throw e
+        }
+    }
+
+    private fun openInternal(dataSpec: DataSpec): Long {
         val uri = dataSpec.uri
         if (uri.host?.endsWith("googlevideo.com") != true) return upstream.open(dataSpec)
 

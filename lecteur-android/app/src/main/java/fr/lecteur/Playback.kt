@@ -136,7 +136,13 @@ object Playback {
         if (Music.active) {
             val key = Music.failingKey() ?: return
             val n = attempts.getOrDefault(key, 0)
-            if (n >= 2 || (n >= 1 && !Settings.fallback)) return
+            if (n >= 2 || (n >= 1 && !Settings.fallback)) {
+                // Titre vraiment illisible : on passe au suivant, comme Spotify
+                recovering = true
+                Toast.makeText(app, "Titre illisible, passage au suivant", Toast.LENGTH_SHORT).show()
+                Music.skipFailing()
+                return
+            }
             attempts[key] = n + 1
             recovering = true
             Toast.makeText(app, "YouTube a refusé ce titre, nouvel essai…", Toast.LENGTH_SHORT).show()
