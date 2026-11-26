@@ -1870,6 +1870,7 @@ class MainActivity : AppCompatActivity() {
                     p.artist = a
                     p.songs = songs
                     p.albums = albums
+                    Store.addRecentArtist(a)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -1894,14 +1895,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun trackRow(list: List<Track>, i: Int, number: Boolean = false, playlistId: String? = null): Row {
+    private fun trackRow(list: List<Track>, i: Int, number: Boolean = false, playlistId: String? = null, onPlayed: (() -> Unit)? = null): Row {
         val t = list[i]
         val sub = listOfNotNull(t.artist, if (number) null else t.album, Yt.formatDuration(t.duration).ifEmpty { null })
             .joinToString(" · ")
         return Row.Track(
             t.title, sub, t.thumb, if (number) "${i + 1}" else null,
             playing = Music.current?.url == t.url, liked = Store.isLiked(t.url),
-            onClick = { Music.play(list, i); openNowPlayingSoon() },
+            onClick = { onPlayed?.invoke(); Music.play(list, i); openNowPlayingSoon() },
             onLong = { trackMenu(t, playlistId, i) }
         )
     }
@@ -1912,12 +1913,78 @@ class MainActivity : AppCompatActivity() {
 
     private fun albumRow(a: Music.Album, kind: String) = Row.Track(
         a.title, listOfNotNull(kind, a.artist).joinToString(" · "), a.thumb,
-        onClick = { pushMusic(MPage.AlbumP(a)) }
+        liked = Store.isAlbumSaved(a.url),
+        onClick = { pushMusic(MPage.AlbumP(a)) }, onLong = { albumMenu(a) }
     )
 
     private fun artistRow(a: Music.Artist) = Row.Track(
-        a.name, "Artiste", a.thumb, round = true, onClick = { pushMusic(MPage.ArtistP(a)) }
+        a.name, "Artiste", a.thumb, round = true, liked = Store.isArtistSaved(a.url),
+        onClick = { pushMusic(MPage.ArtistP(a)) }, onLong = { artistMenu(a) }
     )
+
+    /** Lance un album directement (sans ouvrir sa page). */
+    private fun playAlbum(a: Music.Album, shuffled: Boolean) {
+        lifecycleScope.launch {
+            busy(true)
+            try {
+                val (album, tracks) = Music.albumTracks(a)
+                if (tracks.isEmpty()) { snack("Album vide"); return@launch }
+                Store.addRecentAlbum(album)
+                Music.play(tracks, if (shuffled) tracks.indices.random() else 0, shuffled)
+                openNowPlayingSoon()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snack("Impossible de lire l'album : ${e.message}")
+            } finally {
+                busy(false)
+            }
+        }
+    }
+
+    private fun albumMenu(a: Music.Album, recent: Boolean = false) {
+        val saved = Store.isAlbumSaved(a.url)
+        val opts = mutableListOf(
+            Opt(R.drawable.ic_play, "Lire l'album") { playAlbum(a, false) },
+            Opt(R.drawable.ic_shuffle, "Lecture aléatoire") { playAlbum(a, true) },
+            Opt(if (saved) R.drawable.ic_heart else R.drawable.ic_heart_outline,
+                if (saved) "Retirer de mes albums" else "Ajouter à mes albums") {
+                snack(if (Store.toggleAlbum(a)) "Ajouté à tes albums" else "Retiré de tes albums")
+                render(MUSIC)
+            }
+        )
+        if (recent) opts += Opt(R.drawable.ic_close, "Retirer des écoutés récemment") { Store.removeRecentAlbum(a.url); render(MUSIC) }
+        sheet(a.title, a.artist, opts)
+    }
+
+    private fun artistMenu(a: Music.Artist, recent: Boolean = false) {
+        val saved = Store.isArtistSaved(a.url)
+        val opts = mutableListOf(
+            Opt(R.drawable.ic_person, "Voir l'artiste") { pushMusic(MPage.ArtistP(a)) },
+            Opt(R.drawable.ic_shuffle, "Lecture aléatoire de ses titres") {
+                lifecycleScope.launch {
+                    busy(true)
+                    try {
+                        val songs = Music.songs(a.name).filter { it.artist?.contains(a.name, true) == true }.ifEmpty { Music.songs(a.name) }
+                        if (songs.isEmpty()) snack("Aucun titre trouvé") else {
+                            Store.addRecentArtist(a)
+                            Music.play(songs, songs.indices.random(), true)
+                            openNowPlayingSoon()
+                        }
+                    } finally {
+                        busy(false)
+                    }
+                }
+            },
+            Opt(if (saved) R.drawable.ic_heart else R.drawable.ic_heart_outline,
+                if (saved) "Ne plus suivre" else "Suivre") {
+                snack(if (Store.toggleArtist(a)) "Tu suis ${a.name}" else "Tu ne suis plus ${a.name}")
+                render(MUSIC)
+            }
+        )
+        if (recent) opts += Opt(R.drawable.ic_close, "Retirer des récents") { Store.removeRecentArtist(a.url); render(MUSIC) }
+        sheet(a.name, "Artiste", opts)
+    }
 
     private fun trackMenu(t: Track, playlistId: String?, index: Int) {
         val liked = Store.isLiked(t.url)
@@ -2052,8 +2119,36 @@ class MainActivity : AppCompatActivity() {
         rows += Row.Track("Nouvelle playlist…", null, null, onClick = {
             NowPlayingActivity.askName(this, "Nouvelle playlist", "") { Store.createPlaylist(it); render(MUSIC) }
         })
+        val myAlbums = Store.savedAlbums()
+        if (myAlbums.isNotEmpty()) {
+            rows += Row.Header("Mes albums")
+            rows += Row.Cards(myAlbums.map { a ->
+                Row.Card(a.title, a.artist, a.thumb, onClick = { pushMusic(MPage.AlbumP(a)) }, onLong = { albumMenu(a) })
+            })
+        }
+        val myArtists = Store.savedArtists()
+        if (myArtists.isNotEmpty()) {
+            rows += Row.Header("Mes artistes")
+            rows += Row.Cards(myArtists.map { a ->
+                Row.Card(a.name, null, a.thumb, round = true, onClick = { pushMusic(MPage.ArtistP(a)) }, onLong = { artistMenu(a) })
+            })
+        }
+        val recentAlbums = Store.recentAlbums()
+        if (recentAlbums.isNotEmpty()) {
+            rows += Row.Header("Albums écoutés récemment")
+            rows += Row.Cards(recentAlbums.map { a ->
+                Row.Card(a.title, a.artist, a.thumb, onClick = { pushMusic(MPage.AlbumP(a)) }, onLong = { albumMenu(a, recent = true) })
+            })
+        }
+        val recentArtists = Store.recentArtists().filterNot { r -> myArtists.any { it.url == r.url } }
+        if (recentArtists.isNotEmpty()) {
+            rows += Row.Header("Artistes récents")
+            rows += Row.Cards(recentArtists.map { a ->
+                Row.Card(a.name, null, a.thumb, round = true, onClick = { pushMusic(MPage.ArtistP(a)) }, onLong = { artistMenu(a, recent = true) })
+            })
+        }
         if (recent.isNotEmpty()) {
-            rows += Row.Header("Écoutés récemment", "Tout voir") { pushMusic(MPage.Recent) }
+            rows += Row.Header("Titres écoutés récemment", "Tout voir") { pushMusic(MPage.Recent) }
             rows += Row.Cards(recent.take(15).mapIndexed { i, t ->
                 Row.Card(t.title, t.artist, t.thumb, onClick = { Music.play(recent, i); openNowPlayingSoon() },
                     onLong = { trackMenu(t, null, i) })
@@ -2091,14 +2186,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun musicPageRows(page: MPage, rows: MutableList<Row>) {
-        fun list(title: String, sub: String?, thumb: String?, tracks: List<Track>, numbered: Boolean = false, playlistId: String? = null, round: Boolean = false, onMore: (() -> Unit)? = null) {
+        fun list(
+            title: String, sub: String?, thumb: String?, tracks: List<Track>, numbered: Boolean = false,
+            playlistId: String? = null, round: Boolean = false, onMore: (() -> Unit)? = null,
+            onPlayed: (() -> Unit)? = null, saveLabel: String? = null, saved: Boolean = false, onSave: (() -> Unit)? = null
+        ) {
             rows += Row.MusicHeader(
                 title, sub, thumb, round,
-                onPlay = if (tracks.isEmpty()) null else ({ Music.play(tracks, 0); openNowPlayingSoon() }),
-                onShuffle = if (tracks.size < 2) null else ({ Music.play(tracks, (tracks.indices).random(), shuffled = true); openNowPlayingSoon() }),
-                onMore = onMore
+                onPlay = if (tracks.isEmpty()) null else ({ onPlayed?.invoke(); Music.play(tracks, 0); openNowPlayingSoon() }),
+                onShuffle = if (tracks.size < 2) null else ({ onPlayed?.invoke(); Music.play(tracks, (tracks.indices).random(), shuffled = true); openNowPlayingSoon() }),
+                onMore = onMore, saveLabel = saveLabel, saved = saved, onSave = onSave
             )
-            tracks.indices.forEach { rows += trackRow(tracks, it, numbered, playlistId) }
+            tracks.indices.forEach { rows += trackRow(tracks, it, numbered, playlistId, onPlayed) }
         }
         when (page) {
             is MPage.AlbumP -> {
@@ -2114,10 +2213,17 @@ class MainActivity : AppCompatActivity() {
                     }
                     else -> {
                         val total = t.sumOf { it.duration }
+                        val saved = Store.isAlbumSaved(page.album.url)
                         list(
                             page.album.title,
                             listOfNotNull(page.album.artist, "${t.size} titres", Yt.formatDuration(total).ifEmpty { null }).joinToString(" · "),
-                            page.album.thumb, t, numbered = true
+                            page.album.thumb, t, numbered = true,
+                            onPlayed = { Store.addRecentAlbum(page.album) },
+                            saveLabel = if (saved) "Ajouté" else "Ajouter", saved = saved,
+                            onSave = {
+                                snack(if (Store.toggleAlbum(page.album)) "Ajouté à tes albums" else "Retiré de tes albums")
+                                render(MUSIC)
+                            }
                         )
                     }
                 }
@@ -2125,10 +2231,16 @@ class MainActivity : AppCompatActivity() {
             is MPage.ArtistP -> {
                 val a = page.artist
                 val songs = page.songs
+                val followed = Store.isArtistSaved(a.url)
                 rows += Row.MusicHeader(
                     a.name, "Artiste", a.thumb, true,
                     onPlay = songs?.takeIf { it.isNotEmpty() }?.let { s -> { Music.play(s, 0); openNowPlayingSoon() } },
-                    onShuffle = songs?.takeIf { it.size > 1 }?.let { s -> { Music.play(s, s.indices.random(), true); openNowPlayingSoon() } }
+                    onShuffle = songs?.takeIf { it.size > 1 }?.let { s -> { Music.play(s, s.indices.random(), true); openNowPlayingSoon() } },
+                    saveLabel = if (followed) "Suivi" else "Suivre", saved = followed,
+                    onSave = {
+                        snack(if (Store.toggleArtist(a)) "Tu suis ${a.name}" else "Tu ne suis plus ${a.name}")
+                        render(MUSIC)
+                    }
                 )
                 when {
                     page.error != null -> rows += Row.Note("Impossible de charger : ${page.error}")
@@ -2141,7 +2253,7 @@ class MainActivity : AppCompatActivity() {
                         val al = page.albums.orEmpty()
                         if (al.isNotEmpty()) {
                             rows += Row.Header("Albums")
-                            rows += Row.Cards(al.map { x -> Row.Card(x.title, x.artist, x.thumb, onClick = { pushMusic(MPage.AlbumP(x)) }) })
+                            rows += Row.Cards(al.map { x -> Row.Card(x.title, x.artist, x.thumb, onClick = { pushMusic(MPage.AlbumP(x)) }, onLong = { albumMenu(x) }) })
                         }
                         if (songs.isEmpty() && al.isEmpty()) rows += Row.Note("Rien trouvé pour cet artiste.")
                     }

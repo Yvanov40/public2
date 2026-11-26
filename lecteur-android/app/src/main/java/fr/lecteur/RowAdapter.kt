@@ -52,7 +52,8 @@ sealed class Row {
     class Cards(val items: List<Card>) : Row()
     class MusicHeader(
         val title: String, val sub: String?, val thumb: String?, val round: Boolean,
-        val onPlay: (() -> Unit)?, val onShuffle: (() -> Unit)?, val onMore: (() -> Unit)? = null
+        val onPlay: (() -> Unit)?, val onShuffle: (() -> Unit)?, val onMore: (() -> Unit)? = null,
+        val saveLabel: String? = null, val saved: Boolean = false, val onSave: (() -> Unit)? = null
     ) : Row()
     class Progress(
         val title: String,
@@ -406,6 +407,11 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 playAll.setOnClickListener { row.onPlay?.invoke() }
                 shuf.setOnClickListener { row.onShuffle?.invoke() }
                 more.setOnClickListener { row.onMore?.invoke() }
+                val save = v.findViewById<MaterialButton>(R.id.save)
+                save.visibility = if (row.onSave != null) View.VISIBLE else View.GONE
+                save.text = row.saveLabel
+                save.setIconResource(if (row.saved) R.drawable.ic_heart else R.drawable.ic_heart_outline)
+                save.setOnClickListener { row.onSave?.invoke() }
             }
             is Row.Progress -> {
                 v.findViewById<ImageView>(R.id.kind).setImageResource(row.icon)

@@ -160,6 +160,50 @@ object Store {
     @Synchronized fun addRecentTrack(t: Track) =
         saveTracks("recentTracks", (listOf(t) + recentTracks().filterNot { it.url == t.url }).take(60))
 
+    // Albums et artistes : enregistrés (« Mes albums », « Mes artistes ») et récents
+    private fun albumJson(a: Music.Album) = JSONObject().put("url", a.url).put("title", a.title)
+        .put("artist", a.artist).put("thumb", a.thumb).put("count", a.count)
+
+    private fun albums(key: String): List<Music.Album> = objects(key).map {
+        Music.Album(it.optString("url"), it.optString("title"), it.str("artist"), it.str("thumb"), it.optLong("count", -1))
+    }
+
+    private fun saveAlbums(key: String, l: List<Music.Album>) = put(key, JSONArray(l.map(::albumJson)))
+
+    private fun artistJson(a: Music.Artist) = JSONObject().put("url", a.url).put("name", a.name).put("thumb", a.thumb)
+
+    private fun artists(key: String): List<Music.Artist> = objects(key).map {
+        Music.Artist(it.optString("url"), it.optString("name"), it.str("thumb"))
+    }
+
+    private fun saveArtists(key: String, l: List<Music.Artist>) = put(key, JSONArray(l.map(::artistJson)))
+
+    @Synchronized fun savedAlbums() = albums("savedAlbums")
+    @Synchronized fun isAlbumSaved(url: String) = savedAlbums().any { it.url == url }
+    @Synchronized fun toggleAlbum(a: Music.Album): Boolean {
+        val l = savedAlbums()
+        return if (l.any { it.url == a.url }) { saveAlbums("savedAlbums", l.filterNot { it.url == a.url }); false }
+        else { saveAlbums("savedAlbums", listOf(a) + l); true }
+    }
+
+    @Synchronized fun recentAlbums() = albums("recentAlbums")
+    @Synchronized fun addRecentAlbum(a: Music.Album) =
+        saveAlbums("recentAlbums", (listOf(a) + recentAlbums().filterNot { it.url == a.url }).take(20))
+    @Synchronized fun removeRecentAlbum(url: String) = saveAlbums("recentAlbums", recentAlbums().filterNot { it.url == url })
+
+    @Synchronized fun savedArtists() = artists("savedArtists")
+    @Synchronized fun isArtistSaved(url: String) = savedArtists().any { it.url == url }
+    @Synchronized fun toggleArtist(a: Music.Artist): Boolean {
+        val l = savedArtists()
+        return if (l.any { it.url == a.url }) { saveArtists("savedArtists", l.filterNot { it.url == a.url }); false }
+        else { saveArtists("savedArtists", listOf(a) + l); true }
+    }
+
+    @Synchronized fun recentArtists() = artists("recentArtists")
+    @Synchronized fun addRecentArtist(a: Music.Artist) =
+        saveArtists("recentArtists", (listOf(a) + recentArtists().filterNot { it.url == a.url }).take(20))
+    @Synchronized fun removeRecentArtist(url: String) = saveArtists("recentArtists", recentArtists().filterNot { it.url == url })
+
     class Playlist(val id: String, val name: String, val tracks: List<Track>)
 
     @Synchronized fun playlists(): List<Playlist> = objects("playlists").map { o ->
