@@ -19,13 +19,12 @@ import android.widget.Toast;
 final class Actions {
 
     static final int NONE = 0, LOCK = 1, NOTIFICATIONS = 2, CONTROL_CENTER = 3, OPEN_APP = 4,
-            TORCH = 5, CAMERA = 6, SEARCH = 7, SETTINGS = 8, RECENTS = 9, APP_SEARCH = 10, PREVIOUS = 11,
-            ASSISTANT = 12;
+            TORCH = 5, CAMERA = 6, SEARCH = 7, SETTINGS = 8, RECENTS = 9, APP_SEARCH = 10, PREVIOUS = 11;
 
     static final String[] NAMES = {
             "Rien", "Verrouiller l'écran", "Notifications", "Centre de contrôle", "Ouvrir une appli…",
             "Lampe torche", "Appareil photo", "Recherche web", "Réglages du launcher", "Applis récentes",
-            "Recherche d'applis (clavier)", "Appli d'avant (bascule)", "Assistant (Gemini / Google)"};
+            "Recherche d'applis (clavier)", "Appli d'avant (bascule)"};
 
     /** Gestes réglables : clé d'enregistrement, nom affiché, action par défaut. */
     static final String[] GESTURES = {"gDouble", "gUp", "gDownLeft", "gDownRight", "gLeft", "gRight"};
@@ -42,7 +41,10 @@ final class Actions {
 
     static int actionFor(Context c, String gesture) {
         for (int i = 0; i < GESTURES.length; i++) {
-            if (GESTURES[i].equals(gesture)) return Store.get(c).num(gesture, DEFAULTS[i]);
+            if (GESTURES[i].equals(gesture)) {
+                int v = Store.get(c).num(gesture, DEFAULTS[i]);
+                return v >= 0 && v < NAMES.length ? v : NONE; // action retirée depuis
+            }
         }
         return NONE;
     }
@@ -90,10 +92,6 @@ final class Actions {
                 break;
             case PREVIOUS:
                 previous(a);
-                break;
-            case ASSISTANT:
-                if (!start(a, new Intent(Intent.ACTION_VOICE_COMMAND).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                        && !start(a, new Intent(Intent.ACTION_ASSIST))) toast(a, "Aucun assistant installé");
                 break;
             default:
                 break;

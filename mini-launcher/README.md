@@ -123,10 +123,6 @@ signature fixe dans `app/debug.keystore` : clé de test, pas pour le Play Store)
 Ensuite, Réglages > Mise à jour cherche la dernière release, la télécharge et la passe à
 l'installateur d'Android (autoriser « Installer des applis inconnues » la première fois).
 
-Appui long sur Home : géré par Android. Réglages > Gestes > « Choisir l'assistant » ouvre le
-choix de l'assistant numérique (Gemini : question sur l'écran, capture, texte). Action de
-geste « Assistant » disponible.
-
 ## Code
 
 Java sans dépendance. `HomeActivity`/`HomeView` : le launcher et ses gestes. `HomeGrid` :

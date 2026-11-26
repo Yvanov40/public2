@@ -373,24 +373,6 @@ public final class SettingsActivity extends Activity {
         note("S'il s'ouvre à moitié, essaie les autres méthodes et garde celle qui marche. Sur "
                 + "HyperOS, le style « ancienne version » du centre de contrôle aide aussi.");
 
-        section("Appui long sur Home");
-        action("Choisir l'assistant", "Gemini ou Google : capture, recherche et texte sur l'écran", v -> {
-            String[] actions = {Settings.ACTION_VOICE_INPUT_SETTINGS, Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS,
-                    Settings.ACTION_SETTINGS};
-            for (String act : actions) {
-                try {
-                    startActivity(new Intent(act));
-                    return;
-                } catch (ActivityNotFoundException ignored) {
-                }
-            }
-        });
-        note("L'appui long sur Home est géré par Android, pas par le launcher. Sur Xiaomi, « Entourer "
-                + "pour chercher » ne marche en général qu'avec le launcher d'origine. Avec Mini Launcher, "
-                + "choisis Gemini comme assistant numérique : l'appui long ouvre Gemini, avec « Poser "
-                + "une question sur l'écran » (capture, sélection de texte, recherche). Les gestes "
-                + "peuvent aussi lancer l'action « Assistant ».");
-
         section("Verrouillage");
         danger("Retirer le droit de verrouillage", "À faire avant de désinstaller l'appli", v -> {
             Actions.removeLock(this);
