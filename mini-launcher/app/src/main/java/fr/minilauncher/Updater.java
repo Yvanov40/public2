@@ -104,7 +104,8 @@ final class Updater {
 
     /** true si la version publiée est plus récente que celle installée. */
     static boolean newer(String remote, String local) {
-        String[] a = remote.split("\\."), b = local.split("\\.");
+        // « 5.6 (build 46) » : seul « 5.6 » compte.
+        String[] a = remote.trim().split("\\s")[0].split("\\."), b = local.trim().split("\\s")[0].split("\\.");
         for (int i = 0; i < Math.max(a.length, b.length); i++) {
             int x = i < a.length ? num(a[i]) : 0, y = i < b.length ? num(b[i]) : 0;
             if (x != y) return x > y;
