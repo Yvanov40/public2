@@ -382,7 +382,8 @@ object Music {
                 throw e
             } catch (e: Exception) {
                 if (gen == generation) {
-                    Toast.makeText(app, "« ${t.title} » indisponible", Toast.LENGTH_SHORT).show()
+                    Playback.lastFailed = t.url to t.title
+                    Toast.makeText(app, "« ${t.title} » indisponible : ${e.message?.take(80) ?: "erreur"}", Toast.LENGTH_LONG).show()
                     // Titre suivant à la place
                     val n = i + 1
                     if (n in tracks.indices) {
