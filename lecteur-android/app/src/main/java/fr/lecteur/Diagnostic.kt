@@ -75,6 +75,40 @@ object Diagnostic {
             }
         }
 
+        // Le titre qui a échoué récemment, testé en détail
+        Playback.lastFailed?.let { (url, title) ->
+            val id = SponsorBlock.videoId(url)
+            out("")
+            out("Titre en échec : $title")
+            step(out, "  Infos (NewPipe)") {
+                try {
+                    val info = StreamInfo.getInfo(url)
+                    val a = Sources.pickAudio(info.audioStreams)
+                    "${info.audioStreams.size} flux audio (client ${a?.content?.let { Uri.parse(it).getQueryParameter("c") } ?: "?"})"
+                } catch (e: Exception) {
+                    // La raison donnée par YouTube (pays, âge, Premium, supprimé…)
+                    throw IOException("${e.javaClass.simpleName} : ${e.message}")
+                }
+            }
+            step(out, "  Fichier direct") {
+                val info = StreamInfo.getInfo(url)
+                val a = Sources.pickAudio(info.audioStreams)?.content ?: throw IOException("aucun flux audio")
+                val uri = Uri.parse(a)
+                val ranged = uri.buildUpon().appendQueryParameter("range", "0-65535").appendQueryParameter("rn", "1").build().toString()
+                val b = okhttp3.Request.Builder().url(ranged)
+                YtDataSource.headersFor(uri).forEach { (k, v) -> b.header(k, v) }
+                if (YtDataSource.isWebClient(uri)) b.post(byteArrayOf(0x78, 0).toRequestBody(null))
+                DownloaderImpl.instance.client.newCall(b.build()).execute().use { r ->
+                    if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
+                    "OK"
+                }
+            }
+            if (id != null) {
+                val rel = withContext(Dispatchers.IO) { runCatching { Fallback.relays(4) }.getOrDefault(emptyList()) }
+                for (r in rel) step(out, "  ${r.label}") { Fallback.test(r, id) }
+            }
+        }
+
         out("")
         out("Serveurs relais :")
         val relays = withContext(Dispatchers.IO) { runCatching { Fallback.relays(8) }.getOrDefault(emptyList()) }

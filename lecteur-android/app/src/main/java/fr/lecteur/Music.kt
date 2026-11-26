@@ -334,7 +334,11 @@ object Music {
     fun recover(viaFallback: Boolean) {
         if (!active) return
         val i = failingIndex()
-        val pos = if (i == index) player.currentPosition else 0L
+        // On ne reprend à la position actuelle que si c'est bien ce titre qui jouait
+        val p = player
+        val playingThis = p.currentMediaItem?.mediaId == tracks.getOrNull(i)?.mediaId
+        val pos = if (playingThis && p.duration > 0 && p.currentPosition < p.duration - 3000) p.currentPosition else 0L
+        tracks.getOrNull(i)?.let { Playback.lastFailed = it.url to it.title }
         // Les liens préparés à l'avance pour les titres suivants sont oubliés : ils seront redemandés
         load(i, now = true, viaFallback = viaFallback, startAt = pos)
     }

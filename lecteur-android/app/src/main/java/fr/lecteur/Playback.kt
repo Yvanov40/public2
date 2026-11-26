@@ -116,6 +116,9 @@ object Playback {
 
     private val attempts = HashMap<String, Int>()
 
+    /** Dernier titre ou vidéo refusé (adresse, titre), testé par le Diagnostic. */
+    @Volatile var lastFailed: Pair<String, String>? = null
+
     /** Vrai si la dernière erreur est en cours de récupération (l'écran n'affiche alors pas d'erreur). */
     @Volatile var recovering = false
         private set
@@ -151,6 +154,7 @@ object Playback {
         }
         val id = p.currentMediaItem?.mediaId ?: return
         if (!(id.contains("youtube.com/watch") || id.contains("youtu.be"))) return
+        lastFailed = id to (p.mediaMetadata.title?.toString() ?: "Vidéo")
         val n = attempts.getOrDefault(id, 0)
         if (n >= 2 || (n >= 1 && !Settings.fallback)) return
         attempts[id] = n + 1
