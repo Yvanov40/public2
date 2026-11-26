@@ -59,6 +59,7 @@ class NowPlayingActivity : AppCompatActivity() {
     private lateinit var timerBtn: MaterialButton
 
     private val ui = Handler(Looper.getMainLooper())
+    private var prevCast: (() -> Unit)? = null
     private var dragging = false
     private var showLyrics = false
     private var lyrics: Music.Lyrics? = null
@@ -123,17 +124,33 @@ class NowPlayingActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.close).setOnClickListener { finish() }
+        try {
+            com.google.android.gms.cast.framework.CastButtonFactory.setUpMediaRouteButton(
+                applicationContext, findViewById(R.id.castBtn)
+            )
+        } catch (_: Throwable) {
+            findViewById<View>(R.id.castBtn).isVisible = false
+        }
+        // On garde aussi la mise à jour de l'écran principal
+        prevCast = Caster.listener
+        Caster.listener = {
+            prevCast?.invoke()
+            runOnUiThread { refresh() }
+        }
         findViewById<View>(R.id.playCard).setOnClickListener {
-            if (player.isPlaying) player.pause() else {
+            if (Caster.isCasting) Caster.togglePlayback()
+            else if (player.isPlaying) player.pause() else {
                 if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
                 player.play()
             }
         }
         findViewById<View>(R.id.next).setOnClickListener {
-            if (Music.active) Music.next() else if (player.hasNextMediaItem()) player.seekToNextMediaItem() else player.seekForward()
+            if (Caster.isCasting) Caster.next()
+            else if (Music.active) Music.next() else if (player.hasNextMediaItem()) player.seekToNextMediaItem() else player.seekForward()
         }
         findViewById<View>(R.id.prev).setOnClickListener {
-            if (Music.active) Music.previous() else player.seekToPrevious()
+            if (Caster.isCasting) Caster.previous()
+            else if (Music.active) Music.previous() else player.seekToPrevious()
         }
         shuffle.setOnClickListener { Music.toggleShuffle(); refresh() }
         repeat.setOnClickListener { Music.cycleRepeat(); refresh() }
@@ -158,7 +175,10 @@ class NowPlayingActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(s: SeekBar) { dragging = true }
             override fun onStopTrackingTouch(s: SeekBar) {
                 dragging = false
-                if (player.duration > 0) player.seekTo(player.duration * s.progress / 1000)
+                val d = if (Caster.isCasting) Caster.duration() else player.duration
+                if (d > 0) {
+                    if (Caster.isCasting) Caster.seekTo(d * s.progress / 1000) else player.seekTo(d * s.progress / 1000)
+                }
             }
         })
         player.addListener(listener)
@@ -177,6 +197,7 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        Caster.listener = prevCast
         player.removeListener(listener)
         super.onDestroy()
     }
@@ -202,10 +223,9 @@ class NowPlayingActivity : AppCompatActivity() {
         val m = player.mediaMetadata
         title.text = m.title
         artist.text = listOfNotNull(m.artist?.toString(), m.albumTitle?.toString()).joinToString(" · ")
-        play.setImageResource(
-            if (player.isPlaying || (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING))
-                R.drawable.ic_pause else R.drawable.ic_play
-        )
+        val playing = if (Caster.isCasting) Caster.isPlaying
+        else player.isPlaying || (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING)
+        play.setImageResource(if (playing) R.drawable.ic_pause else R.drawable.ic_play)
         val t = currentTrack()
         like.setImageResource(if (t != null && Store.isLiked(t.url)) R.drawable.ic_heart else R.drawable.ic_heart_outline)
         shuffle.isVisible = Music.active
@@ -213,7 +233,7 @@ class NowPlayingActivity : AppCompatActivity() {
         shuffle.alpha = if (Music.shuffle) 1f else 0.45f
         repeat.alpha = if (Music.repeat != Music.Repeat.OFF) 1f else 0.45f
         repeat.setImageResource(if (Music.repeat == Music.Repeat.ONE) R.drawable.ic_repeat_one else R.drawable.ic_repeat)
-        findViewById<TextView>(R.id.context).text = if (Music.active) "Musique · ${Music.index + 1} / ${Music.tracks.size}" else "Lecture en cours"
+        findViewById<TextView>(R.id.context).text = if (Caster.isCasting) "Diffusion sur ${Caster.deviceName ?: "l'enceinte"}" else if (Music.active) "Musique · ${Music.index + 1} / ${Music.tracks.size}" else "Lecture en cours"
         timerBtn.text = Playback.sleepLabel() ?: "Minuteur"
 
         // Pochette et couleurs
@@ -248,8 +268,8 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     private fun updateProgress() {
-        val d = player.duration
-        val p = player.currentPosition
+        val d = if (Caster.isCasting) Caster.duration() else player.duration
+        val p = if (Caster.isCasting) Caster.position() else player.currentPosition
         if (d > 0) {
             if (!dragging) {
                 seek.progress = (p * 1000 / d).toInt()

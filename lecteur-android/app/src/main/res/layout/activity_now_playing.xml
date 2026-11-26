@@ -37,6 +37,11 @@
             android:textAppearance="?attr/textAppearanceLabelLarge"
             android:textColor="#DDFFFFFF" />
 
+        <androidx.mediarouter.app.MediaRouteButton
+            android:id="@+id/castBtn"
+            android:layout_width="44dp"
+            android:layout_height="44dp" />
+
         <ImageButton
             android:id="@+id/queue"
             android:layout_width="44dp"

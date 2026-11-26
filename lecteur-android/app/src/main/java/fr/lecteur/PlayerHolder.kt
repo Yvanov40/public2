@@ -62,6 +62,11 @@ object PlayerHolder {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // Pendant une diffusion Chromecast, le son part sur l'enceinte
+                if (isPlaying && Caster.isCasting) {
+                    handler.post { Caster.onLocalPlay(p) }
+                    return
+                }
                 // L'égaliseur ne tourne que pendant la lecture (jamais en pause)
                 if (android.os.Build.VERSION.SDK_INT >= 28) {
                     try { (dynamics as? android.media.audiofx.DynamicsProcessing)?.enabled = isPlaying && Settings.normalize } catch (_: Exception) {}

@@ -251,6 +251,12 @@ object Fallback {
         )
     }
 
+    /** Adresse du son d'une vidéo via un relais (pour l'enceinte Chromecast). */
+    fun audioUrl(videoId: String): String = firstWorking { r ->
+        val s = if (r.kind == "piped") piped(r.url, videoId) else invidious(r.url, videoId)
+        s.audio ?: s.muxed ?: throw IOException("aucun flux")
+    }
+
     // ——— Recherche ———
 
     /** Recherche de vidéos via un serveur relais, au même format que NewPipe. */

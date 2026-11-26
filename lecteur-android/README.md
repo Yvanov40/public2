@@ -22,6 +22,7 @@ Lecteur audio/vidéo YouTube léger pour Android (usage personnel).
 - Description et chapitres (YouTube et podcasts), image dans l'image
 - Nouveautés vérifiées toutes les 6 h (notification, téléchargement auto en Wi-Fi)
 - Import OPML / NewPipe / Takeout, export OPML, sauvegarde et restauration complètes
+- Diffusion sur enceintes et téléviseurs Chromecast (le téléphone sert de relais Wi-Fi pour YouTube)
 - Vérification des mises à jour, Android Auto (téléchargements et podcasts)
 - Réglages : disposition cartes/liste, colonnes, taille des tuiles, couleur, thème clair/sombre/noir, police, qualité max
 - Accueil : recherches récentes (appui long pour en retirer une), vidéos lues récemment, fil « D'après tes recherches »

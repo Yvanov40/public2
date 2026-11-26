@@ -85,6 +85,11 @@
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
 
+        <!-- Chromecast : enceintes et téléviseurs Google Cast -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="fr.lecteur.CastOptionsProvider" />
+
         <!-- Android Auto -->
         <meta-data
             android:name="com.google.android.gms.car.application"

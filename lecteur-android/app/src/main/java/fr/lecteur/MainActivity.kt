@@ -394,6 +394,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Chromecast
+        try {
+            com.google.android.gms.cast.framework.CastButtonFactory.setUpMediaRouteButton(
+                applicationContext, findViewById(R.id.castBtn)
+            )
+        } catch (_: Throwable) {
+            findViewById<View>(R.id.castBtn).isVisible = false
+        }
+        findViewById<View>(R.id.castPlay).setOnClickListener { Caster.togglePlayback() }
+        findViewById<View>(R.id.castStop).setOnClickListener { Caster.disconnect() }
+        findViewById<View>(R.id.castBar).setOnClickListener {
+            if (player.mediaItemCount > 0) startActivity(Intent(this, NowPlayingActivity::class.java))
+        }
+        Caster.listener = { runOnUiThread { updateCastBar() } }
+
         setupSwipeDown()
         playerView.setFullscreenButtonClickListener { full ->
             requestedOrientation = if (full) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -493,6 +508,7 @@ class MainActivity : AppCompatActivity() {
         Store.onChange = null
         Downloads.onChange = null
         Playback.listener = null
+        Caster.listener = null
         ui.removeCallbacks(ticker)
         player.removeListener(listener)
         playerView.player = null
@@ -2545,6 +2561,7 @@ class MainActivity : AppCompatActivity() {
         }
         updateNowPlaying()
         updateMiniPlay()
+        updateCastBar()
     }
 
     private fun updateNowPlaying() {
@@ -2557,6 +2574,18 @@ class MainActivity : AppCompatActivity() {
         miniSub.isVisible = !m.artist.isNullOrEmpty()
         val art = m.artworkUri?.toString()
         if (miniThumb.tag != art || art == null) Thumbs.load(miniThumb, art, R.drawable.ic_audio)
+    }
+
+    private fun updateCastBar() {
+        val bar = findViewById<View>(R.id.castBar)
+        bar.isVisible = Caster.isCasting && !fullscreen
+        if (!Caster.isCasting) return
+        findViewById<TextView>(R.id.castDevice).text = "Diffusion sur ${Caster.deviceName ?: "l'enceinte"}"
+        findViewById<TextView>(R.id.castTitle).text = Caster.title ?: "Choisis un titre à diffuser"
+        findViewById<ImageButton>(R.id.castPlay).setImageResource(if (Caster.isPlaying) R.drawable.ic_pause else R.drawable.ic_play)
+        // Pendant la diffusion, la vidéo du téléphone est inutile
+        if (playerView.isVisible) setVideoMode(false)
+        miniPlayer.isVisible = false
     }
 
     private fun updateMiniPlay() {
