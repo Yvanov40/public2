@@ -123,6 +123,7 @@ public final class SettingsActivity extends Activity {
                 new Tile("●", "Pastilles", "Notifications sur les icônes", this::pagePastilles),
                 new Tile("◐", "Apparence", "Lisibilité, couleur, effets", this::pageApparence),
                 new Tile("⌕", "Panneaux et recherche", "Thème, position, grille", this::pagePanneaux),
+                new Tile("↓", "Mise à jour", "Télécharger et installer la dernière version", this::pageMiseAJour),
         };
     }
 
@@ -372,6 +373,24 @@ public final class SettingsActivity extends Activity {
         note("S'il s'ouvre à moitié, essaie les autres méthodes et garde celle qui marche. Sur "
                 + "HyperOS, le style « ancienne version » du centre de contrôle aide aussi.");
 
+        section("Appui long sur Home");
+        action("Choisir l'assistant", "Gemini ou Google : capture, recherche et texte sur l'écran", v -> {
+            String[] actions = {Settings.ACTION_VOICE_INPUT_SETTINGS, Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS,
+                    Settings.ACTION_SETTINGS};
+            for (String act : actions) {
+                try {
+                    startActivity(new Intent(act));
+                    return;
+                } catch (ActivityNotFoundException ignored) {
+                }
+            }
+        });
+        note("L'appui long sur Home est géré par Android, pas par le launcher. Sur Xiaomi, « Entourer "
+                + "pour chercher » ne marche en général qu'avec le launcher d'origine. Avec Mini Launcher, "
+                + "choisis Gemini comme assistant numérique : l'appui long ouvre Gemini, avec « Poser "
+                + "une question sur l'écran » (capture, sélection de texte, recherche). Les gestes "
+                + "peuvent aussi lancer l'action « Assistant ».");
+
         section("Verrouillage");
         danger("Retirer le droit de verrouillage", "À faire avant de désinstaller l'appli", v -> {
             Actions.removeLock(this);
@@ -476,6 +495,68 @@ public final class SettingsActivity extends Activity {
 
     private int px(float v) {
         return (int) (v * dp);
+    }
+
+    private void pageMiseAJour() {
+        section("Mise à jour");
+        String local = Store.version(this);
+        LinearLayout r = row("Version installée : " + local, "Recherche de la dernière version…", accent);
+        TextView sub = (TextView) ((LinearLayout) r.getChildAt(0)).getChildAt(1);
+        TextView title = (TextView) ((LinearLayout) r.getChildAt(0)).getChildAt(0);
+        Updater.Info[] found = {null};
+        boolean[] busy = {true};
+        Runnable check = () -> {
+            busy[0] = true;
+            sub.setText("Recherche de la dernière version…");
+            Updater.check((info, error) -> {
+                busy[0] = false;
+                found[0] = null;
+                if (info == null) {
+                    sub.setText(error + " · toucher pour réessayer");
+                } else if (Updater.newer(info.version, local)) {
+                    found[0] = info;
+                    title.setText("Installer la version " + info.version);
+                    sub.setText("Version installée : " + local + " · " + (info.size / 1024) + " Ko · toucher pour installer");
+                } else {
+                    title.setText("Version installée : " + local);
+                    sub.setText("C'est la dernière (" + info.version + ") · toucher pour revérifier");
+                }
+            });
+        };
+        clickable(r, v -> {
+            if (busy[0]) return;
+            Updater.Info info = found[0];
+            if (info == null) {
+                check.run();
+                return;
+            }
+            if (!Updater.canInstall(this)) {
+                Toast.makeText(this, "Autorise « Installer des applis inconnues », puis reviens toucher Installer",
+                        Toast.LENGTH_LONG).show();
+                Updater.askInstallPermission(this);
+                return;
+            }
+            busy[0] = true;
+            sub.setText("Téléchargement… 0 %");
+            Updater.install(this, info, new Updater.Progress() {
+                @Override
+                public void update(int percent) {
+                    sub.setText(percent >= 100 ? "Installation…" : "Téléchargement… " + percent + " %");
+                }
+
+                @Override
+                public void failed(String error) {
+                    busy[0] = false;
+                    sub.setText("Échec : " + error + " · toucher pour réessayer");
+                }
+            });
+        });
+        addRow(r);
+        note("La nouvelle version est téléchargée depuis GitHub et installée par Android, qui "
+                + "demande une confirmation. La première fois, autorise « Installer des applis "
+                + "inconnues » pour Mini Launcher. Si l'installation est bloquée, désactive l'analyse "
+                + "Play Protect le temps de la mise à jour. Le launcher redémarre ensuite tout seul.");
+        check.run();
     }
 
     private void header() {

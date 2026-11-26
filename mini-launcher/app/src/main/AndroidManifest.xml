@@ -11,6 +11,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Facultatif (accordé par l'utilisateur dans les réglages) : applis récentes complètes. -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <!-- Réglages > Mise à jour : télécharger et installer la nouvelle version. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Nécessaire depuis Android 11 pour voir les applis installées. -->
     <queries>
@@ -79,6 +82,10 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <receiver
+            android:name=".Updater$InstallReceiver"
+            android:exported="false" />
 
         <!-- Droit limité au verrouillage de l'écran (geste « Verrouiller »). -->
         <receiver
