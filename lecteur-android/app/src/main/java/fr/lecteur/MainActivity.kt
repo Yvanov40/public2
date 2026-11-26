@@ -2514,7 +2514,8 @@ class MainActivity : AppCompatActivity() {
             "Sauter les silences", "Raccourcit les blancs, surtout utile pour les podcasts", Settings.skipSilence
         ) { on -> Settings.skipSilence = on; PlayerHolder.applySkipSilence() }
         rows += Row.Toggle(
-            "Jeton anti-robot", "Comme NewPipe : prouve à YouTube que la demande vient d'un vrai navigateur", Settings.poToken
+            "Jeton anti-robot (expérimental)",
+            "À activer seulement si plus rien ne marche sans. Coupé automatiquement si YouTube le refuse.", Settings.poToken
         ) { on -> Settings.poToken = on }
         rows += Row.Toggle(
             "Serveurs relais en secours",

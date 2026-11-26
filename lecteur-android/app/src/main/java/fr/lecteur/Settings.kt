@@ -109,7 +109,7 @@ object Settings {
     fun setSb(cat: String, v: Boolean) = setBool("sb_$cat", v)
 
     var poToken: Boolean
-        get() = bool("poToken", true)
+        get() = bool("poToken", false)
         set(v) = setBool("poToken", v)
 
     var fallback: Boolean

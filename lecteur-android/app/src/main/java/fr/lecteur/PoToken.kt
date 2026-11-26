@@ -87,6 +87,11 @@ object PoToken : PoTokenProvider {
         }
     }
 
+    /** Le jeton a été refusé par YouTube : on n'en génère plus jusqu'au prochain lancement. */
+    fun disableForSession() {
+        failures = 3
+    }
+
     private fun reset() {
         ready = false
         expiresAt = 0
