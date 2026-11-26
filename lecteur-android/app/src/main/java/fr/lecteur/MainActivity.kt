@@ -296,7 +296,11 @@ class MainActivity : AppCompatActivity() {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = refreshUi()
         override fun onPlayerError(error: PlaybackException) {
             Log.e("Lecteur", "Erreur de lecture", error)
-            snack("Erreur de lecture (${error.errorCodeName}). Réessaie ou mets l'appli à jour.")
+            // Si l'appli est déjà en train de réessayer, pas de message d'erreur
+            if (Playback.recovering) return
+            val why = if (error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS)
+                "YouTube a refusé le fichier" else "Erreur de lecture (${error.errorCodeName})"
+            snack("$why. Réessaie, ou lance Réglages → Diagnostic YouTube.")
         }
     }
 

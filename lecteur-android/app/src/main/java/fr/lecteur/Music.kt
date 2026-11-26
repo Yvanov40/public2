@@ -315,12 +315,31 @@ object Music {
         }
     }
 
-    /** Erreur pendant la lecture du titre en cours : on le relance via le relais. */
-    fun retryWithFallback() {
-        if (!active) return
-        val pos = player.currentPosition
-        load(index, now = true, viaFallback = true, startAt = pos)
+    /**
+     * Le titre qui a échoué : celui en cours, ou le suivant s'il était en préparation
+     * pendant que le précédent finissait.
+     */
+    private fun failingIndex(): Int {
+        val p = player
+        val ci = p.currentMediaItemIndex
+        val d = p.duration
+        val nearEnd = d > 0 && p.currentPosition >= d - 3000
+        val next = inPlayer.getOrNull(ci + 1)
+        return if (nearEnd && next != null && next >= 0) next else inPlayer.getOrNull(ci)?.takeIf { it >= 0 } ?: index
     }
+
+    fun failingKey(): String? = tracks.getOrNull(failingIndex())?.mediaId
+
+    /** Relance le titre en échec avec un lien neuf (ou via un serveur relais), au bon endroit. */
+    fun recover(viaFallback: Boolean) {
+        if (!active) return
+        val i = failingIndex()
+        val pos = if (i == index) player.currentPosition else 0L
+        // Les liens préparés à l'avance pour les titres suivants sont oubliés : ils seront redemandés
+        load(i, now = true, viaFallback = viaFallback, startAt = pos)
+    }
+
+    fun retryWithFallback() = recover(viaFallback = true)
 
     /** Prépare le titre [i] : tout de suite (now) ou à la suite de la liste du lecteur. */
     private fun load(i: Int, now: Boolean, viaFallback: Boolean = false, startAt: Long = 0) {

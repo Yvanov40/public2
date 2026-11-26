@@ -72,6 +72,7 @@ object PlayerHolder {
                     try { (dynamics as? android.media.audiofx.DynamicsProcessing)?.enabled = isPlaying && Settings.normalize } catch (_: Exception) {}
                 }
                 if (isPlaying) {
+                    Playback.onPlaying()
                     handler.postDelayed(saver, 15_000)
                     handler.removeCallbacks(sponsorCheck)
                     handler.postDelayed(sponsorCheck, 500)

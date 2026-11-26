@@ -114,30 +114,60 @@ object Playback {
         return r.vid
     }
 
-    private val retried = HashSet<String>()
+    private val attempts = HashMap<String, Int>()
 
-    /** Erreur pendant la lecture (souvent un refus de YouTube) : nouvel essai via le relais. */
+    /** Vrai si la dernière erreur est en cours de récupération (l'écran n'affiche alors pas d'erreur). */
+    @Volatile var recovering = false
+        private set
+
+    /**
+     * Erreur pendant la lecture (souvent un refus de YouTube) :
+     * 1er essai = lien tout neuf chez YouTube, 2e essai = serveur relais.
+     */
     fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-        if (!Settings.fallback) return
+        recovering = false
         val p = PlayerHolder.peek() ?: return
-        val id = p.currentMediaItem?.mediaId ?: return
         val io = error.errorCode in 2000..2999
-        if (!io || !retried.add(id)) return
-        when {
-            id.startsWith("music:") -> Music.retryWithFallback()
-            id.contains("youtube.com/watch") || id.contains("youtu.be") -> {
-                val pos = p.currentPosition
-                val audioOnly = !PlayerHolder.videoMode
-                scope.launch {
-                    try {
-                        playViaFallback(id, audioOnly, null)
-                        if (pos > 0) PlayerHolder.peek()?.seekTo(pos)
-                    } catch (e: Exception) {
-                        Toast.makeText(app, "Lecture impossible : ${e.message}", Toast.LENGTH_LONG).show()
-                    }
-                }
+        if (!io) return
+        if (Music.active) {
+            val key = Music.failingKey() ?: return
+            val n = attempts.getOrDefault(key, 0)
+            if (n >= 2 || (n >= 1 && !Settings.fallback)) return
+            attempts[key] = n + 1
+            recovering = true
+            Toast.makeText(app, "YouTube a refusé ce titre, nouvel essai…", Toast.LENGTH_SHORT).show()
+            Music.recover(viaFallback = n >= 1)
+            return
+        }
+        val id = p.currentMediaItem?.mediaId ?: return
+        if (!(id.contains("youtube.com/watch") || id.contains("youtu.be"))) return
+        val n = attempts.getOrDefault(id, 0)
+        if (n >= 2 || (n >= 1 && !Settings.fallback)) return
+        attempts[id] = n + 1
+        recovering = true
+        val pos = p.currentPosition
+        val audioOnly = !PlayerHolder.videoMode
+        Toast.makeText(app, "YouTube a refusé la vidéo, nouvel essai…", Toast.LENGTH_SHORT).show()
+        scope.launch {
+            try {
+                if (n == 0) playYoutube(id, audioOnly) else playViaFallback(id, audioOnly, null)
+                if (pos > 0) PlayerHolder.peek()?.seekTo(pos)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Toast.makeText(app, "Lecture impossible : ${e.message}. Lance Réglages → Diagnostic YouTube.", Toast.LENGTH_LONG).show()
+            } finally {
+                recovering = false
             }
         }
+    }
+
+    /** Lecture réussie : on oublie les essais (un futur refus aura de nouveau droit à 2 essais). */
+    fun onPlaying() {
+        val id = PlayerHolder.peek()?.currentMediaItem?.mediaId ?: return
+        attempts.remove(id)
+        Music.current?.let { attempts.remove(it.mediaId) }
+        recovering = false
     }
 
     /** Lecture de fichiers ou d'épisodes (adresses directes). */
