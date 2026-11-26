@@ -38,7 +38,7 @@ object Caster {
 
     /** Prévenir l'écran (nom de l'appareil, lecture/pause…). */
     var listener: (() -> Unit)? = null
-    private fun changed() = listener?.invoke()
+    private fun changed() { listener?.invoke() }
 
     val available get() = cast != null
     val isCasting get() = session?.isConnected == true
@@ -71,7 +71,7 @@ object Caster {
         override fun onSessionStarted(s: CastSession, sessionId: String) = started(s)
         override fun onSessionResumed(s: CastSession, wasSuspended: Boolean) = started(s)
         override fun onSessionEnded(s: CastSession, error: Int) = ended()
-        override fun onSessionSuspended(s: CastSession, reason: Int) = changed()
+        override fun onSessionSuspended(s: CastSession, reason: Int) { changed() }
         override fun onSessionStarting(s: CastSession) {}
         override fun onSessionStartFailed(s: CastSession, error: Int) {
             Toast.makeText(app, "Connexion à l'enceinte impossible", Toast.LENGTH_SHORT).show()
