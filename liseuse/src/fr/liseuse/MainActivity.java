@@ -77,6 +77,7 @@ public final class MainActivity extends Activity {
     private final List<String> enAttente = new ArrayList<String>();
     private boolean pret;
     private boolean volumeActif;
+    private boolean volumeAuSon;
     private String exportId;
 
     // ================================================================ cycle de vie
@@ -255,6 +256,9 @@ public final class MainActivity extends Activity {
     public boolean dispatchKeyEvent(KeyEvent e) {
         int k = e.getKeyCode();
         if (volumeActif && (k == KeyEvent.KEYCODE_VOLUME_DOWN || k == KeyEvent.KEYCODE_VOLUME_UP)) {
+            // décidé à l'appui (et gardé jusqu'au relâchement) : si du son est en cours, c'est le volume
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) volumeAuSon = Achats.volumeOccupe(this);
+            if (volumeAuSon) return super.dispatchKeyEvent(e);
             if (e.getAction() == KeyEvent.ACTION_DOWN) {
                 js("window.lecteur && lecteur.tourner(" + (k == KeyEvent.KEYCODE_VOLUME_DOWN ? 1 : -1) + ")");
             }
@@ -1281,6 +1285,7 @@ public final class MainActivity extends Activity {
                         i.putExtra(PdfActivity.EXTRA_CHAUD, r.optInt("chaud", 0));
                         i.putExtra(PdfActivity.EXTRA_PLEIN, r.optBoolean("plein", true));
                         i.putExtra(PdfActivity.EXTRA_ALLUME, r.optBoolean("allume", false));
+                        i.putExtra(PdfActivity.EXTRA_VOLUME, r.optBoolean("volume", false));
                         startActivityForResult(i, REQ_PDF);
                     } catch (Exception e) {
                         toast("Ouverture du PDF impossible : " + message(e));

@@ -9,6 +9,24 @@ import android.app.Activity;
  */
 public abstract class Achats {
 
+    /**
+     * Les boutons de volume servent-ils au son ? Oui si une appli joue du son
+     * (musique, podcast, vidéo…) ou si un appel / une sonnerie est en cours.
+     */
+    public static boolean volumeOccupe(android.content.Context c) {
+        try {
+            android.media.AudioManager am = (android.media.AudioManager) c.getSystemService(android.content.Context.AUDIO_SERVICE);
+            if (am == null) return false;
+            if (am.isMusicActive()) return true;
+            int m = am.getMode();
+            return m == android.media.AudioManager.MODE_IN_CALL || m == android.media.AudioManager.MODE_IN_COMMUNICATION
+                    || m == android.media.AudioManager.MODE_RINGTONE;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+
     /** Identifiant du produit dans la Play Console (achat unique, « produit intégré »). */
     public static final String PRODUIT_PRO = "liseuse_pro";
 

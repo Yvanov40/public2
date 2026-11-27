@@ -51,7 +51,7 @@ import java.io.File;
 public final class PdfActivity extends Activity {
 
     static final String EXTRA_ID = "id", EXTRA_TITRE = "titre", EXTRA_PAGE = "page", EXTRA_FRACTION = "fraction",
-            EXTRA_NUIT = "nuit", EXTRA_LUM = "lum", EXTRA_CHAUD = "chaud", EXTRA_PLEIN = "plein", EXTRA_ALLUME = "allume";
+            EXTRA_NUIT = "nuit", EXTRA_LUM = "lum", EXTRA_CHAUD = "chaud", EXTRA_PLEIN = "plein", EXTRA_ALLUME = "allume", EXTRA_VOLUME = "volume";
 
     private String id;
     private PdfView vue;
@@ -67,6 +67,7 @@ public final class PdfActivity extends Activity {
     private int chaud;   // 0..100
     private boolean nuit;
     private boolean barres;
+    private boolean volumeTourne, volumeAuSon;
     private float densite;
     private final Handler ui = new Handler(Looper.getMainLooper());
 
@@ -84,6 +85,7 @@ public final class PdfActivity extends Activity {
         Intent in = getIntent();
         id = in.getStringExtra(EXTRA_ID);
         nuit = in.getBooleanExtra(EXTRA_NUIT, false);
+        volumeTourne = in.getBooleanExtra(EXTRA_VOLUME, false);
         densite = getResources().getDisplayMetrics().density;
 
         Window w = getWindow();
@@ -516,6 +518,18 @@ public final class PdfActivity extends Activity {
     }
 
     @Override
+    public boolean dispatchKeyEvent(KeyEvent e) {
+        int k = e.getKeyCode();
+        if (volumeTourne && (k == KeyEvent.KEYCODE_VOLUME_DOWN || k == KeyEvent.KEYCODE_VOLUME_UP)) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) volumeAuSon = Achats.volumeOccupe(this);
+            if (volumeAuSon) return super.dispatchKeyEvent(e);
+            if (e.getAction() == KeyEvent.ACTION_DOWN) vue.ecran(k == KeyEvent.KEYCODE_VOLUME_DOWN ? 1 : -1);
+            return true;
+        }
+        return super.dispatchKeyEvent(e);
+    }
+
+    @Override
     public boolean onKeyDown(int k, KeyEvent e) {
         if (k == KeyEvent.KEYCODE_BACK) {
             if (panneauLum != null && panneauLum.getVisibility() == View.VISIBLE) panneauLum.setVisibility(View.GONE);
@@ -846,6 +860,15 @@ public final class PdfActivity extends Activity {
             sx = Math.max(0, Math.min(maxX(), x));
             sy = Math.max(0, Math.min(maxY(), y));
             invalidate();
+        }
+
+        /** Avance (ou recule) d'un écran, en douceur. */
+        void ecran(int sens) {
+            if (!pret) return;
+            float cible = Math.max(0, Math.min(maxY(), sy + sens * getHeight() * 0.88f));
+            defil.forceFinished(true);
+            defil.startScroll((int) sx, (int) sy, 0, (int) (cible - sy), 260);
+            postInvalidateOnAnimation();
         }
 
         void ajuster() {

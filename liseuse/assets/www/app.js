@@ -745,7 +745,7 @@ function ouvrirPdf(l) {
     const R = lecteur.reglages();
     A.ouvrirPdfNatif(l.id, l.titre || 'PDF', JSON.stringify({
       c: pos.c || 0, f: pos.f || 0, nuit: !!Store.get('pdfNuit', false),
-      lum: R.luminosite, chaud: R.chaud || 0, plein: !!R.pleinEcran, allume: !!R.ecranAllume
+      lum: R.luminosite, chaud: R.chaud || 0, plein: !!R.pleinEcran, allume: !!R.ecranAllume, volume: !!R.volume
     }));
     return;
   }

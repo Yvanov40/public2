@@ -1,5 +1,5 @@
 {
- "versionCode": 16,
- "versionName": "3.2",
- "notes": "Mise à jour directement depuis l'appli : Réglages → Mises à jour."
+ "versionCode": 17,
+ "versionName": "3.3",
+ "notes": "Boutons de volume : si de la musique, une vidéo ou un appel est en cours, ils règlent le volume au lieu de tourner les pages. Ils fonctionnent aussi dans les PDF."
 }
