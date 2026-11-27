@@ -104,14 +104,14 @@ object Diagnostic {
                 }
             }
             if (id != null) {
-                val rel = withContext(Dispatchers.IO) { runCatching { Fallback.relays(4) }.getOrDefault(emptyList()) }
+                val rel = withContext(Dispatchers.IO) { runCatching { Fallback.relays(6, includeBenched = true) }.getOrDefault(emptyList()) }
                 for (r in rel) step(out, "  ${r.label}") { Fallback.test(r, id) }
             }
         }
 
         out("")
         out("Serveurs relais :")
-        val relays = withContext(Dispatchers.IO) { runCatching { Fallback.relays(8) }.getOrDefault(emptyList()) }
+        val relays = withContext(Dispatchers.IO) { runCatching { Fallback.relays(12, includeBenched = true) }.getOrDefault(emptyList()) }
         if (relays.isEmpty()) out("❌ liste des relais introuvable")
         for (r in relays) step(out, r.label) { Fallback.test(r, VIDEO) }
         out("")

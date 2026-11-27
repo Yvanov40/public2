@@ -117,7 +117,16 @@ object Playback {
     private val attempts = HashMap<String, Int>()
 
     /** Dernier titre ou vidéo refusé (adresse, titre), testé par le Diagnostic. */
-    @Volatile var lastFailed: Pair<String, String>? = null
+    var lastFailed: Pair<String, String>?
+        get() {
+            val pr = app.getSharedPreferences("lecteur", Context.MODE_PRIVATE)
+            val u = pr.getString("lastFailedUrl", null) ?: return null
+            return u to (pr.getString("lastFailedTitle", null) ?: "Titre")
+        }
+        set(v) {
+            app.getSharedPreferences("lecteur", Context.MODE_PRIVATE).edit()
+                .putString("lastFailedUrl", v?.first).putString("lastFailedTitle", v?.second).apply()
+        }
 
     /** Vrai si la dernière erreur est en cours de récupération (l'écran n'affiche alors pas d'erreur). */
     @Volatile var recovering = false

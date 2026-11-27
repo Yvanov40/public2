@@ -73,16 +73,27 @@ object Fallback {
         }
     }.getOrDefault(emptyList())).distinct().also { invidious = it }
 
-    /** Tous les relais à essayer : le dernier qui a marché, puis Piped et Invidious en alternance. */
-    fun relays(max: Int = 10): List<Relay> {
-        val p = pipedList().map { Relay("piped", it) }
-        val v = invidiousList().map { Relay("invidious", it) }
+    /** Relais en échec récent : mis de côté 30 minutes. */
+    private val benched = java.util.concurrent.ConcurrentHashMap<Relay, Long>()
+
+    /**
+     * Relais à essayer : le dernier qui a marché, puis les listes publiques à jour
+     * (classées par santé), Piped et Invidious en alternance ; la liste intégrée en dernier.
+     */
+    fun relays(max: Int = 10, includeBenched: Boolean = false): List<Relay> {
+        val now = System.currentTimeMillis()
+        fun live(list: List<String>, defaults: List<String>) =
+            list.filterNot { it in defaults } + defaults.filter { it in list }
+        val p = live(pipedList(), pipedDefaults).map { Relay("piped", it) }
+        val v = live(invidiousList(), invidiousDefaults).map { Relay("invidious", it) }
         val mixed = mutableListOf<Relay>()
         for (i in 0 until maxOf(p.size, v.size)) {
-            p.getOrNull(i)?.let { mixed += it }
             v.getOrNull(i)?.let { mixed += it }
+            p.getOrNull(i)?.let { mixed += it }
         }
-        return (listOfNotNull(lastGood) + mixed).distinct().take(max)
+        return (listOfNotNull(lastGood) + mixed).distinct()
+            .filter { includeBenched || (benched[it] ?: 0) < now }
+            .take(max)
     }
 
     private fun <T> firstWorking(block: (Relay) -> T): T {
@@ -91,9 +102,12 @@ object Fallback {
             try {
                 val res = block(r)
                 lastGood = r
+                benched.remove(r)
                 return res
             } catch (e: Exception) {
                 last = e
+                benched[r] = System.currentTimeMillis() + 30 * 60_000L
+                if (lastGood == r) lastGood = null
             }
         }
         throw IOException("Aucun serveur relais n'a répondu" + (last?.message?.let { " ($it)" } ?: ""))
