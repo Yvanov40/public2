@@ -16,6 +16,8 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
 - Appui long sur une appli (accueil ou alphabet) : son menu s'ouvre tout de suite —
   raccourcis de l'appli (« Nouveau message »…), favori, retirer, infos, désinstaller. Glisser
   sans lever le doigt ferme le menu et part en glisser-déposer sur l'accueil.
+  « Applis liées » : un mini-dossier propre à chaque appli (ex. le répondeur sous
+  Téléphone), rempli avec « + », chaque appli s'ouvre d'un toucher.
 - Menu de l'accueil : verrouiller la disposition (plus rien ne bouge), verrouiller l'écran.
 
 ## Accueil

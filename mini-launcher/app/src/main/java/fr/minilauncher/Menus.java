@@ -59,19 +59,19 @@ final class Menus {
         String key = Store.key(cn);
         Sheet s = new Sheet(a, null);
 
-        // En-tête : icône et nom
+        // En-tête compact : icône, nom, infos
         android.widget.LinearLayout head = new android.widget.LinearLayout(a);
         head.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         head.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        head.setPadding(s.px(22), s.px(2), s.px(22), s.px(14));
+        head.setPadding(s.px(20), 0, s.px(20), s.px(8));
         android.widget.ImageView icon = new android.widget.ImageView(a);
         icon.setImageDrawable(iconOf(a, cn));
-        android.widget.LinearLayout.LayoutParams il = new android.widget.LinearLayout.LayoutParams(s.px(52), s.px(52));
-        il.rightMargin = s.px(16);
+        android.widget.LinearLayout.LayoutParams il = new android.widget.LinearLayout.LayoutParams(s.px(40), s.px(40));
+        il.rightMargin = s.px(14);
         head.addView(icon, il);
         android.widget.LinearLayout texts = new android.widget.LinearLayout(a);
         texts.setOrientation(android.widget.LinearLayout.VERTICAL);
-        android.widget.TextView name = s.text(label, 19, Sheet.TEXT);
+        android.widget.TextView name = s.text(label, 17, Sheet.TEXT);
         name.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
         name.setSingleLine(true);
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -80,38 +80,38 @@ final class Menus {
         String where = folder != null ? "Dans « " + folder + " »" : store.isOnHome(key) ? "Sur l'accueil" : null;
         String sub = (n > 0 ? "Ouverte " + n + " fois" : "Pas encore ouverte d'ici")
                 + (where != null ? " · " + where : "") + (store.isPinned(key) ? " · ★" : "");
-        texts.addView(s.text(sub, 13, Sheet.MUTED));
+        android.widget.TextView subView = s.text(sub, 12, Sheet.MUTED);
+        subView.setSingleLine(true);
+        subView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        texts.addView(subView);
         head.addView(texts, new android.widget.LinearLayout.LayoutParams(0,
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         s.content.addView(head);
 
-        // Raccourcis de l'appli (« Nouveau message », « Itinéraire »…)
+        // Raccourcis de l'appli (« Nouveau message », « Itinéraire »…), en lignes serrées
         List<android.content.pm.ShortcutInfo> shortcuts = Shortcuts.of(a, cn);
         for (int i = 0; i < shortcuts.size(); i++) {
             android.content.pm.ShortcutInfo info = shortcuts.get(i);
-            Sheet.Item it = new Sheet.Item(Shortcuts.label(info).toString());
-            it.icon = Shortcuts.icon(a, info);
-            android.view.View r = s.row(it);
+            android.view.View r = compactRow(s, a, Shortcuts.icon(a, info), Shortcuts.label(info).toString());
             r.setOnClickListener(v -> {
                 s.dialog.dismiss();
                 Shortcuts.start(a, info, null);
             });
             s.content.addView(r);
         }
-        if (!shortcuts.isEmpty()) {
-            android.view.View space = new android.view.View(a);
-            s.content.addView(space, new android.widget.LinearLayout.LayoutParams(1, s.px(10)));
-        }
+
+        // Applis liées : un mini-dossier propre à cette appli
+        linkedApps(s, a, key, label, changed);
 
         // Tuiles d'action
         List<Object[]> acts = new ArrayList<>();
         boolean pinned = store.isPinned(key);
-        acts.add(new Object[]{pinned ? "★" : "☆", pinned ? "Retirer des favoris" : "Favori", false, (Runnable) () -> {
+        acts.add(new Object[]{pinned ? "★" : "☆", pinned ? "Défavoriser" : "Favori", false, (Runnable) () -> {
             store.togglePin(key);
             changed.run();
         }});
         if (folder != null) {
-            acts.add(new Object[]{"↩", "Retirer du dossier", false, (Runnable) () -> {
+            acts.add(new Object[]{"↩", "Sortir", false, (Runnable) () -> {
                 List<Store.Group> groups = store.groups();
                 Store.Group g = Store.find(groups, folder);
                 if (g != null) {
@@ -121,7 +121,7 @@ final class Menus {
                 changed.run();
             }});
         } else if (store.isOnHome(key)) {
-            acts.add(new Object[]{"↩", "Retirer de l'accueil", false, (Runnable) () -> {
+            acts.add(new Object[]{"↩", "Retirer", false, (Runnable) () -> {
                 store.toggleHomeApp(key);
                 changed.run();
             }});
@@ -135,16 +135,127 @@ final class Menus {
             }
         }});
 
-        addTiles(s, a, acts);
+        addTiles(s, a, acts, true);
         s.show();
     }
 
+    /** Ligne serrée : petite icône + texte. */
+    private static android.view.View compactRow(Sheet s, Activity a, Drawable d, String text) {
+        android.widget.LinearLayout r = new android.widget.LinearLayout(a);
+        r.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        r.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        r.setMinimumHeight(s.px(44));
+        r.setPadding(s.px(22), s.px(4), s.px(20), s.px(4));
+        android.widget.ImageView iv = new android.widget.ImageView(a);
+        if (d != null) iv.setImageDrawable(Sheet.copy(d));
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(s.px(28), s.px(28));
+        lp.rightMargin = s.px(16);
+        r.addView(iv, lp);
+        android.widget.TextView t = s.text(text, 15, Sheet.TEXT);
+        t.setSingleLine(true);
+        t.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        r.addView(t, new android.widget.LinearLayout.LayoutParams(0,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        android.graphics.drawable.GradientDrawable mask = new android.graphics.drawable.GradientDrawable();
+        mask.setColor(0xFFFFFFFF);
+        r.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(Sheet.RIPPLE), null, mask));
+        return r;
+    }
+
+    /**
+     * Rangée d'applis liées sous les raccourcis (icône + nom, défilement horizontal), avec une
+     * case « + » pour choisir lesquelles. Toucher une appli l'ouvre.
+     */
+    private static void linkedApps(Sheet s, Activity a, String key, String label, Runnable changed) {
+        Store store = Store.get(a);
+        List<AppRepository.AppEntry> all = AppRepository.get(a).cached();
+        List<AppRepository.AppEntry> linked = new ArrayList<>();
+        for (String k : store.linked(key)) {
+            for (AppRepository.AppEntry e : all) {
+                if (Store.key(e.component).equals(k)) {
+                    linked.add(e);
+                    break;
+                }
+            }
+        }
+        android.widget.TextView title = s.text(linked.isEmpty() ? "APPLIS LIÉES" : "APPLIS LIÉES · " + linked.size(), 11, Sheet.MUTED);
+        title.setLetterSpacing(0.08f);
+        title.setPadding(s.px(22), s.px(8), s.px(22), s.px(2));
+        s.content.addView(title);
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(a);
+        hs.setHorizontalScrollBarEnabled(false);
+        android.widget.LinearLayout row = new android.widget.LinearLayout(a);
+        row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        row.setPadding(s.px(14), 0, s.px(14), s.px(6));
+        hs.addView(row);
+        for (AppRepository.AppEntry e : linked) {
+            android.view.View cell = linkedCell(s, a, Sheet.copy(e.icon), null, e.label);
+            cell.setOnClickListener(v -> {
+                s.dialog.dismiss();
+                Launcher.launch(a, e, null, null);
+            });
+            row.addView(cell);
+        }
+        android.view.View add = linkedCell(s, a, null, linked.isEmpty() ? "＋" : "✎",
+                linked.isEmpty() ? "Ajouter" : "Modifier");
+        add.setOnClickListener(v -> {
+            s.dialog.dismiss();
+            List<AppRepository.AppEntry> choices = new ArrayList<>();
+            for (AppRepository.AppEntry e : all) if (!Store.key(e.component).equals(key)) choices.add(e);
+            pickApps(a, "Applis liées à « " + label + " »", choices, store.linked(key), keys -> {
+                store.setLinked(key, keys);
+                changed.run();
+            });
+        });
+        row.addView(add);
+        s.content.addView(hs);
+    }
+
+    private static android.view.View linkedCell(Sheet s, Activity a, Drawable icon, String glyph, String text) {
+        android.widget.LinearLayout c = new android.widget.LinearLayout(a);
+        c.setOrientation(android.widget.LinearLayout.VERTICAL);
+        c.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        c.setPadding(s.px(4), s.px(6), s.px(4), s.px(6));
+        android.graphics.drawable.GradientDrawable mask = new android.graphics.drawable.GradientDrawable();
+        mask.setColor(0xFFFFFFFF);
+        mask.setCornerRadius(s.px(14));
+        c.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(Sheet.RIPPLE), null, mask));
+        if (icon != null) {
+            android.widget.ImageView iv = new android.widget.ImageView(a);
+            iv.setImageDrawable(icon);
+            c.addView(iv, new android.widget.LinearLayout.LayoutParams(s.px(40), s.px(40)));
+        } else {
+            android.widget.TextView g = s.text(glyph, 18, s.accent);
+            g.setGravity(android.view.Gravity.CENTER);
+            android.graphics.drawable.GradientDrawable gb = new android.graphics.drawable.GradientDrawable();
+            gb.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            gb.setColor(Sheet.FIELD);
+            g.setBackground(gb);
+            c.addView(g, new android.widget.LinearLayout.LayoutParams(s.px(40), s.px(40)));
+        }
+        android.widget.TextView t = s.text(text, 11, Sheet.TEXT);
+        t.setSingleLine(true);
+        t.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        t.setGravity(android.view.Gravity.CENTER);
+        t.setPadding(0, s.px(4), 0, 0);
+        c.addView(t, new android.widget.LinearLayout.LayoutParams(s.px(64),
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT));
+        return c;
+    }
+
     private static android.view.View tile(Sheet s, Activity a, String glyph, String label, boolean danger, Runnable action) {
+        return tile(s, a, glyph, label, danger, action, false);
+    }
+
+    private static android.view.View tile(Sheet s, Activity a, String glyph, String label, boolean danger,
+                                          Runnable action, boolean compact) {
         int color = danger ? Sheet.DANGER : s.accent;
         android.widget.LinearLayout t = new android.widget.LinearLayout(a);
         t.setOrientation(android.widget.LinearLayout.VERTICAL);
         t.setGravity(android.view.Gravity.CENTER);
-        t.setPadding(s.px(6), s.px(10), s.px(6), s.px(10));
+        t.setPadding(s.px(4), s.px(compact ? 6 : 10), s.px(4), s.px(compact ? 6 : 10));
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setColor(Sheet.FIELD);
         bg.setCornerRadius(s.px(18));
@@ -153,20 +264,22 @@ final class Menus {
         mask.setCornerRadius(s.px(18));
         t.setBackground(new android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(Sheet.RIPPLE), bg, mask));
-        android.widget.TextView g = s.text(glyph, 18, color);
+        android.widget.TextView g = s.text(glyph, compact ? 15 : 18, color);
         g.setGravity(android.view.Gravity.CENTER);
         g.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD));
         android.graphics.drawable.GradientDrawable gb = new android.graphics.drawable.GradientDrawable();
         gb.setShape(android.graphics.drawable.GradientDrawable.OVAL);
         gb.setColor((color & 0x00FFFFFF) | 0x26000000);
         g.setBackground(gb);
-        t.addView(g, new android.widget.LinearLayout.LayoutParams(s.px(38), s.px(38)));
-        android.widget.TextView l = s.text(label, 13, danger ? Sheet.DANGER : Sheet.TEXT);
+        t.addView(g, new android.widget.LinearLayout.LayoutParams(s.px(compact ? 30 : 38), s.px(compact ? 30 : 38)));
+        android.widget.TextView l = s.text(label, compact ? 12 : 13, danger ? Sheet.DANGER : Sheet.TEXT);
         l.setGravity(android.view.Gravity.CENTER);
-        l.setMaxLines(2);
-        l.setPadding(0, s.px(6), 0, 0);
+        l.setMaxLines(compact ? 1 : 2);
+        l.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        l.setPadding(0, s.px(compact ? 3 : 6), 0, 0);
         t.addView(l);
-        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, s.px(96), 1f);
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0,
+                s.px(compact ? 66 : 96), 1f);
         lp.setMargins(s.px(4), 0, s.px(4), 0);
         t.setLayoutParams(lp);
         t.setOnClickListener(v -> {
@@ -372,6 +485,10 @@ final class Menus {
     }
 
     private static void addTiles(Sheet s, Activity a, List<Object[]> acts) {
+        addTiles(s, a, acts, false);
+    }
+
+    private static void addTiles(Sheet s, Activity a, List<Object[]> acts, boolean compact) {
         int cols = acts.size() <= 4 ? acts.size() : 3;
         android.widget.LinearLayout row = null;
         for (int i = 0; i < acts.size(); i++) {
@@ -382,13 +499,14 @@ final class Menus {
                 s.content.addView(row);
             }
             Object[] act = acts.get(i);
-            row.addView(tile(s, a, (String) act[0], (String) act[1], (Boolean) act[2], (Runnable) act[3]));
+            row.addView(tile(s, a, (String) act[0], (String) act[1], (Boolean) act[2], (Runnable) act[3], compact));
         }
         // Cases vides : la dernière ligne garde la largeur des tuiles.
         if (row != null) {
             for (int k = acts.size() % cols; k != 0 && k < cols; k++) {
                 android.view.View v = new android.view.View(a);
-                android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, s.px(96), 1f);
+                android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0,
+                        s.px(compact ? 66 : 96), 1f);
                 lp.setMargins(s.px(4), 0, s.px(4), 0);
                 row.addView(v, lp);
             }

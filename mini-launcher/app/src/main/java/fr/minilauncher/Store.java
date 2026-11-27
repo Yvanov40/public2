@@ -83,6 +83,19 @@ final class Store {
         }
     }
 
+    /** Applis liées à une appli (mini-dossier dans son menu, ex. Répondeur sous Téléphone). */
+    List<String> linked(String key) {
+        List<String> out = new ArrayList<>();
+        String v = text("linked_" + key);
+        if (v == null || v.isEmpty()) return out;
+        for (String k : v.split("\n")) if (!k.isEmpty()) out.add(k);
+        return out;
+    }
+
+    void setLinked(String key, List<String> keys) {
+        setText("linked_" + key, keys.isEmpty() ? null : android.text.TextUtils.join("\n", keys));
+    }
+
     String text(String name) {
         return prefs.getString(name, null);
     }
