@@ -167,11 +167,11 @@ final class Menus {
      * Rangée d'applis liées sous les raccourcis (icône + nom, défilement horizontal), avec une
      * case « + » pour choisir lesquelles. Toucher une appli l'ouvre.
      */
-    private static void linkedApps(Sheet s, Activity a, String key, String label, Runnable changed) {
-        Store store = Store.get(a);
-        List<AppRepository.AppEntry> all = AppRepository.get(a).cached();
+    /** Les applis liées encore installées, dans l'ordre choisi. */
+    static List<AppRepository.AppEntry> linkedEntries(android.content.Context c, String key) {
+        List<AppRepository.AppEntry> all = AppRepository.get(c).cached();
         List<AppRepository.AppEntry> linked = new ArrayList<>();
-        for (String k : store.linked(key)) {
+        for (String k : Store.get(c).linked(key)) {
             for (AppRepository.AppEntry e : all) {
                 if (Store.key(e.component).equals(k)) {
                     linked.add(e);
@@ -179,6 +179,13 @@ final class Menus {
                 }
             }
         }
+        return linked;
+    }
+
+    private static void linkedApps(Sheet s, Activity a, String key, String label, Runnable changed) {
+        Store store = Store.get(a);
+        List<AppRepository.AppEntry> all = AppRepository.get(a).cached();
+        List<AppRepository.AppEntry> linked = linkedEntries(a, key);
         android.widget.TextView title = s.text(linked.isEmpty() ? "APPLIS LIÉES" : "APPLIS LIÉES · " + linked.size(), 11, Sheet.MUTED);
         title.setLetterSpacing(0.08f);
         title.setPadding(s.px(22), s.px(8), s.px(22), s.px(2));
@@ -209,7 +216,23 @@ final class Menus {
             });
         });
         row.addView(add);
+        if (!linked.isEmpty()) {
+            int st = Math.max(0, Math.min(3, store.linkedStyle(key)));
+            String[] glyphs = {"◎", "▮", "▦", "☰"};
+            android.view.View format = linkedCell(s, a, null, glyphs[st], "Format");
+            format.setOnClickListener(v -> {
+                s.dialog.dismiss();
+                choose(a, "Glisser depuis « " + label + " »", FolderWheelView.STYLES, st,
+                        i -> store.setNum("linkedStyle_" + key, i));
+            });
+            row.addView(format);
+        }
         s.content.addView(hs);
+        if (!linked.isEmpty()) {
+            android.widget.TextView hint = s.text("Sur l'accueil : appuie sur l'icône et glisse pour les ouvrir", 11, Sheet.MUTED);
+            hint.setPadding(s.px(22), 0, s.px(22), s.px(6));
+            s.content.addView(hint);
+        }
     }
 
     private static android.view.View linkedCell(Sheet s, Activity a, Drawable icon, String glyph, String text) {

@@ -478,6 +478,7 @@ final class HomeView extends FrameLayout {
                 removeCallbacks(longPress);
                 removeCallbacks(homeMenu);
                 lastTapTime = 0;
+                if (touchedItem != null && touchedItem.folder == null && openLinked(e)) return true;
                 if (touchedItem == null && dy < 0 && -dy > 1.3f * Math.abs(dx)
                         && Actions.actionFor(getContext(), "gUp") == Actions.RECENTS) {
                     // Un seul geste : la roue des récentes s'ouvre là où le doigt est parti,
@@ -603,6 +604,29 @@ final class HomeView extends FrameLayout {
         } else if (Math.abs(dx) > 1.3f * Math.abs(dy)) {
             host.onGesture(dx < 0 ? "gLeft" : "gRight");
         }
+    }
+
+    /**
+     * Appui puis glissé sur une appli qui a des applis liées : elles s'ouvrent comme un dossier
+     * autour de l'icône, et le geste continue jusqu'à l'appli choisie.
+     */
+    private boolean openLinked(MotionEvent current) {
+        AppRepository.AppEntry app = grid.appOf(touchedItem);
+        if (app == null) return false;
+        String key = Store.key(app.component);
+        List<AppRepository.AppEntry> linked = Menus.linkedEntries(getContext(), key);
+        float[] c = grid.centerOf(touchedItem);
+        if (linked.isEmpty() || c == null) return false;
+        Store store = Store.get(getContext());
+        folderWheel.openLinked(app.label, store.accent(), linked, c[0] + grid.getLeft(), c[1] + grid.getTop(),
+                store.linkedStyle(key));
+        folderForwarding = true;
+        MotionEvent down = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(),
+                MotionEvent.ACTION_DOWN, downX, downY, 0);
+        folderWheel.handleTouch(down);
+        down.recycle();
+        folderWheel.handleTouch(current);
+        return true;
     }
 
     /**

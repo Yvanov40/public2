@@ -181,6 +181,14 @@ final class FolderWheelView extends View {
         invalidate();
     }
 
+    /** Applis liées d'une appli : même affichage qu'un dossier, dans le style choisi. */
+    void openLinked(String title, int color, List<AppRepository.AppEntry> apps, float x, float y, int s) {
+        open(title, color, apps, x, y, false);
+        setStyle(s);
+        layout(apps);
+        invalidate();
+    }
+
     void close() {
         removeCallbacks(longPress);
         boolean was = open;

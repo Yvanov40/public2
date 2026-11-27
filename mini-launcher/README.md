@@ -17,7 +17,9 @@ Pour l'activer : Paramètres > Applis par défaut > Écran d'accueil > **Mini La
   raccourcis de l'appli (« Nouveau message »…), favori, retirer, infos, désinstaller. Glisser
   sans lever le doigt ferme le menu et part en glisser-déposer sur l'accueil.
   « Applis liées » : un mini-dossier propre à chaque appli (ex. le répondeur sous
-  Téléphone), rempli avec « + », chaque appli s'ouvre d'un toucher.
+  Téléphone), rempli avec « + », chaque appli s'ouvre d'un toucher. Sur l'accueil, appuyer
+  sur l'appli et glisser ouvre ses applis liées comme un dossier (cercle, colonne, grille ou
+  liste : case « Format » du menu) ; lâcher sur l'appli voulue.
 - Menu de l'accueil : verrouiller la disposition (plus rien ne bouge), verrouiller l'écran.
 
 ## Accueil

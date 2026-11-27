@@ -96,6 +96,10 @@ final class Store {
         setText("linked_" + key, keys.isEmpty() ? null : android.text.TextUtils.join("\n", keys));
     }
 
+    int linkedStyle(String key) {
+        return num("linkedStyle_" + key, 0);
+    }
+
     String text(String name) {
         return prefs.getString(name, null);
     }
