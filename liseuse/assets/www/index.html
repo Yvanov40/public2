@@ -80,6 +80,12 @@
     <h1>Réglages</h1>
   </header>
   <div class="defile">
+    <div class="groupe" id="groupe-maj">
+      <h3>Mises à jour</h3>
+      <p class="texte-reglage" id="maj-etat"></p>
+      <label class="ligne"><span>Vérifier au démarrage<small>Une fois par jour au plus, si Internet est disponible</small></span><input type="checkbox" class="interrupteur" id="o-maj-auto"></label>
+      <div class="boutons-pro"><button class="bouton plein" id="b-maj">Rechercher une mise à jour</button></div>
+    </div>
     <div class="groupe">
       <h3>Conversion des documents Word</h3>
       <label class="ligne"><span>Nouveau chapitre à chaque<small>Découpe le livre selon les titres du document</small></span>
@@ -102,12 +108,6 @@
       <label class="ligne"><span>Alléger les grandes images<small>Plus rapide et plus léger, qualité préservée à l'écran</small></span><input type="checkbox" id="o-compresser" class="interrupteur"></label>
       <label class="ligne"><span>Première image en couverture<small>Si le document commence par une image</small></span><input type="checkbox" id="o-couv" class="interrupteur"></label>
       <p class="note-reglage">Ces choix s'appliquent aux prochains documents. Pour un livre déjà ajouté, utilisez « Reconvertir » dans son menu.</p>
-    </div>
-    <div class="groupe" id="groupe-maj" hidden>
-      <h3>Mises à jour</h3>
-      <p class="texte-reglage" id="maj-etat"></p>
-      <label class="ligne"><span>Vérifier au démarrage<small>Une fois par jour au plus, si Internet est disponible</small></span><input type="checkbox" class="interrupteur" id="o-maj-auto"></label>
-      <div class="boutons-pro"><button class="bouton plein" id="b-maj">Rechercher une mise à jour</button></div>
     </div>
     <div class="groupe">
       <h3>Liseuse Pro</h3>

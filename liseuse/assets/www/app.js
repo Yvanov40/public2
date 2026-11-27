@@ -58,7 +58,7 @@ function demarrer() {
   chargerPro();
   if (A) A.pret();
   // édition complète : recherche discrète d'une nouvelle version (au plus une fois par jour)
-  if (A && A.verifierMaj && app.pro.edition === 'complete' && app.prefs.majAuto
+  if (majPossible() && app.prefs.majAuto !== false
     && Date.now() - (Store.get('majVerifiee', 0) || 0) > 20 * 3600000) {
     setTimeout(() => { Store.set('majVerifiee', Date.now()); A.verifierMaj(false); }, 4000);
   }
@@ -129,14 +129,23 @@ app.exigerPro = exigerPro;
 
 // ================================================================ mise à jour (édition complète)
 
+function majPossible() {
+  return !!(A && typeof A.verifierMaj !== 'undefined' && app.pro.edition !== 'play');
+}
+
 function afficherMaj() {
-  const g = $('#groupe-maj');
-  const possible = !!(A && A.verifierMaj && app.pro.edition === 'complete');
-  g.hidden = !possible;
-  if (!possible) return;
-  let v = { nom: '' };
-  try { v = JSON.parse(A.versionInstallee()); } catch (e) { /* rien */ }
-  $('#maj-etat').textContent = `Version installée : ${v.nom || '?'}. Les mises à jour viennent du dépôt GitHub de l'appli ; Android vous demande toujours confirmation avant d'installer.`;
+  const possible = majPossible();
+  let v = { nom: $('#version').textContent };
+  try { if (A && A.versionInstallee) v = JSON.parse(A.versionInstallee()); } catch (e) { /* rien */ }
+  $('#b-maj').hidden = !possible;
+  $('#o-maj-auto').closest('.ligne').hidden = !possible;
+  if (!possible) {
+    $('#maj-etat').textContent = app.pro.edition === 'play'
+      ? `Version ${v.nom || '?'} (édition Play Store) : les mises à jour se font par le Play Store.`
+      : `Version ${v.nom || '?'} : mise à jour depuis l'appli indisponible (édition « ${app.pro.edition || 'inconnue'} »).`;
+    return;
+  }
+  $('#maj-etat').textContent = `Version installée : ${v.nom || '?'} (édition complète). Les mises à jour viennent du dépôt GitHub de l'appli ; Android vous demande toujours confirmation avant d'installer.`;
   $('#o-maj-auto').checked = app.prefs.majAuto !== false;
   $('#o-maj-auto').onchange = e => { app.prefs.majAuto = e.target.checked; Store.set('app', app.prefs); };
   $('#b-maj').onclick = () => {
@@ -664,11 +673,12 @@ document.addEventListener('click', e => {
 });
 
 async function menuBiblio() {
-  const v = await dialogue('Bibliothèque · v' + ($('#version').textContent || '?'), `<div class="liste-actions dans-menu">
+  const v = await dialogue('Bibliothèque · v' + ($('#version').textContent || '?') + (app.pro.edition === 'play' ? ' · Play' : ''), `<div class="liste-actions dans-menu">
       <button data-m="dossier"><svg><use href="#i-dossier-plus"/></svg>Nouveau dossier${app.dossier ? ' ici' : ''}</button>
       <button data-m="selection"><svg><use href="#i-coche"/></svg>Sélectionner plusieurs livres</button>
       <button data-m="tri"><svg><use href="#i-tri"/></svg>Trier par… <small>${esc(NOMS_TRI[app.prefs.tri] || '')}</small></button>
       <button data-m="reglages"><svg><use href="#i-reglages"/></svg>Réglages et personnalisation</button>
+      ${majPossible() ? '<button data-m="maj"><svg><use href="#i-refaire"/></svg>Rechercher une mise à jour</button>' : ''}
     </div>`, [{ texte: 'Fermer', valeur: null }]);
   return v;
 }
@@ -681,6 +691,7 @@ document.addEventListener('click', e => {
   else if (m === 'selection') commencerSelection(null);
   else if (m === 'tri') choisirTri();
   else if (m === 'reglages') afficherParametres();
+  else if (m === 'maj') { toast('Recherche d\'une mise à jour…'); Store.set('majVerifiee', Date.now()); A.verifierMaj(true); }
 });
 
 // ================================================================ écrans
@@ -1051,8 +1062,8 @@ function afficherParametres() {
   $('#o-affichage').value = app.prefs.affichage;
   $('#o-reprendre').checked = app.prefs.reprendre;
   $('#o-pdf').value = app.prefs.pdf || 'demander';
-  afficherPersonnalisation();
-  afficherMaj();
+  try { afficherMaj(); } catch (e) { console.error(e); }
+  try { afficherPersonnalisation(); } catch (e) { console.error(e); }
   montrer('parametres');
 }
 

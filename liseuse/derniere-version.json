@@ -1,5 +1,5 @@
 {
- "versionCode": 17,
- "versionName": "3.3",
- "notes": "Boutons de volume : si de la musique, une vidéo ou un appel est en cours, ils règlent le volume au lieu de tourner les pages. Ils fonctionnent aussi dans les PDF."
+ "versionCode": 18,
+ "versionName": "3.4",
+ "notes": "La rubrique « Mises à jour » est maintenant en tête des réglages, et aussi dans le menu ⋮ de la bibliothèque."
 }
