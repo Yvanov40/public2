@@ -116,7 +116,9 @@ object Music {
             url, info.name, clean(info.uploaderName) ?: a.artist,
             Sources.bestThumb(info.thumbnails, 300) ?: a.thumb, info.streamCount
         )
-        album to items.map(::track).map { it.copy(album = album.title) }
+        val list = items.map(::track).map { it.copy(album = album.title) }
+        val withThumb = if (album.thumb == null) album.copy(thumb = list.firstOrNull { it.thumb != null }?.thumb) else album
+        withThumb to list
     }
 
     /** Page d'artiste : titres populaires et albums. */

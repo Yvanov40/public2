@@ -710,11 +710,15 @@ class MainActivity : AppCompatActivity() {
             v == ALL -> allRows(rows)
             v == MUSIC -> musicRows(rows)
             v == HOME -> {
-                homeRows(rows)
-                // Les chaînes suivies et leurs nouveautés, sous les vidéos
+                if (searchQuery == null) {
+                    quickVideos()?.let { rows += it }
+                    stripChannels(rows)
+                }
+                homeRows(rows, showResume = false)
+                // Les nouveautés des chaînes suivies, sous les vidéos
                 if (searchQuery == null) {
                     subsMode = "yt"
-                    subsRows(rows)
+                    subsRows(rows, strip = false)
                 }
             }
             v == SUBS -> subsRows(rows)
@@ -941,6 +945,97 @@ class MainActivity : AppCompatActivity() {
         refreshUi()
     }
 
+    // ——— Tuiles et ronds propres à chaque bulle ———
+
+    private fun quickMusic(): Row? {
+        val q = mutableListOf<Row.QuickItem>()
+        val likes = Store.likes()
+        if (likes.isNotEmpty()) q += Row.QuickItem("Titres likés", likes.first().thumb, R.drawable.ic_heart, { pushMusic(MPage.Liked) })
+        Store.recentAlbums().take(3).forEach { a ->
+            q += Row.QuickItem(a.title, a.thumb, R.drawable.ic_music, { pushMusic(MPage.AlbumP(a)) }, { albumMenu(a, recent = true) })
+        }
+        Store.playlists().take(2).forEach { p ->
+            q += Row.QuickItem(p.name, p.tracks.firstOrNull()?.thumb, R.drawable.ic_queue, { pushMusic(MPage.PlaylistP(p.id)) }, { playlistMenu(p) })
+        }
+        Store.savedAlbums().filterNot { s -> Store.recentAlbums().take(3).any { it.url == s.url } }.take(3).forEach { a ->
+            q += Row.QuickItem(a.title, a.thumb, R.drawable.ic_music, { pushMusic(MPage.AlbumP(a)) }, { albumMenu(a) })
+        }
+        if (q.size < 8) Store.recentTracks().take(8 - q.size).forEachIndexed { i, t ->
+            q += Row.QuickItem(t.title, t.thumb, R.drawable.ic_music, { Music.play(Store.recentTracks(), i); openNowPlayingSoon() })
+        }
+        return if (q.isEmpty()) null else Row.Quick(q.take(8))
+    }
+
+    private fun quickVideos(): Row? {
+        val w = Store.watched().take(8)
+        if (w.isEmpty()) return null
+        return Row.Quick(w.map { v -> Row.QuickItem(v.title, v.thumb, R.drawable.ic_video, { play(v.url) }, { videoMenu(v) }) })
+    }
+
+    /** Épisodes commencés d'abord, puis les plus récents pas encore écoutés. */
+    private fun quickPodcasts(): Row? {
+        val f = podFeed ?: return null
+        val started = f.filter { Store.position(Pod.mediaId(it)) > 0 }
+        val fresh = f.filter { Store.position(Pod.mediaId(it)) == 0L }
+        val pick = (started + fresh).distinctBy { it.audioUrl }.take(6)
+        if (pick.isEmpty()) return null
+        return Row.Quick(pick.map { e ->
+            Row.QuickItem(e.title, e.image ?: e.podcastArt, R.drawable.ic_headphones, {
+                playEpisodes(f, f.indexOf(e).coerceAtLeast(0))
+            }, { episodeMenu(f, f.indexOf(e).coerceAtLeast(0)) })
+        })
+    }
+
+    private fun stripArtists(rows: MutableList<Row>) {
+        val artists = (Store.savedArtists() + Store.recentArtists()).distinctBy { it.url }
+        if (artists.isEmpty()) return
+        rows += Row.Header("Mes artistes")
+        rows += Row.Avatars(
+            artists.map { Chan(it.url, it.name, it.thumb) },
+            onClick = { c -> artists.firstOrNull { it.url == c.url }?.let { pushMusic(MPage.ArtistP(it)) } },
+            onLong = { c -> artists.firstOrNull { it.url == c.url }?.let { artistMenu(it, recent = !Store.isArtistSaved(it.url)) } }
+        )
+    }
+
+    private fun stripChannels(rows: MutableList<Row>) {
+        val subs = Store.subs()
+        if (subs.isEmpty()) return
+        rows += Row.Header("Mes chaînes")
+        rows += Row.Avatars(subs, onClick = { openChannel(it) }, onLong = { confirmUnsubscribe(it) })
+    }
+
+    /** Tout : artistes suivis, podcasts et chaînes réunis. */
+    private fun stripFavorites(rows: MutableList<Row>) {
+        val artists = Store.savedArtists()
+        val pods = Store.podcasts()
+        val chans = Store.subs()
+        val items = artists.map { Chan(it.url, it.name, it.thumb) } +
+            pods.map { Chan(it.feedUrl, it.title, it.artwork) } + chans
+        if (items.isEmpty()) return
+        rows += Row.Header("Mes favoris")
+        rows += Row.Avatars(
+            items.distinctBy { it.url },
+            onClick = { c ->
+                val a = artists.firstOrNull { it.url == c.url }
+                val p = pods.firstOrNull { it.feedUrl == c.url }
+                when {
+                    a != null -> { show(MUSIC); pushMusic(MPage.ArtistP(a)) }
+                    p != null -> openPodcast(p)
+                    else -> openChannel(c)
+                }
+            },
+            onLong = { c ->
+                val a = artists.firstOrNull { it.url == c.url }
+                val p = pods.firstOrNull { it.feedUrl == c.url }
+                when {
+                    a != null -> artistMenu(a)
+                    p != null -> confirmUnsubscribePodcast(p)
+                    else -> confirmUnsubscribe(c)
+                }
+            }
+        )
+    }
+
     // ——— Accueil « Tout » : accès rapide façon Spotify ———
 
     private fun allRows(rows: MutableList<Row>) {
@@ -965,6 +1060,7 @@ class MainActivity : AppCompatActivity() {
             quick += Row.QuickItem(a.name, a.thumb, R.drawable.ic_person, { show(MUSIC); pushMusic(MPage.ArtistP(a)) })
         }
         if (quick.isNotEmpty()) rows += Row.Quick(quick.take(8))
+        stripFavorites(rows)
 
         val watched = Store.watched()
         if (watched.size > 2) {
@@ -1037,7 +1133,7 @@ class MainActivity : AppCompatActivity() {
         else -> null
     }
 
-    private fun homeRows(rows: MutableList<Row>) {
+    private fun homeRows(rows: MutableList<Row>, showResume: Boolean = true) {
         val q = searchQuery
         if (q != null) {
             rows += Row.Header("Résultats pour « $q »")
@@ -1067,7 +1163,7 @@ class MainActivity : AppCompatActivity() {
                 onLong = { s -> Store.removeSearch(s); feed = null; render(HOME) }
             )
         }
-        if (watched.isNotEmpty()) {
+        if (showResume && watched.isNotEmpty()) {
             rows += Row.Header("Reprendre")
             rows += Row.Carousel(
                 watched.take(12).map { v -> v.copy(meta = listOfNotNull(v.uploader, resumeText(v.url)).joinToString(" · ")) },
@@ -1113,7 +1209,7 @@ class MainActivity : AppCompatActivity() {
 
     // ——— Abonnements et chaînes ———
 
-    private fun subsRows(rows: MutableList<Row>) {
+    private fun subsRows(rows: MutableList<Row>, strip: Boolean = true) {
         if (subsMode == "pod") {
             podcastSubsRows(rows)
             return
@@ -1127,8 +1223,10 @@ class MainActivity : AppCompatActivity() {
             )
             return
         }
-        rows += Row.Header("Mes chaînes")
-        rows += Row.Avatars(subs, onClick = { openChannel(it) }, onLong = { confirmUnsubscribe(it) })
+        if (strip) {
+            rows += Row.Header("Mes chaînes")
+            rows += Row.Avatars(subs, onClick = { openChannel(it) }, onLong = { confirmUnsubscribe(it) })
+        }
         rows += Row.Header("Nouveautés")
         val f = subsFeed
         when {
@@ -1186,10 +1284,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun podcastSubsRows(rows: MutableList<Row>) {
-        rows += Row.Entry(
-            "Rechercher un podcast ou un flux RSS…",
-            "Mots-clés, adresse d'un flux, ou lien d'une page (Acast, site du podcast, Apple Podcasts…)",
-            null, R.drawable.ic_search, onClick = { askRssUrl() }
+        val addRss = Row.Entry(
+            "Ajouter un flux RSS…",
+            "Adresse d'un flux, ou lien d'une page (Acast, site du podcast, Apple Podcasts…)",
+            null, R.drawable.ic_add, onClick = { askRssUrl() }
         )
         val q = podQuery
         if (q != null) {
@@ -1207,12 +1305,14 @@ class MainActivity : AppCompatActivity() {
         val pods = Store.podcasts()
         if (pods.isEmpty()) {
             rows += Row.Note(
-                "Aucun podcast pour l'instant.\nCherche un podcast avec la barre de recherche, " +
+                "Aucun podcast pour l'instant.\nTouche la loupe en bas pour chercher un podcast, " +
                     "ou ajoute directement l'adresse de son flux RSS.",
                 R.drawable.ic_headphones
             )
+            rows += addRss
             return
         }
+        quickPodcasts()?.let { rows += it }
         rows += Row.Header("Mes podcasts")
         rows += Row.Avatars(
             pods.map { Chan(it.feedUrl, it.title, it.artwork) },
@@ -1226,6 +1326,7 @@ class MainActivity : AppCompatActivity() {
             f.isEmpty() -> rows += Row.Note("Aucun épisode trouvé. Tire vers le bas pour actualiser.")
             else -> f.indices.forEach { rows += episodeRow(f, it, true) }
         }
+        rows += addRss
     }
 
     private fun loadPodFeed(force: Boolean = false) {
@@ -2111,6 +2212,11 @@ class MainActivity : AppCompatActivity() {
                     val (a, t) = Music.albumTracks(p.album)
                     p.album = a
                     p.tracks = t
+                    // Met à jour la pochette des albums mémorisés qui n'en avaient pas
+                    if (a.thumb != null) {
+                        Store.recentAlbums().firstOrNull { it.url == a.url && it.thumb == null }?.let { Store.addRecentAlbum(a) }
+                        if (Store.savedAlbums().any { it.url == a.url && it.thumb == null }) { Store.toggleAlbum(a); Store.toggleAlbum(a) }
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -2355,6 +2461,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Accueil musique
+        quickMusic()?.let { rows += it }
+        stripArtists(rows)
         val likes = Store.likes()
         val pls = Store.playlists()
         val recent = Store.recentTracks()
@@ -2381,12 +2489,6 @@ class MainActivity : AppCompatActivity() {
             })
         }
         val myArtists = Store.savedArtists()
-        if (myArtists.isNotEmpty()) {
-            rows += Row.Header("Mes artistes")
-            rows += Row.Cards(myArtists.map { a ->
-                Row.Card(a.name, null, a.thumb, round = true, onClick = { pushMusic(MPage.ArtistP(a)) }, onLong = { artistMenu(a) })
-            })
-        }
         val recentAlbums = Store.recentAlbums()
         if (recentAlbums.isNotEmpty()) {
             rows += Row.Header("Albums écoutés récemment")
