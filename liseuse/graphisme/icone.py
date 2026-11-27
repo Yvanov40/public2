@@ -20,12 +20,14 @@ VARIANTES = [
 ]
 
 
-def fond(haut, bas):
+def fond(haut, bas, arrondi=True):
     f = Image.new('RGBA', (S, S))
     d = ImageDraw.Draw(f)
     for y in range(S):
         t = y / S
         d.line([(0, y), (S, y)], fill=tuple(int(haut[k] + (bas[k] - haut[k]) * t) for k in range(3)) + (255,))
+    if not arrondi:
+        return f
     m = Image.new('L', (S, S), 0)
     ImageDraw.Draw(m).rounded_rectangle([0, 0, S - 1, S - 1], radius=230, fill=255)
     im = Image.new('RGBA', (S, S), (0, 0, 0, 0))
@@ -59,27 +61,88 @@ def lettre(d, couleur):
     d.line([(S // 2 - 200, S // 2 + 300), (S // 2 + 200, S // 2 + 300)], fill=couleur + (200,), width=14)
 
 
-def icone(v):
-    nom, haut, bas, pages, traits, signet, motif = v
-    im = fond(haut, bas)
+def motif(v):
+    """Le dessin seul (livre ou lettre), sur fond transparent."""
+    nom, haut, bas, pages, traits, signet, forme = v
+    im = Image.new('RGBA', (S, S), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
-    if motif == 'lettre':
+    if forme == 'lettre':
         lettre(d, pages)
     else:
         livre(d, pages, traits, signet)
     return im
 
 
+def icone(v):
+    """Icône classique (Android 7 et moins) : carré arrondi."""
+    im = fond(v[1], v[2])
+    m = motif(v)
+    im.alpha_composite(m)
+    return im
+
+
+def premier_plan(v):
+    """Icône adaptative : le dessin réduit pour tenir dans la zone sûre (cercle de 66 dp sur 108 dp)."""
+    m = motif(v)
+    k = 0.70
+    petit = m.resize((int(S * k), int(S * k)), Image.LANCZOS)
+    im = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+    o = (S - petit.width) // 2
+    im.alpha_composite(petit, (o, o))
+    return im
+
+
+def monochrome(avant):
+    """Silhouette pour les icônes à thème (Android 13+) : la forme du dessin, en une seule teinte."""
+    a = avant.getchannel('A')
+    im = Image.new('RGBA', avant.size, (255, 255, 255, 0))
+    im.putalpha(a)
+    return im
+
+
 TAILLES = (('mdpi', 48), ('hdpi', 72), ('xhdpi', 96), ('xxhdpi', 144), ('xxxhdpi', 192))
+ADAPTATIVES = (('mdpi', 108), ('hdpi', 162), ('xhdpi', 216), ('xxhdpi', 324), ('xxxhdpi', 432))
+
+ANYDPI = os.path.join(RES, 'mipmap-anydpi-v26')
+os.makedirs(ANYDPI, exist_ok=True)
+
+
+def xml_adaptatif(nom):
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@mipmap/{nom}_fond" />
+    <foreground android:drawable="@mipmap/{nom}_avant" />
+    <monochrome android:drawable="@mipmap/{nom}_mono" />
+</adaptive-icon>
+"""
+
 
 for i, v in enumerate(VARIANTES, 1):
-    im = icone(v)
+    noms = ['ic_icone%d' % i] + (['ic_launcher'] if i == 1 else [])
+    classique = icone(v)
+    arriere = fond(v[1], v[2], arrondi=False)
+    avant = premier_plan(v)
+    mono = monochrome(avant)
     for dens, t in TAILLES:
         dos = os.path.join(RES, 'mipmap-' + dens)
         os.makedirs(dos, exist_ok=True)
-        petite = im.resize((t, t), Image.LANCZOS)
-        petite.save(os.path.join(dos, 'ic_icone%d.png' % i))
-        if i == 1:
-            petite.save(os.path.join(dos, 'ic_launcher.png'))
+        for nom in noms:
+            classique.resize((t, t), Image.LANCZOS).save(os.path.join(dos, nom + '.png'))
+    for dens, t in ADAPTATIVES:
+        dos = os.path.join(RES, 'mipmap-' + dens)
+        for nom in noms:
+            arriere.resize((t, t), Image.LANCZOS).save(os.path.join(dos, nom + '_fond.png'))
+            avant.resize((t, t), Image.LANCZOS).save(os.path.join(dos, nom + '_avant.png'))
+            mono.resize((t, t), Image.LANCZOS).save(os.path.join(dos, nom + '_mono.png'))
+    for nom in noms:
+        open(os.path.join(ANYDPI, nom + '.xml'), 'w').write(xml_adaptatif(nom))
     if i == 1:
-        im.resize((512, 512), Image.LANCZOS).save(os.path.join(ICI, 'icone-512.png'))
+        classique.resize((512, 512), Image.LANCZOS).save(os.path.join(ICI, 'icone-512.png'))
+        # aperçu : découpe ronde comme le ferait un lanceur
+        apercu = arriere.copy()
+        apercu.alpha_composite(avant)
+        masque = Image.new('L', (S, S), 0)
+        ImageDraw.Draw(masque).ellipse([0, 0, S - 1, S - 1], fill=255)
+        rond = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+        rond.paste(apercu, (0, 0), masque)
+        rond.resize((256, 256), Image.LANCZOS).save(os.path.join(ICI, 'apercu-rond.png'))

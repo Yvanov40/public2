@@ -1,1 +1,1 @@
-La rubrique « Mises à jour » est maintenant en tête des réglages, et aussi dans le menu ⋮ de la bibliothèque.
+Icônes adaptatives : le logo remplit proprement la forme choisie par le téléphone ou le lanceur (rond, carré, goutte), et suit les icônes à thème d'Android 13+.

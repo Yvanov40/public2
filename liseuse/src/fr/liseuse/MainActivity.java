@@ -969,9 +969,17 @@ public final class MainActivity extends Activity {
                     int[] icones = {R.mipmap.ic_icone1, R.mipmap.ic_icone2, R.mipmap.ic_icone3, R.mipmap.ic_icone4,
                             R.mipmap.ic_icone5, R.mipmap.ic_icone6, R.mipmap.ic_icone7, R.mipmap.ic_icone8};
                     int k = n.isEmpty() ? 0 : Integer.parseInt(n);
-                    int res = k >= 1 && k <= 8 ? icones[k - 1] : 0;
-                    if (res == 0) return introuvable();
-                    return reponse("image/png", getResources().openRawResource(res));
+                    if (k < 1 || k > 8) return introuvable();
+                    // l'icône telle qu'Android la dessine (forme du téléphone : rond, carré, goutte…)
+                    android.graphics.drawable.Drawable dr = getResources().getDrawable(icones[k - 1], getTheme());
+                    android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(192, 192, android.graphics.Bitmap.Config.ARGB_8888);
+                    android.graphics.Canvas cv = new android.graphics.Canvas(bm);
+                    dr.setBounds(0, 0, 192, 192);
+                    dr.draw(cv);
+                    java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                    bm.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bo);
+                    bm.recycle();
+                    return reponse("image/png", new ByteArrayInputStream(bo.toByteArray()));
                 }
                 if (p.startsWith("/couv/")) {
                     String id = p.substring(6).replaceAll("[^0-9a-f]", "");
