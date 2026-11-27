@@ -252,7 +252,7 @@ final class HomeGrid extends FrameLayout {
         if (g == null) return null;
         List<AppRepository.AppEntry> inner = folderApps(gs, name, byKey, depth);
         return new AppRepository.AppEntry(name, Store.subComponent(name), null,
-                new FolderDrawable(g.color, inner, g.shape == 1));
+                new FolderDrawable(g, inner, store));
     }
 
     /**
@@ -273,41 +273,95 @@ final class HomeGrid extends FrameLayout {
         return out;
     }
 
-    /** Icône d'un sous-dossier : fond de sa couleur et ses 4 premières applis. */
+    /** Icône d'un sous-dossier : même style que l'icône du dossier sur l'accueil. */
     static final class FolderDrawable extends android.graphics.drawable.Drawable {
-        private final Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final List<android.graphics.drawable.Drawable> icons = new java.util.ArrayList<>();
-        private final boolean round;
+        private final Store.Group g;
+        private final int count, tileAlpha;
+        private final boolean border;
 
-        FolderDrawable(int color, List<AppRepository.AppEntry> apps, boolean round) {
-            this.round = round;
-            bg.setColor((color & 0x00FFFFFF) | 0xCC000000);
+        FolderDrawable(Store.Group g, List<AppRepository.AppEntry> apps, Store store) {
+            this.g = g;
+            count = apps.size();
+            tileAlpha = (int) (255 * store.folderTile() / 100f);
+            border = store.folderBorder();
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD));
             for (int i = 0; i < Math.min(4, apps.size()); i++) {
                 if (apps.get(i).icon != null) icons.add(Sheet.copy(apps.get(i).icon));
             }
         }
 
+        private void drawText(Canvas c, String s, float x, float y, float size) {
+            text.setColor(0xFF111320);
+            text.setTextSize(size);
+            Rect tb = new Rect();
+            text.getTextBounds(s, 0, s.length(), tb);
+            c.drawText(s, x, y + tb.height() / 2f - tb.bottom, text);
+        }
+
         @Override
         public void draw(Canvas c) {
-            android.graphics.Rect b = getBounds();
-            float w = b.width(), h = b.height();
+            Rect b = getBounds();
+            float w = b.width(), half = w / 2f, cx = b.exactCenterX(), cy = b.exactCenterY();
             android.graphics.RectF r = new android.graphics.RectF(b);
-            if (round) c.drawOval(r, bg);
-            else c.drawRoundRect(r, w * 0.28f, h * 0.28f, bg);
-            float pad = w * (round ? 0.2f : 0.14f), gap = w * 0.06f;
-            float cell = (w - 2 * pad - gap) / 2f;
+            float corner = g.shape == 1 ? half : half * 0.45f;
+            if (g.style == 3) {
+                // Invisible : un contour discret pour le retrouver dans le cercle.
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(Math.max(2f, w * 0.03f));
+                paint.setColor(0x80FFFFFF);
+                paint.setPathEffect(new android.graphics.DashPathEffect(new float[]{w * 0.08f, w * 0.07f}, 0));
+                r.inset(w * 0.04f, w * 0.04f);
+                c.drawRoundRect(r, corner, corner, paint);
+                paint.setPathEffect(null);
+                paint.setStyle(Paint.Style.FILL);
+                return;
+            }
+            paint.setStyle(Paint.Style.FILL);
+            if (g.style == 2) {
+                paint.setColor(g.color);
+                c.drawRoundRect(r, corner, corner, paint);
+                drawText(c, g.name.isEmpty() ? "?" : g.name.substring(0, 1).toUpperCase(), cx, cy, half * 0.95f);
+                return;
+            }
+            paint.setColor(0xFF1B1D26);
+            paint.setAlpha(Math.max(tileAlpha, 120)); // reste visible sur le fond du cercle
+            c.drawRoundRect(r, corner, corner, paint);
+            if (border) {
+                paint.setColor(g.color);
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(Math.max(2f, w * 0.04f));
+                android.graphics.RectF rb = new android.graphics.RectF(r);
+                rb.inset(w * 0.02f, w * 0.02f);
+                c.drawRoundRect(rb, corner, corner, paint);
+                paint.setStyle(Paint.Style.FILL);
+            }
+            if (g.style == 1) {
+                if (!icons.isEmpty()) {
+                    float m = half * 0.72f;
+                    icons.get(0).setBounds((int) (cx - m), (int) (cy - m), (int) (cx + m), (int) (cy + m));
+                    icons.get(0).draw(c);
+                }
+                float br = half * 0.36f, bx = cx + half - br * 0.6f, by = cy - half + br * 0.6f;
+                paint.setColor(g.color);
+                c.drawCircle(bx, by, br, paint);
+                drawText(c, String.valueOf(count), bx, by, br * 1.1f);
+                return;
+            }
+            float mini = half * 0.38f, gap = half * 0.08f;
             for (int i = 0; i < icons.size(); i++) {
-                int col = i % 2, row = i / 2;
-                int l = (int) (b.left + pad + col * (cell + gap)), t = (int) (b.top + pad + row * (cell + gap));
-                android.graphics.drawable.Drawable d = icons.get(i);
-                d.setBounds(l, t, (int) (l + cell), (int) (t + cell));
-                d.draw(c);
+                float mx = cx + (i % 2 == 0 ? -1 : 1) * (mini + gap / 2);
+                float my = cy + (i < 2 ? -1 : 1) * (mini + gap / 2);
+                icons.get(i).setBounds((int) (mx - mini), (int) (my - mini), (int) (mx + mini), (int) (my + mini));
+                icons.get(i).draw(c);
             }
         }
 
         @Override
         public void setAlpha(int alpha) {
-            bg.setAlpha(alpha);
         }
 
         @Override
