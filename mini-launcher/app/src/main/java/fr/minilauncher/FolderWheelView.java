@@ -123,7 +123,7 @@ final class FolderWheelView extends View {
         Spot s = spots.get(hover);
         if (!isSub(s) || subOpener == null) return;
         haptic(HapticFeedbackConstants.VIRTUAL_KEY);
-        subOpener.openSub(s.app.label, cx, cy);
+        subOpener.openSub(s.app.label, s.x, s.y); // centré sur le sous-dossier
         tracking = true;
         moved = true;
     };
@@ -466,7 +466,7 @@ final class FolderWheelView extends View {
 
     private void launch(Spot s) {
         if (isSub(s) && subOpener != null) {
-            subOpener.openSub(s.app.label, cx, cy);
+            subOpener.openSub(s.app.label, s.x, s.y); // centré sur le sous-dossier
             makeSticky(); // ouvert d'un toucher ou d'un lâcher : il attend le choix
             return;
         }
