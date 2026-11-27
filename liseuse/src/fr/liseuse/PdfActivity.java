@@ -59,6 +59,10 @@ public final class PdfActivity extends Activity {
     private TextView titre, numero, pastille;
     private View voile, filtreChaud;
     private LinearLayout panneauLum;
+    private android.widget.SeekBar curseurLum;
+    private TextView valeurLum, indicLum;
+    private android.widget.CheckBox autoLum;
+    private boolean majInterne;
     private float lum;   // -1 = automatique, sinon 0..1 (sous 0,2 : mode nuit extra-sombre)
     private int chaud;   // 0..100
     private boolean nuit;
@@ -241,10 +245,13 @@ public final class PdfActivity extends Activity {
         panneauLum.setClickable(true); // les touchers sur le panneau ne traversent pas
 
         final TextView valLum = new TextView(this);
+        valeurLum = valLum;
         final TextView valChaud = new TextView(this);
         final android.widget.SeekBar curseur = new android.widget.SeekBar(this);
+        curseurLum = curseur;
         final android.widget.SeekBar curseurChaud = new android.widget.SeekBar(this);
         final android.widget.CheckBox auto = new android.widget.CheckBox(this);
+        autoLum = auto;
 
         panneauLum.addView(ligne("Luminosité", curseur, valLum));
         TextView aide = new TextView(this);
@@ -305,11 +312,25 @@ public final class PdfActivity extends Activity {
         auto.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(android.widget.CompoundButton b, boolean oui) {
+                if (majInterne) return;
                 lum = oui ? -1f : curseur.getProgress() / 100f;
                 valLum.setText(texteLum());
                 appliquerLumiere();
             }
         });
+
+        // pastille affichée pendant le geste sur le bord gauche
+        indicLum = new TextView(this);
+        indicLum.setTextColor(0xFFFFFFFF);
+        indicLum.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        indicLum.setTypeface(Typeface.DEFAULT_BOLD);
+        indicLum.setPadding(dp(22), dp(12), dp(22), dp(12));
+        GradientDrawable fi = new GradientDrawable();
+        fi.setColor(0xD1141414);
+        fi.setCornerRadius(dp(18));
+        indicLum.setBackground(fi);
+        indicLum.setAlpha(0f);
+        racine.addView(indicLum, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
 
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         lp.leftMargin = dp(10);
@@ -334,6 +355,27 @@ public final class PdfActivity extends Activity {
         valeur.setGravity(Gravity.END);
         l.addView(valeur, new LinearLayout.LayoutParams(dp(70), -2));
         return l;
+    }
+
+    /** Réglage par le geste sur le bord gauche. */
+    void reglerLum(float v, boolean fin) {
+        lum = Math.max(0f, Math.min(1f, v));
+        appliquerLumiere();
+        if (curseurLum != null) curseurLum.setProgress(Math.round(lum * 100));
+        if (autoLum != null && autoLum.isChecked()) {
+            majInterne = true;
+            autoLum.setChecked(false);
+            majInterne = false;
+        }
+        if (valeurLum != null) valeurLum.setText(texteLum());
+        indicLum.setText("☀  " + texteLum());
+        indicLum.animate().cancel();
+        indicLum.setAlpha(1f);
+        if (fin) indicLum.animate().alpha(0f).setStartDelay(800).setDuration(250).start();
+    }
+
+    float lumCourante() {
+        return lum < 0 ? 0.6f : lum;
     }
 
     private String texteLum() {
@@ -885,8 +927,40 @@ public final class PdfActivity extends Activity {
             }
         }
 
+        // geste vertical le long du bord gauche : luminosité
+        private float lumX0, lumY0, lumDepart;
+        private int lumEtat; // 0 aucun, 1 candidat, 2 actif
+
         @Override
         public boolean onTouchEvent(MotionEvent e) {
+            int a = e.getActionMasked();
+            if (a == MotionEvent.ACTION_DOWN) {
+                lumEtat = e.getX() < getWidth() * 0.1f ? 1 : 0;
+                lumX0 = e.getX();
+                lumY0 = e.getY();
+                lumDepart = lumCourante();
+            } else if (a == MotionEvent.ACTION_POINTER_DOWN && lumEtat != 2) {
+                lumEtat = 0;
+            }
+            if (lumEtat == 1 && a == MotionEvent.ACTION_MOVE) {
+                float dx = e.getX() - lumX0, dy = e.getY() - lumY0;
+                if (Math.abs(dy) > 14 * densite && Math.abs(dy) > Math.abs(dx) * 1.5f) {
+                    lumEtat = 2;
+                    lumY0 = e.getY();
+                    defil.forceFinished(true);
+                    MotionEvent annule = MotionEvent.obtain(e);
+                    annule.setAction(MotionEvent.ACTION_CANCEL);
+                    gestes.onTouchEvent(annule);
+                    annule.recycle();
+                }
+            }
+            if (lumEtat == 2) {
+                float v = lumDepart - (e.getY() - lumY0) / (getHeight() * 0.6f);
+                boolean fin = a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL;
+                reglerLum(v, fin);
+                if (fin) lumEtat = 0;
+                return true;
+            }
             pince.onTouchEvent(e);
             if (!pince.isInProgress()) gestes.onTouchEvent(e);
             return true;

@@ -7,7 +7,7 @@ const lecteur = window.lecteur = (() => {
     taille: 19, theme: 'creme', police: 'literata', interligne: 1.55, marges: 22,
     alignement: 'justifie', paragraphes: 'retrait', mode: 'pages', images: 'document', imagesSombre: 'attenuer',
     cesure: true, gras: false, couleursDoc: true, deuxPages: true, animation: true, uneMain: false,
-    volume: true, pleinEcran: true, ecranAllume: false, infos: true, luminosite: -1, liensExternes: true,
+    volume: true, pleinEcran: true, ecranAllume: false, infos: true, luminosite: -1, liensExternes: true, bordLum: true,
     chaud: 0, persoFond: '#f3ece0', persoTexte: '#2b2b2b'
   };
 
@@ -105,6 +105,16 @@ const lecteur = window.lecteur = (() => {
     const oc = (R.chaud || 0) / 100 * 0.55;
     chaud.style.opacity = oc;
     chaud.style.display = oc > 0 ? 'block' : 'none';
+  }
+
+  /** Pastille indiquant la luminosité pendant le geste sur le bord. */
+  let minuteIndic;
+  function indiquerLumiere(fin) {
+    const p = $('#indic-lum');
+    p.querySelector('span').textContent = texteLumiere();
+    p.classList.add('actif');
+    clearTimeout(minuteIndic);
+    if (fin) minuteIndic = setTimeout(() => p.classList.remove('actif'), 900);
   }
 
   function texteLumiere() {
@@ -492,12 +502,43 @@ const lecteur = window.lecteur = (() => {
 
   function brancherDoc() {
     let t0 = null;
+    // glisser verticalement le long du bord gauche : luminosité
+    let lum = null;
     doc.addEventListener('touchstart', e => {
+      lum = null;
       if (e.touches.length > 1) { t0 = null; return; }
       const t = e.touches[0];
       t0 = { x: t.clientX, y: t.clientY, t: Date.now() };
+      if (R.bordLum && t.clientX < (win.innerWidth || W) * 0.12) {
+        lum = { y0: t.clientY, depart: R.luminosite < 0 ? 0.6 : R.luminosite, actif: false };
+      }
     }, { passive: true });
+    doc.addEventListener('touchmove', e => {
+      if (!lum || !t0 || e.touches.length > 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - t0.x, dy = t.clientY - t0.y;
+      if (!lum.actif) {
+        if (Math.abs(dy) < 12 || Math.abs(dy) < Math.abs(dx) * 1.5) return;
+        lum.actif = true;
+        lum.y0 = t.clientY;
+      }
+      e.preventDefault();
+      const v = Math.max(0, Math.min(1, lum.depart - (t.clientY - lum.y0) / ((win.innerHeight || H) * 0.6)));
+      R.luminosite = Math.round(v * 100) / 100;
+      appliquerLumiere(true);
+      indiquerLumiere();
+    }, { passive: false });
     doc.addEventListener('touchend', e => {
+      if (lum && lum.actif) {
+        // fin du réglage de luminosité : pas de toucher ni de page tournée
+        e.preventDefault();
+        lum = null;
+        t0 = null;
+        sauverReglages();
+        indiquerLumiere(true);
+        return;
+      }
+      lum = null;
       if (!t0) return;
       const t = e.changedTouches[0];
       const dx = t.clientX - t0.x, dy = t.clientY - t0.y, dt = Date.now() - t0.t;

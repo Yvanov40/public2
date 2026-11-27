@@ -374,3 +374,8 @@ body.lecture .feuille { padding-bottom: var(--sys-bas, 0px); }
 .raison-pro { background: var(--accent-doux); color: var(--texte); padding: 10px 12px; border-radius: 10px; margin: 0 0 14px; }
 .petit-pro { font-size: .8rem; margin: 0; }
 .boutons-pro { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 10px; }
+
+/* pastille de luminosité (geste sur le bord gauche) */
+.indic-lum { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%) scale(.92); background: rgba(20, 20, 20, .82); color: #fff; padding: 14px 22px; border-radius: 18px; display: flex; align-items: center; gap: 10px; font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums; z-index: 210; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+.indic-lum.actif { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.indic-lum svg { width: 26px; height: 26px; }
