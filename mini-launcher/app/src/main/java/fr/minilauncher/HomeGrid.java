@@ -781,6 +781,45 @@ final class HomeGrid extends FrameLayout {
      * sur une case vide → posée sur l'accueil. Elle quitte son dossier d'origine.
      * Renvoie un message à afficher, ou null si tout s'est bien passé.
      */
+    /** Un sous-dossier sorti de son dossier : sur une case vide de l'accueil, ou dans un autre dossier. */
+    String dropFolder(String name, String fromFolder, float x, float y) {
+        items = store.homeItems();
+        computeGrid();
+        Store.HomeItem target = null;
+        for (Map.Entry<View, Store.HomeItem> e : viewItems.entrySet()) {
+            View v = e.getKey();
+            if (x >= v.getLeft() && x < v.getRight() && y >= v.getTop() && y < v.getBottom()) target = e.getValue();
+        }
+        if (target != null) {
+            Store.HomeItem t = same(target);
+            if (t == null || t.folder == null) return "Dépose-le dans une case vide ou sur un dossier";
+            if (t.folder.equals(fromFolder) || t.folder.equals(name)) return null;
+            if (store.folderContains(name, t.folder)) return "« " + name + " » contient déjà ce dossier";
+            store.addToFolder(t.folder, Store.subKey(name));
+        } else {
+            int col = (int) Math.floor((x - left) / cellW), row = (int) Math.floor((y - top) / cellH);
+            Store.HomeItem existing = null;
+            for (Store.HomeItem o : items) if (name.equals(o.folder)) existing = o;
+            if (!fits(col, row, existing == null ? 1 : existing.w, existing == null ? 1 : existing.h, existing)) {
+                return "Pas de place à cet endroit";
+            }
+            if (existing == null) {
+                existing = new Store.HomeItem();
+                existing.folder = name;
+                items.add(existing);
+            }
+            existing.col = col;
+            existing.row = row;
+            store.setHomeItems(items);
+        }
+        List<Store.Group> gs = store.groups();
+        Store.Group from = Store.find(gs, fromFolder);
+        if (from != null && from.apps.remove(Store.subKey(name))) store.setGroups(gs);
+        items = store.homeItems();
+        rebuild();
+        return null;
+    }
+
     String dropApp(String key, String fromFolder, float x, float y) {
         items = store.homeItems();
         computeGrid();

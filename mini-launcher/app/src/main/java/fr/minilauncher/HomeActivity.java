@@ -343,6 +343,17 @@ public final class HomeActivity extends Activity
 
     @Override
     public void onFolderAppDrop(AppRepository.AppEntry app, String folder, float x, float y, boolean moved) {
+        if (Store.isSub(app.component)) {
+            // Sous-dossier soulevé : lâché sur place = son menu, ailleurs = il sort du dossier.
+            if (!moved) {
+                Menus.folderMenu(this, app.label, grid.appsWithFolders(app.label), this::refreshAll, null, 0);
+                return;
+            }
+            String message = grid.dropFolder(app.label, folder, x, y);
+            if (message != null) Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+            refreshAll();
+            return;
+        }
         if (!moved) {
             // Maintenue puis lâchée sur place : le menu de l'appli, comme avant.
             Menus.appMenu(this, app.component, app.label, folder, this::refreshAll);
@@ -422,6 +433,10 @@ public final class HomeActivity extends Activity
 
     @Override
     public void onLiftMenu(AppRepository.AppEntry app, String folder) {
+        if (Store.isSub(app.component)) {
+            Menus.folderMenu(this, app.label, grid.appsWithFolders(app.label), this::refreshAll, null, 0);
+            return;
+        }
         Menus.appMenu(this, app.component, app.label, folder, this::refreshAll);
     }
 

@@ -139,7 +139,7 @@ final class FolderWheelView extends View {
         tracking = false;
         haptic(HapticFeedbackConstants.LONG_PRESS);
         AppRepository.AppEntry app = spots.get(hover).app;
-        if (Store.isSub(app.component)) {
+        if (Store.isSub(app.component) && !(realFolder && liftListener != null)) {
             listener.onFolderAppMenu(app, folder); // menu du sous-dossier
             return;
         }
