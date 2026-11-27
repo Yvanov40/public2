@@ -1,5 +1,5 @@
 {
- "versionCode": 19,
- "versionName": "3.5",
- "notes": "Icônes adaptatives : le logo remplit proprement la forme choisie par le téléphone ou le lanceur (rond, carré, goutte), et suit les icônes à thème d'Android 13+."
+ "versionCode": 20,
+ "versionName": "3.6",
+ "notes": "Sécurité : le code éventuellement caché dans un livre EPUB téléchargé ailleurs est désormais bloqué ; il ne peut plus agir sur l'appli."
 }

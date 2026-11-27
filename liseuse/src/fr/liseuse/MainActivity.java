@@ -944,7 +944,12 @@ public final class MainActivity extends Activity {
                     ZipEntry e = z.getEntry(chemin);
                     if (e == null) return introuvable();
                     boolean html = u.getQueryParameter("html") != null;
-                    return reponse(mime(chemin, html), z.getInputStream(e));
+                    // contenu des livres : aucun code autorisé (un EPUB ne peut pas piloter l'appli)
+                    WebResourceResponse rl = reponse(mime(chemin, html), z.getInputStream(e));
+                    Map<String, String> hl = new HashMap<String, String>(rl.getResponseHeaders());
+                    hl.put("Content-Security-Policy", "script-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'");
+                    rl.setResponseHeaders(hl);
+                    return rl;
                 }
                 if (p.startsWith("/pdfcache/")) {
                     String nom = p.substring(10).replaceAll("[^0-9a-z.\\-]", "");

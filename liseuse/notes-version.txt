@@ -1,1 +1,1 @@
-Icônes adaptatives : le logo remplit proprement la forme choisie par le téléphone ou le lanceur (rond, carré, goutte), et suit les icônes à thème d'Android 13+.
+Sécurité : le code éventuellement caché dans un livre EPUB téléchargé ailleurs est désormais bloqué ; il ne peut plus agir sur l'appli.
