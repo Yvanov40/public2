@@ -18,7 +18,7 @@ function esc(s) {
 }
 
 const CONVERSION_DEFAUT = { niveauChapitre: 1, detecterChapitres: true, sautsDePage: true, compresserImages: true, couvertureImage: true };
-const APP_DEFAUT = { apparence: 'systeme', affichage: 'grille', reprendre: true, tri: 'recent', accent: '#b5543a', pdf: 'demander' };
+const APP_DEFAUT = { apparence: 'systeme', affichage: 'grille', reprendre: true, tri: 'recent', accent: '#b5543a', pdf: 'demander', majAuto: true };
 
 const app = window.app = {
   livres: [],
@@ -57,6 +57,11 @@ function demarrer() {
   }
   chargerPro();
   if (A) A.pret();
+  // édition complète : recherche discrète d'une nouvelle version (au plus une fois par jour)
+  if (A && A.verifierMaj && app.pro.edition === 'complete' && app.prefs.majAuto
+    && Date.now() - (Store.get('majVerifiee', 0) || 0) > 20 * 3600000) {
+    setTimeout(() => { Store.set('majVerifiee', Date.now()); A.verifierMaj(false); }, 4000);
+  }
 }
 
 app.systeme = function (sombre) {
@@ -121,6 +126,62 @@ function exigerPro(raison) {
   return false;
 }
 app.exigerPro = exigerPro;
+
+// ================================================================ mise à jour (édition complète)
+
+function afficherMaj() {
+  const g = $('#groupe-maj');
+  const possible = !!(A && A.verifierMaj && app.pro.edition === 'complete');
+  g.hidden = !possible;
+  if (!possible) return;
+  let v = { nom: '' };
+  try { v = JSON.parse(A.versionInstallee()); } catch (e) { /* rien */ }
+  $('#maj-etat').textContent = `Version installée : ${v.nom || '?'}. Les mises à jour viennent du dépôt GitHub de l'appli ; Android vous demande toujours confirmation avant d'installer.`;
+  $('#o-maj-auto').checked = app.prefs.majAuto !== false;
+  $('#o-maj-auto').onchange = e => { app.prefs.majAuto = e.target.checked; Store.set('app', app.prefs); };
+  $('#b-maj').onclick = () => {
+    $('#b-maj').disabled = true;
+    $('#b-maj').textContent = 'Recherche…';
+    Store.set('majVerifiee', Date.now());
+    A.verifierMaj(true);
+  };
+}
+
+function remettreBoutonMaj() {
+  const b = $('#b-maj');
+  if (b) { b.disabled = false; b.textContent = 'Rechercher une mise à jour'; }
+}
+
+async function evenementMaj(e) {
+  if (e.type === 'maj') {
+    remettreBoutonMaj();
+    if (e.erreur) { if (e.manuel) toast(e.erreur, 4000); return; }
+    if (!e.disponible) { if (e.manuel) toast('Vous avez déjà la dernière version.'); return; }
+    const notes = e.notes ? `<p>${esc(e.notes).replace(/\n/g, '<br>')}</p>` : '';
+    const ok = await dialogue(`Version ${e.nom} disponible`, `${notes}<p class="petit-pro">Votre bibliothèque, vos positions de lecture et vos réglages sont conservés.</p>`,
+      [{ texte: 'Plus tard', valeur: false }, { texte: 'Mettre à jour', classe: 'plein', valeur: true }]);
+    if (!ok) return;
+    $('#import-texte').textContent = 'Téléchargement de la mise à jour…';
+    $('#import').classList.add('actif');
+    A.installerMaj(e.code);
+  } else if (e.type === 'maj-progres') {
+    $('#import-texte').textContent = `Téléchargement de la mise à jour… ${e.pourcent} %`;
+  } else if (e.type === 'maj-prete') {
+    $('#import').classList.remove('actif');
+  } else if (e.type === 'maj-erreur') {
+    $('#import').classList.remove('actif');
+    dialogue('Mise à jour impossible', `<p>${esc(e.message || '')}</p>`);
+  } else if (e.type === 'maj-autorisation') {
+    $('#import').classList.remove('actif');
+    const ok = await dialogue('Une autorisation est nécessaire',
+      `<p>Pour installer la mise à jour, Android demande d'autoriser Liseuse à installer des applications.</p>
+       <p>Touchez « Ouvrir le réglage », activez <strong>« Autoriser cette source »</strong>, puis revenez ici : l'installation reprendra.</p>`,
+      [{ texte: 'Annuler', valeur: false }, { texte: 'Ouvrir le réglage', classe: 'plein', valeur: true }]);
+    if (!ok) return;
+    app.majEnAttente = true;
+    A.autoriserInstallation();
+  }
+}
 
 // ================================================================ couleur de l'application
 
@@ -800,6 +861,7 @@ app.toast = toast;
 // ================================================================ évènements venant d'Android
 
 app.evenement = function (e) {
+  if (e.type && e.type.startsWith('maj')) { evenementMaj(e); return; }
   if (e.type === 'pro') {
     app.pro = { actif: !!e.actif, prix: e.prix || '', edition: e.edition || app.pro.edition };
     majPro();
@@ -853,6 +915,8 @@ app.pause = function () {
 
 /** Retour dans l'application : après une vraie absence, la luminosité repart en automatique. */
 app.reprise = function () {
+  // retour du réglage « installer des applis inconnues » : on relance l'installation
+  if (app.majEnAttente && A && A.reprendreMaj) { app.majEnAttente = false; A.reprendreMaj(); }
   if (app.enPauseDepuis && Date.now() - app.enPauseDepuis > 3 * 60000) lecteur.lumiereAuto();
   app.enPauseDepuis = 0;
 };
@@ -988,6 +1052,7 @@ function afficherParametres() {
   $('#o-reprendre').checked = app.prefs.reprendre;
   $('#o-pdf').value = app.prefs.pdf || 'demander';
   afficherPersonnalisation();
+  afficherMaj();
   montrer('parametres');
 }
 

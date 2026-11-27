@@ -19,7 +19,9 @@ VN=$(grep '^versionName=' version.properties | cut -d= -f2)
 
 # manifeste pour aapt (le manifeste du dépôt est au format Gradle : sans paquet ni version)
 sed -e "s|<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">|<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"fr.liseuse\" android:versionCode=\"$VC\" android:versionName=\"$VN\">\\n    <uses-sdk android:minSdkVersion=\"24\" android:targetSdkVersion=\"34\" />|" \
-    -e 's| *android:enableOnBackInvokedCallback="false"||' -e 's|\${applicationId}|fr.liseuse|g' AndroidManifest.xml > "$OUT/AndroidManifest.xml"
+    -e 's| *android:enableOnBackInvokedCallback="false"||' -e 's|\${applicationId}|fr.liseuse|g' \
+    -e 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />|' \
+    AndroidManifest.xml > "$OUT/AndroidManifest.xml"
 
 echo "▸ Ressources ($VN)"
 aapt package -f -m -J "$OUT/gen" -M "$OUT/AndroidManifest.xml" -S res -A assets -I "$ANDROID_JAR" \
@@ -50,4 +52,11 @@ echo "▸ Signature"
 apksigner sign --ks "$CLE" --ks-pass pass:liseuse --key-pass pass:liseuse --ks-key-alias liseuse \
   --min-sdk-version 24 --out "$APK" "$OUT/aligne.apk"
 apksigner verify "$APK"
-echo "✔ $APK ($(du -h "$APK" | cut -f1))"
+# fichier lu par l'appli pour savoir si une mise à jour est disponible
+python3 - "$VC" "$VN" <<'PY'
+import json, sys
+notes = open('notes-version.txt', encoding='utf-8').read().strip() if __import__('os').path.exists('notes-version.txt') else ''
+json.dump({'versionCode': int(sys.argv[1]), 'versionName': sys.argv[2], 'notes': notes},
+          open('derniere-version.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+PY
+echo "✔ $APK ($(du -h "$APK" | cut -f1)) — version $VN ($VC)"

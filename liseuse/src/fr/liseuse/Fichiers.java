@@ -27,6 +27,11 @@ public final class Fichiers extends ContentProvider {
 
     private File fichier(Uri uri) throws FileNotFoundException {
         List<String> s = uri.getPathSegments();
+        if (s.size() == 2 && "maj".equals(s.get(0)) && "Liseuse.apk".equals(s.get(1))) {
+            File m = new File(getContext().getCacheDir(), "maj/Liseuse.apk");
+            if (!m.exists()) throw new FileNotFoundException();
+            return m;
+        }
         if (s.isEmpty() || !s.get(0).matches("[0-9a-f]{6,32}")) throw new FileNotFoundException();
         String nom = uri.getLastPathSegment();
         boolean pdf = nom != null && nom.toLowerCase().endsWith(".pdf");
@@ -65,6 +70,7 @@ public final class Fichiers extends ContentProvider {
     public String getType(Uri uri) {
         String n = uri.getLastPathSegment();
         if (n != null && n.toLowerCase().endsWith(".pdf")) return "application/pdf";
+        if (n != null && n.toLowerCase().endsWith(".apk")) return "application/vnd.android.package-archive";
         return "application/epub+zip";
     }
 

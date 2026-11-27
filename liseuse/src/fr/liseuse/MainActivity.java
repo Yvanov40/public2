@@ -1800,6 +1800,103 @@ public final class MainActivity extends Activity {
             });
         }
 
+        // ---------------------------------------------------------------- mise à jour (édition complète)
+
+        @JavascriptInterface
+        public String versionInstallee() {
+            return obj("code", MiseAJour.versionInstallee(MainActivity.this), "nom", BuildConfig.VERSION).toString();
+        }
+
+        /** Cherche une nouvelle version ; réponse par l'évènement « maj ». */
+        @JavascriptInterface
+        public void verifierMaj(final boolean manuel) {
+            if (!"complete".equals(achats.edition())) return; // l'édition Play Store passe par le Play Store
+            travail.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        JSONObject d = new MiseAJour(MainActivity.this).derniere();
+                        int code = d.optInt("versionCode", 0);
+                        boolean dispo = code > MiseAJour.versionInstallee(MainActivity.this);
+                        evenement(obj("type", "maj", "disponible", dispo, "code", code, "nom", d.optString("versionName"),
+                                "notes", d.optString("notes"), "manuel", manuel));
+                    } catch (Throwable e) {
+                        evenement(obj("type", "maj", "erreur", "Impossible de joindre GitHub (" + message(e) + ").", "manuel", manuel));
+                    }
+                }
+            });
+        }
+
+        /** Télécharge puis propose l'installation de la nouvelle version. */
+        @JavascriptInterface
+        public void installerMaj(final int code) {
+            if (!"complete".equals(achats.edition())) return;
+            final MiseAJour m = new MiseAJour(MainActivity.this);
+            travail.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        m.telecharger(code, new MiseAJour.Suivi() {
+                            @Override
+                            public void progres(int p) {
+                                evenement(obj("type", "maj-progres", "pourcent", p));
+                            }
+                        });
+                        ui.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (!m.installationAutorisee()) {
+                                    evenement(obj("type", "maj-autorisation"));
+                                    return;
+                                }
+                                try {
+                                    m.installer();
+                                    evenement(obj("type", "maj-prete"));
+                                } catch (Exception e) {
+                                    evenement(obj("type", "maj-erreur", "message", message(e)));
+                                }
+                            }
+                        });
+                    } catch (Throwable e) {
+                        evenement(obj("type", "maj-erreur", "message", message(e)));
+                    }
+                }
+            });
+        }
+
+        /** Après avoir autorisé l'installation : relance l'installateur avec le fichier déjà téléchargé. */
+        @JavascriptInterface
+        public void reprendreMaj() {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    MiseAJour m = new MiseAJour(MainActivity.this);
+                    if (!m.fichier().exists()) {
+                        evenement(obj("type", "maj-erreur", "message", "fichier de mise à jour introuvable, recommencez"));
+                    } else if (!m.installationAutorisee()) {
+                        evenement(obj("type", "maj-autorisation"));
+                    } else {
+                        m.installer();
+                        evenement(obj("type", "maj-prete"));
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void autoriserInstallation() {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        new MiseAJour(MainActivity.this).ouvrirAutorisation();
+                    } catch (Exception e) {
+                        toast("Ouvrez Paramètres → Applications → Liseuse → Installer des applis inconnues.");
+                    }
+                }
+            });
+        }
+
         // ---------------------------------------------------------------- version Pro
 
         @JavascriptInterface
