@@ -102,11 +102,47 @@ final class FolderWheelView extends View {
         liftListener = l;
     }
 
+    /** Ouvre un sous-dossier à la place du dossier affiché (même centre). */
+    interface SubOpener {
+        void openSub(String name, float x, float y);
+    }
+
+    private SubOpener subOpener;
+
+    void setSubOpener(SubOpener o) {
+        subOpener = o;
+    }
+
+    private static boolean isSub(Spot s) {
+        return s != null && Store.isSub(s.app.component);
+    }
+
+    /** Glisser et rester un instant sur un sous-dossier l'ouvre, le doigt continue dedans. */
+    private final Runnable subDwell = () -> {
+        if (!open || !tracking || hover < 0 || hover >= spots.size()) return;
+        Spot s = spots.get(hover);
+        if (!isSub(s) || subOpener == null) return;
+        haptic(HapticFeedbackConstants.VIRTUAL_KEY);
+        subOpener.openSub(s.app.label, cx, cy);
+        tracking = true;
+        moved = true;
+    };
+
+    void makeSticky() {
+        sticky = true;
+        hover = -1;
+        invalidate();
+    }
+
     private final Runnable longPress = () -> {
         if (hover < 0 || listener == null || !tracking) return;
         tracking = false;
         haptic(HapticFeedbackConstants.LONG_PRESS);
         AppRepository.AppEntry app = spots.get(hover).app;
+        if (Store.isSub(app.component)) {
+            listener.onFolderAppMenu(app, folder); // menu du sous-dossier
+            return;
+        }
         if (realFolder && liftListener != null) {
             String f = folder;
             close();
@@ -191,6 +227,7 @@ final class FolderWheelView extends View {
 
     void close() {
         removeCallbacks(longPress);
+        removeCallbacks(subDwell);
         boolean was = open;
         open = false;
         sticky = false;
@@ -392,6 +429,8 @@ final class FolderWheelView extends View {
                 if (h != hover) {
                     hover = h;
                     if (h >= 0) haptic(HapticFeedbackConstants.CLOCK_TICK);
+                    removeCallbacks(subDwell);
+                    if (h >= 0 && isSub(spots.get(h))) postDelayed(subDwell, 450);
                     invalidate();
                 }
                 // Un doigt qui glisse ne soulève jamais d'appli : seul l'appui long commencé
@@ -401,6 +440,7 @@ final class FolderWheelView extends View {
 
             case MotionEvent.ACTION_UP:
                 removeCallbacks(longPress);
+                removeCallbacks(subDwell);
                 if (!tracking) return true;
                 tracking = false;
                 int hit = spotAt(x, y);
@@ -425,6 +465,11 @@ final class FolderWheelView extends View {
     }
 
     private void launch(Spot s) {
+        if (isSub(s) && subOpener != null) {
+            subOpener.openSub(s.app.label, cx, cy);
+            makeSticky(); // ouvert d'un toucher ou d'un lâcher : il attend le choix
+            return;
+        }
         if (listener == null) return;
         int[] loc = new int[2];
         getLocationOnScreen(loc);

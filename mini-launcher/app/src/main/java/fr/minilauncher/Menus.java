@@ -335,12 +335,28 @@ final class Menus {
         List<Object[]> acts = new ArrayList<>();
         acts.add(new Object[]{"＋", "Applis", false, (Runnable) () -> {
             Store.Group g = Store.find(store.groups(), folder);
-            pickApps(a, "Applis du dossier", apps, g == null ? new ArrayList<>() : g.apps, keys -> {
+            pickApps(a, "Applis et dossiers du dossier", apps, g == null ? new ArrayList<>() : g.apps, keys -> {
                 store.setFolderApps(folder, keys);
                 changed.run();
             });
         }});
         acts.add(new Object[]{"⇅", "Organiser", false, (Runnable) () -> organizeFolder(a, folder, apps, visible, changed)});
+        acts.add(new Object[]{"▣", "Sous-dossier", false, (Runnable) () -> askName(a, "Nouveau sous-dossier",
+                store.freeFolderName("Dossier"), name -> {
+                    if (Store.find(store.groups(), name) != null) {
+                        android.widget.Toast.makeText(a, "Un dossier porte déjà ce nom",
+                                android.widget.Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    store.createSubFolder(folder, name);
+                    changed.run();
+                    List<AppRepository.AppEntry> plain = new ArrayList<>();
+                    for (AppRepository.AppEntry e : apps) if (!Store.isSub(e.component)) plain.add(e);
+                    pickApps(a, "Applis de « " + name + " »", plain, new ArrayList<>(), keys -> {
+                        store.setFolderApps(name, keys);
+                        changed.run();
+                    });
+                })});
         acts.add(new Object[]{"◐", "Personnaliser", false, (Runnable) () -> customizeFolder(a, folder, changed)});
         if (resize != null) acts.add(new Object[]{"⤢", "Taille", false, resize});
         acts.add(new Object[]{"✎", "Renommer", false, (Runnable) () -> askName(a, "Renommer le dossier", folder, name -> {

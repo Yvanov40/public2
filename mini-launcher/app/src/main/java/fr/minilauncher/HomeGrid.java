@@ -223,17 +223,111 @@ final class HomeGrid extends FrameLayout {
 
     /** Les applis d'un dossier, dans l'ordre alphabétique. */
     List<AppRepository.AppEntry> folderApps(String name) {
-        List<AppRepository.AppEntry> out = new java.util.ArrayList<>();
-        Store.Group g = Store.find(store.groups(), name);
-        if (g == null) return out;
-        // L'ordre choisi par l'utilisateur (Organiser) : place dans le cercle et applis visibles.
         Map<String, AppRepository.AppEntry> byKey = new HashMap<>();
         for (AppRepository.AppEntry e : sortedApps()) byKey.put(Store.key(e.component), e);
+        return folderApps(store.groups(), name, byKey, 0);
+    }
+
+    private List<AppRepository.AppEntry> folderApps(List<Store.Group> gs, String name,
+                                                    Map<String, AppRepository.AppEntry> byKey, int depth) {
+        List<AppRepository.AppEntry> out = new java.util.ArrayList<>();
+        Store.Group g = Store.find(gs, name);
+        if (g == null) return out;
+        // L'ordre choisi par l'utilisateur (Organiser) : place dans le cercle et applis visibles.
         for (String k : g.apps) {
             AppRepository.AppEntry e = byKey.get(k);
+            if (e == null && depth < 4) {
+                android.content.ComponentName cn = android.content.ComponentName.unflattenFromString(k);
+                if (Store.isSub(cn)) e = subEntry(gs, cn.getClassName(), byKey, depth + 1);
+            }
             if (e != null) out.add(e);
         }
         return out;
+    }
+
+    /** Un sous-dossier vu comme une appli : son nom et une icône de dossier miniature. */
+    private AppRepository.AppEntry subEntry(List<Store.Group> gs, String name,
+                                            Map<String, AppRepository.AppEntry> byKey, int depth) {
+        Store.Group g = Store.find(gs, name);
+        if (g == null) return null;
+        List<AppRepository.AppEntry> inner = folderApps(gs, name, byKey, depth);
+        return new AppRepository.AppEntry(name, Store.subComponent(name), null,
+                new FolderDrawable(g.color, inner, g.shape == 1));
+    }
+
+    /**
+     * Toutes les applis, plus les dossiers qu'on peut ranger dans {@code into} (pas lui-même,
+     * ni un dossier qui le contient déjà).
+     */
+    List<AppRepository.AppEntry> appsWithFolders(String into) {
+        List<AppRepository.AppEntry> out = new java.util.ArrayList<>();
+        List<Store.Group> gs = store.groups();
+        Map<String, AppRepository.AppEntry> byKey = new HashMap<>();
+        for (AppRepository.AppEntry e : sortedApps()) byKey.put(Store.key(e.component), e);
+        for (Store.Group g : gs) {
+            if (g.name.equals(into) || store.folderContains(g.name, into)) continue;
+            AppRepository.AppEntry e = subEntry(gs, g.name, byKey, 1);
+            if (e != null) out.add(e);
+        }
+        out.addAll(sortedApps());
+        return out;
+    }
+
+    /** Icône d'un sous-dossier : fond de sa couleur et ses 4 premières applis. */
+    static final class FolderDrawable extends android.graphics.drawable.Drawable {
+        private final Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final List<android.graphics.drawable.Drawable> icons = new java.util.ArrayList<>();
+        private final boolean round;
+
+        FolderDrawable(int color, List<AppRepository.AppEntry> apps, boolean round) {
+            this.round = round;
+            bg.setColor((color & 0x00FFFFFF) | 0xCC000000);
+            for (int i = 0; i < Math.min(4, apps.size()); i++) {
+                if (apps.get(i).icon != null) icons.add(Sheet.copy(apps.get(i).icon));
+            }
+        }
+
+        @Override
+        public void draw(Canvas c) {
+            android.graphics.Rect b = getBounds();
+            float w = b.width(), h = b.height();
+            android.graphics.RectF r = new android.graphics.RectF(b);
+            if (round) c.drawOval(r, bg);
+            else c.drawRoundRect(r, w * 0.28f, h * 0.28f, bg);
+            float pad = w * (round ? 0.2f : 0.14f), gap = w * 0.06f;
+            float cell = (w - 2 * pad - gap) / 2f;
+            for (int i = 0; i < icons.size(); i++) {
+                int col = i % 2, row = i / 2;
+                int l = (int) (b.left + pad + col * (cell + gap)), t = (int) (b.top + pad + row * (cell + gap));
+                android.graphics.drawable.Drawable d = icons.get(i);
+                d.setBounds(l, t, (int) (l + cell), (int) (t + cell));
+                d.draw(c);
+            }
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            bg.setAlpha(alpha);
+        }
+
+        @Override
+        public void setColorFilter(android.graphics.ColorFilter cf) {
+        }
+
+        @Override
+        public int getOpacity() {
+            return android.graphics.PixelFormat.TRANSLUCENT;
+        }
+
+        @Override
+        public int getIntrinsicWidth() {
+            return 192;
+        }
+
+        @Override
+        public int getIntrinsicHeight() {
+            return 192;
+        }
     }
 
     /** Nombre d'applis visibles sur l'icône du dossier (grille ou mini-icônes), 0 si aucune. */
@@ -466,13 +560,24 @@ final class HomeGrid extends FrameLayout {
         if (dragView == null) return;
         Store.HomeItem it = dragItem;
         Store.HomeItem target = null;
-        if (!it.widget && it.folder == null) {
+        if (!it.widget) {
             for (Map.Entry<View, Store.HomeItem> e : viewItems.entrySet()) {
                 View v = e.getKey();
                 Store.HomeItem o = e.getValue();
                 if (o == it || o.widget) continue;
+                if (it.folder != null && o.folder == null) continue; // un dossier ne va que dans un dossier
                 if (fx >= v.getLeft() && fx < v.getRight() && fy >= v.getTop() && fy < v.getBottom()) target = o;
             }
+        }
+        if (target != null && it.folder != null) {
+            resetDragView();
+            if (!store.nestFolder(it.folder, target.folder)) {
+                android.widget.Toast.makeText(getContext(), "Ce dossier contient déjà « " + target.folder + " »",
+                        android.widget.Toast.LENGTH_SHORT).show();
+            }
+            items = store.homeItems();
+            rebuild();
+            return;
         }
         if (target != null) {
             resetDragView();

@@ -109,6 +109,9 @@ L'écran principal est une grille de tuiles ; chaque tuile ouvre sa page :
   « Ouverture » : cercle, colonne (glisser vertical, au-dessus ou en dessous du dossier),
   grille de tuiles ou liste (icône + nom). « Afficher le nom » : masque le nom du dossier
   sous l'icône et dans l'ouverture (le nom de l'appli survolée reste affiché).
+  Sous-dossiers : tuile « Sous-dossier » du menu d'un dossier, cocher un dossier dans
+  « Applis », ou glisser un dossier de l'accueil sur un autre. Dans le cercle, toucher le
+  sous-dossier ou rester dessus un instant en glissant l'ouvre ; appui long : son menu.
   Organiser : toucher une appli puis sa nouvelle place ; l'ordre est celui du cercle (en
   haut, puis sens horaire) et les premières sont celles visibles sur l'icône.
   Invisible : la case paraît vide mais reste un dossier (contour en pointillés pendant un

@@ -293,6 +293,7 @@ final class HomeView extends FrameLayout {
         addView(strip, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         addView(folderWheel, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         folderWheel.setLiftListener(this::onLift);
+        folderWheel.setSubOpener(this::openFolderAt);
         strip.setLiftListener(this::onLift);
         ink.setStyle(android.graphics.Paint.Style.STROKE);
         ink.setStrokeCap(android.graphics.Paint.Cap.ROUND);
@@ -604,6 +605,20 @@ final class HomeView extends FrameLayout {
         } else if (Math.abs(dx) > 1.3f * Math.abs(dy)) {
             host.onGesture(dx < 0 ? "gLeft" : "gRight");
         }
+    }
+
+    /** Ouvre un dossier (ou sous-dossier) avec ses réglages, centré en (x, y). */
+    void openFolderAt(String name, float x, float y) {
+        folderWheel.setIconFactor(grid.folderIconFactor(name));
+        folderWheel.setStyle(grid.folderOpenStyle(name));
+        folderWheel.setShowName(grid.folderShowName(name));
+        folderWheel.open(name, grid.folderColor(name), grid.folderApps(name), x, y);
+    }
+
+    /** Sous-dossier touché sur un dossier à icônes directes : il s'ouvre et attend un toucher. */
+    void openFolderSticky(String name, float x, float y) {
+        openFolderAt(name, x, y);
+        folderWheel.makeSticky();
     }
 
     /**

@@ -427,13 +427,19 @@ public final class HomeActivity extends Activity
 
     @Override
     public void onLaunchHomeApp(AppRepository.AppEntry app, Rect bounds) {
+        if (Store.isSub(app.component)) {
+            int[] loc = new int[2];
+            home.getLocationOnScreen(loc);
+            home.openFolderSticky(app.label, bounds.exactCenterX() - loc[0], bounds.exactCenterY() - loc[1]);
+            return;
+        }
         Launcher.launch(this, app, bounds, home);
     }
 
     @Override
     public void onHomeItemMenu(Store.HomeItem item) {
         if (item.folder != null) {
-            Menus.folderMenu(this, item.folder, grid.sortedApps(), this::refreshAll,
+            Menus.folderMenu(this, item.folder, grid.appsWithFolders(item.folder), this::refreshAll,
                     Store.get(this).homeLocked() ? null : () -> startResize(item), grid.folderVisibleCount(item));
         } else if (item.widget) {
             AppWidgetProviderInfo info = widgetManager.getAppWidgetInfo(item.widgetId);
@@ -577,12 +583,17 @@ public final class HomeActivity extends Activity
 
     @Override
     public void onFolderLaunch(AppRepository.AppEntry app, Rect bounds) {
+        if (Store.isSub(app.component)) return;
         Launcher.launch(this, app, bounds, home);
     }
 
     @Override
     public void onFolderAppMenu(AppRepository.AppEntry app, String folder) {
         folderWheel.close();
+        if (Store.isSub(app.component)) {
+            Menus.folderMenu(this, app.label, grid.appsWithFolders(app.label), this::refreshAll, null, 0);
+            return;
+        }
         Menus.appMenu(this, app.component, app.label, folder, this::refreshAll);
     }
 

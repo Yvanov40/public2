@@ -55,6 +55,59 @@ final class Store {
         return cn.flattenToString();
     }
 
+    /** Un sous-dossier est rangé dans son dossier parent comme une fausse appli de ce paquet. */
+    static final String SUB_PKG = "fr.minilauncher.dossier";
+
+    static ComponentName subComponent(String folder) {
+        return new ComponentName(SUB_PKG, folder);
+    }
+
+    static String subKey(String folder) {
+        return key(subComponent(folder));
+    }
+
+    static boolean isSub(ComponentName cn) {
+        return cn != null && SUB_PKG.equals(cn.getPackageName());
+    }
+
+    /** Le dossier {@code outer} contient-il {@code inner}, directement ou plus profond ? */
+    boolean folderContains(String outer, String inner) {
+        List<Group> gs = groups();
+        java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        todo.add(outer);
+        while (!todo.isEmpty()) {
+            Group g = find(gs, todo.poll());
+            if (g == null || !seen.add(g.name)) continue;
+            for (String k : g.apps) {
+                ComponentName cn = ComponentName.unflattenFromString(k);
+                if (!isSub(cn)) continue;
+                if (cn.getClassName().equals(inner)) return true;
+                todo.add(cn.getClassName());
+            }
+        }
+        return false;
+    }
+
+    /** Nouveau dossier rangé dans {@code parent} (pas sur l'accueil). */
+    void createSubFolder(String parent, String name) {
+        List<Group> gs = groups();
+        if (find(gs, name) == null) gs.add(new Group(name, GROUP_COLORS[gs.size() % GROUP_COLORS.length]));
+        Group p = find(gs, parent);
+        if (p != null && !p.apps.contains(subKey(name))) p.apps.add(subKey(name));
+        setGroups(gs);
+    }
+
+    /** Un dossier de l'accueil va dans un autre dossier. */
+    boolean nestFolder(String folder, String into) {
+        if (folder.equals(into) || folderContains(folder, into)) return false;
+        addToFolder(into, subKey(folder));
+        List<HomeItem> items = homeItems();
+        for (int i = items.size() - 1; i >= 0; i--) if (folder.equals(items.get(i).folder)) items.remove(i);
+        setHomeItems(items);
+        return true;
+    }
+
     // ------------------------------------------------------------ réglages
 
     boolean autoFavorites() {
@@ -524,6 +577,10 @@ final class Store {
         Group g = find(gs, from);
         if (g == null || find(gs, to) != null) return;
         g.name = to;
+        for (Group o : gs) {
+            int i = o.apps.indexOf(subKey(from));
+            if (i >= 0) o.apps.set(i, subKey(to));
+        }
         setGroups(gs);
         List<HomeItem> items = homeItems();
         for (HomeItem it : items) if (from.equals(it.folder)) it.folder = to;
@@ -534,6 +591,7 @@ final class Store {
         List<Group> gs = groups();
         Group g = find(gs, name);
         if (g != null) gs.remove(g);
+        for (Group o : gs) o.apps.remove(subKey(name));
         setGroups(gs);
         List<HomeItem> items = homeItems();
         for (int i = items.size() - 1; i >= 0; i--) if (name.equals(items.get(i).folder)) items.remove(i);
@@ -545,6 +603,16 @@ final class Store {
         java.util.Set<String> onHome = new java.util.HashSet<>();
         for (HomeItem it : homeItems()) if (it.folder != null) onHome.add(it.folder);
         List<Group> gs = groups();
+        // Les sous-dossiers d'un dossier gardé sont gardés aussi.
+        java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>(onHome);
+        while (!todo.isEmpty()) {
+            Group g = find(gs, todo.poll());
+            if (g == null) continue;
+            for (String k : g.apps) {
+                ComponentName cn = ComponentName.unflattenFromString(k);
+                if (isSub(cn) && onHome.add(cn.getClassName())) todo.add(cn.getClassName());
+            }
+        }
         boolean changed = gs.removeIf(g -> !onHome.contains(g.name));
         if (changed) setGroups(gs);
     }
