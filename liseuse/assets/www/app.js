@@ -18,7 +18,7 @@ function esc(s) {
 }
 
 const CONVERSION_DEFAUT = { niveauChapitre: 1, detecterChapitres: true, sautsDePage: true, compresserImages: true, couvertureImage: true };
-const APP_DEFAUT = { apparence: 'systeme', affichage: 'grille', reprendre: true, tri: 'recent', accent: '#b5543a', pdf: 'demander', majAuto: true };
+const APP_DEFAUT = { apparence: 'systeme', affichage: 'grille', reprendre: true, tri: 'recent', accent: '#b5543a', pdf: 'demander', majAuto: true, colonnes: 3 };
 
 const app = window.app = {
   livres: [],
@@ -516,6 +516,7 @@ function afficherBiblio() {
   dossiersVus.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { numeric: true }));
   const grille = $('#grille');
   grille.classList.toggle('liste', app.prefs.affichage === 'liste');
+  appliquerColonnes();
   grille.classList.toggle('en-selection', !!app.selection);
   $('#vide').hidden = app.livres.length > 0 || dossiers().length > 0;
   $('#b-vue use').setAttribute('href', app.prefs.affichage === 'liste' ? '#i-grille' : '#i-liste');
@@ -693,6 +694,46 @@ document.addEventListener('click', e => {
   else if (m === 'reglages') afficherParametres();
   else if (m === 'maj') { toast('Recherche d\'une mise à jour…'); Store.set('majVerifiee', Date.now()); A.verifierMaj(true); }
 });
+
+// ================================================================ taille des vignettes
+
+/** Nombre de vignettes par ligne : réglage pour le téléphone tenu droit, adapté en paysage. */
+function appliquerColonnes() {
+  const g = $('#grille');
+  const n = Math.max(2, Math.min(7, app.prefs.colonnes || 3));
+  const paysage = innerWidth > innerHeight * 1.1;
+  const eff = paysage ? Math.round(n * innerWidth / Math.max(1, innerHeight)) : n;
+  g.style.setProperty('--colonnes', eff);
+  g.dataset.colonnes = Math.min(7, n);
+}
+window.addEventListener('resize', () => { if (app.ecran === 'biblio') appliquerColonnes(); });
+
+function changerColonnes(n) {
+  n = Math.max(2, Math.min(7, n));
+  if (n === app.prefs.colonnes) return;
+  app.prefs.colonnes = n;
+  Store.set('app', app.prefs);
+  appliquerColonnes();
+  const o = $('#o-colonnes');
+  if (o) { o.value = n; $('#v-colonnes').textContent = n; }
+}
+
+// pincer la bibliothèque : écarter = vignettes plus grandes, rapprocher = plus petites
+(function pincementBiblio() {
+  const zone = $('#biblio-defile');
+  let d0 = null, n0 = 3;
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  zone.addEventListener('touchstart', e => {
+    if (e.touches.length === 2 && app.prefs.affichage !== 'liste') { d0 = dist(e.touches); n0 = app.prefs.colonnes || 3; }
+  }, { passive: true });
+  zone.addEventListener('touchmove', e => {
+    if (d0 == null || e.touches.length !== 2) return;
+    e.preventDefault();
+    const r = dist(e.touches) / d0;
+    changerColonnes(Math.round(n0 / Math.max(0.25, r)));
+  }, { passive: false });
+  zone.addEventListener('touchend', e => { if (e.touches.length < 2) d0 = null; });
+})();
 
 // ================================================================ écrans
 
@@ -1062,6 +1103,9 @@ function afficherParametres() {
   $('#o-affichage').value = app.prefs.affichage;
   $('#o-reprendre').checked = app.prefs.reprendre;
   $('#o-pdf').value = app.prefs.pdf || 'demander';
+  $('#o-colonnes').value = app.prefs.colonnes || 3;
+  $('#v-colonnes').textContent = app.prefs.colonnes || 3;
+  $('#o-colonnes').oninput = e => changerColonnes(+e.target.value);
   try { afficherMaj(); } catch (e) { console.error(e); }
   try { afficherPersonnalisation(); } catch (e) { console.error(e); }
   montrer('parametres');

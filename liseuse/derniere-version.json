@@ -1,5 +1,5 @@
 {
- "versionCode": 20,
- "versionName": "3.6",
- "notes": "Sécurité : le code éventuellement caché dans un livre EPUB téléchargé ailleurs est désormais bloqué ; il ne peut plus agir sur l'appli."
+ "versionCode": 21,
+ "versionName": "3.7",
+ "notes": "Taille des vignettes réglable : de 2 à 7 par ligne, dans Réglages ou en pinçant la bibliothèque avec deux doigts."
 }
