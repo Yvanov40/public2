@@ -20,4 +20,5 @@
     <string name="queue">File</string>
     <string name="tab_music">Musique</string>
     <string name="hint_music">Titres, albums, artistes…</string>
+    <string name="hint_podcasts">Podcasts ou adresse de flux RSS…</string>
 </resources>

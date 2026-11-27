@@ -9,7 +9,7 @@ Lecteur audio/vidéo YouTube léger pour Android (usage personnel).
 - Sous-titres YouTube, y compris automatiques (bouton CC)
 - Recherche, lien collé, ou « Partager » depuis l'appli YouTube
 - Plein écran en tournant le téléphone ou via le bouton du lecteur
-- Interface Material You (couleurs du fond d'écran), glisser entre les écrans, mini-lecteur
+- Interface façon Spotify : 2 onglets (Accueil, Bibliothèque), bulles de filtre en bas (🔍, Tout, Musique, Vidéos, Podcasts), tuiles d'accès rapide, réglages derrière la roue crantée
 - Abonnements : chaînes suivies et leurs nouveautés ; chaînes dans la recherche
 - Appui long sur une vidéo : écouter directement en arrière-plan, télécharger, voir la chaîne, partager
 - Podcasts : recherche (annuaires Apple Podcasts et fyyd), flux trouvé à partir d'un lien de page ou Apple Podcasts, ajout d'un flux RSS (Acast…), nouveaux épisodes, téléchargement des épisodes

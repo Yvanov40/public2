@@ -110,7 +110,13 @@ class MainActivity : AppCompatActivity() {
     private val adapters = Array(PAGES) { RowAdapter() }
     private val lists = arrayOfNulls<RecyclerView>(PAGES)
     private val refreshers = arrayOfNulls<SwipeRefreshLayout>(PAGES)
-    private val navIds = intArrayOf(R.id.nav_home, R.id.nav_music, R.id.nav_subs, R.id.nav_offline, R.id.nav_settings)
+    private val navIds = intArrayOf(R.id.nav_home, R.id.nav_offline)
+
+    /** Bulle choisie sur l'Accueil : all, music, videos, podcasts. */
+    private var homeFilter = "all"
+    private var settingsOpen = false
+    private var searchOpen = false
+    private var bubbleKey = ""
 
     // ——— Musique ———
     private sealed class MPage {
@@ -353,12 +359,16 @@ class MainActivity : AppCompatActivity() {
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 if (bottomNav.selectedItemId != navIds[position]) bottomNav.selectedItemId = navIds[position]
-                if (position == SUBS) { if (subsMode == "pod") loadPodFeed() else loadSubsFeed() }
-                if (position == OFFLINE) rescanLocal()
-                query.hint = getString(if (position == MUSIC) R.string.hint_music else R.string.hint)
-                if (position == MUSIC) render(MUSIC)
+                if (settingsOpen) settingsOpen = false
+                if (position == 1) rescanLocal() else ensureLoads()
+                renderAll()
             }
         })
+        findViewById<View>(R.id.settingsBtn).setOnClickListener {
+            settingsOpen = !settingsOpen
+            renderAll()
+            lists[pager.currentItem]?.scrollToPosition(0)
+        }
         bottomNav.setOnItemSelectedListener { item ->
             val i = navIds.indexOf(item.itemId)
             if (i >= 0 && pager.currentItem != i) pager.setCurrentItem(i, true)
@@ -421,21 +431,25 @@ class MainActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                val page = pager.currentItem
+                val phys = pager.currentItem
+                val v = currentVirtual()
                 when {
                     fullscreen -> requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                    podPage?.page == page -> closePodcast()
-                    channelPage?.page == page -> closeChannel()
-                    page == SUBS && podQuery != null -> clearPodSearch()
-                    page == MUSIC && musicStack.isNotEmpty() -> popMusic()
-                    page == MUSIC && musicQuery != null -> clearSearch()
-                    page == OFFLINE && folderStack.isNotEmpty() -> leaveFolder()
-                    page == OFFLINE && libFilter != "all" -> {
+                    settingsOpen -> { settingsOpen = false; renderAll() }
+                    podPage?.page == phys -> closePodcast()
+                    channelPage?.page == phys -> closeChannel()
+                    v == SUBS && podQuery != null -> clearPodSearch()
+                    v == MUSIC && musicStack.isNotEmpty() -> popMusic()
+                    v == MUSIC && musicQuery != null -> clearSearch()
+                    v == OFFLINE && folderStack.isNotEmpty() -> leaveFolder()
+                    v == OFFLINE && libFilter != "all" -> {
                         libFilter = "all"
-                        render(OFFLINE)
+                        renderAll()
                     }
-                    page == HOME && searchQuery != null -> clearSearch()
-                    page != HOME -> pager.setCurrentItem(HOME, true)
+                    v == HOME && searchQuery != null -> clearSearch()
+                    searchOpen -> toggleSearch()
+                    phys == 0 && homeFilter != "all" -> show(ALL)
+                    phys != 0 -> pager.setCurrentItem(0, true)
                     else -> moveTaskToBack(true) // l'audio continue
                 }
             }
@@ -451,9 +465,11 @@ class MainActivity : AppCompatActivity() {
         Downloads.onChange = { render(OFFLINE) }
         refreshUi()
         renderAll()
+        savedInstanceState?.getString("filter")?.let { homeFilter = it }
         savedInstanceState?.getInt("page", -1)?.takeIf { it in 0 until PAGES }?.let {
             pager.setCurrentItem(it, false)
         }
+        renderAll()
         if (savedInstanceState == null) {
             handleIntent(intent)
             autoUpdateCheck()
@@ -491,6 +507,7 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putInt("page", pager.currentItem)
+        outState.putString("filter", homeFilter)
     }
 
     override fun onStart() {
@@ -550,7 +567,7 @@ class MainActivity : AppCompatActivity() {
             applyGrid(h.list)
             lists[position] = h.list
             refreshers[position] = h.refresh
-            h.refresh.isEnabled = position == HOME || position == SUBS
+            h.refresh.isEnabled = position == 0
             h.refresh.setOnRefreshListener { onPullRefresh(position) }
         }
     }
@@ -563,10 +580,17 @@ class MainActivity : AppCompatActivity() {
         list.setPadding(pad, list.paddingTop, pad, list.paddingBottom)
     }
 
-    private fun onPullRefresh(page: Int) {
-        when (page) {
+    private fun onPullRefresh(phys: Int) {
+        when (virtualFor(phys)) {
+            ALL -> {
+                feed = null
+                loadFeed()
+                loadSubsFeed(force = true)
+                loadPodFeed(force = true)
+            }
+            MUSIC -> refreshers[phys]?.isRefreshing = false
             HOME -> if (searchQuery != null) {
-                refreshers[HOME]?.isRefreshing = false
+                refresherFor(HOME)?.isRefreshing = false
                 searchQuery?.let { search(it) }
             } else {
                 feed = null
@@ -576,58 +600,230 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun onReselect(page: Int) {
+    private fun onReselect(phys: Int) {
         when {
-            podPage?.page == page -> closePodcast()
-            channelPage?.page == page -> closeChannel()
-            page == HOME && searchQuery != null -> clearSearch()
-            page == MUSIC && (musicStack.isNotEmpty() || musicQuery != null) -> {
+            settingsOpen -> { settingsOpen = false; renderAll() }
+            podPage?.page == phys -> closePodcast()
+            channelPage?.page == phys -> closeChannel()
+            phys == 0 && (searchQuery != null || musicQuery != null || podQuery != null || musicStack.isNotEmpty()) -> {
                 musicStack.clear()
                 musicQuery = null
                 musicResult = null
+                searchQuery = null
+                searchResults = emptyList()
+                podQuery = null
+                podResults2 = null
                 query.setText("")
-                render(MUSIC)
+                renderAll()
             }
-            page == OFFLINE && (folderStack.isNotEmpty() || libFilter != "all") -> {
+            phys == 0 && homeFilter != "all" -> show(ALL)
+            phys == 1 && (folderStack.isNotEmpty() || libFilter != "all") -> {
                 libFilter = "all"
                 folderStack.clear()
                 folderFiles = null
-                render(OFFLINE)
+                renderAll()
             }
-            else -> lists[page]?.smoothScrollToPosition(0)
+            else -> lists[phys]?.smoothScrollToPosition(0)
         }
     }
 
-    private fun renderAll() = (0 until PAGES).forEach { render(it) }
+    /** La vue affichée sur un écran réel. */
+    private fun virtualFor(phys: Int): Int = when {
+        settingsOpen && phys == pager.currentItem -> SETTINGS
+        phys == 1 -> OFFLINE
+        homeFilter == "music" -> MUSIC
+        homeFilter == "videos" -> HOME
+        homeFilter == "podcasts" -> SUBS
+        else -> ALL
+    }
 
-    private fun render(page: Int) {
-        if (page == OFFLINE) {
-            val n = Downloads.active()
-            val badge = bottomNav.getOrCreateBadge(R.id.nav_offline)
-            badge.isVisible = n > 0
-            if (n > 0) badge.number = n
+    /** Les vues dont dépend une vue (le « Tout » rassemble un peu de chaque). */
+    private fun deps(v: Int): Set<Int> = when (v) {
+        ALL -> setOf(ALL, HOME, MUSIC, SUBS)
+        HOME -> setOf(HOME, SUBS)
+        else -> setOf(v)
+    }
+
+    private fun currentVirtual() = virtualFor(pager.currentItem)
+    private fun physOf(v: Int): Int? = (0 until PAGES).firstOrNull { v in deps(virtualFor(it)) }
+    private fun listFor(v: Int): RecyclerView? = physOf(v)?.let { lists[it] }
+    private fun refresherFor(v: Int): SwipeRefreshLayout? = physOf(v)?.let { refreshers[it] }
+
+    /** Affiche une vue : choisit l'onglet et la bulle qui conviennent. */
+    private fun show(v: Int) {
+        settingsOpen = v == SETTINGS
+        when (v) {
+            OFFLINE -> pager.setCurrentItem(1, true)
+            SETTINGS -> {}
+            else -> {
+                homeFilter = when (v) {
+                    MUSIC -> "music"
+                    HOME -> "videos"
+                    SUBS -> if (subsMode == "pod") "podcasts" else "videos"
+                    else -> "all"
+                }
+                if (homeFilter == "videos") subsMode = "yt"
+                if (homeFilter == "podcasts") subsMode = "pod"
+                pager.setCurrentItem(0, true)
+            }
         }
+        ensureLoads()
+        renderAll()
+    }
+
+    private fun ensureLoads() {
+        if (pager.currentItem != 0) return
+        when (homeFilter) {
+            "all" -> { loadSubsFeed(); loadPodFeed() }
+            "videos" -> loadSubsFeed()
+            "podcasts" -> loadPodFeed()
+        }
+    }
+
+    private fun renderAll() = (0 until PAGES).forEach { renderPhys(it) }
+
+    private fun render(v: Int) {
+        for (phys in 0 until PAGES) if (v in deps(virtualFor(phys))) renderPhys(phys)
+        if (v == OFFLINE) updateBadge()
+    }
+
+    private fun updateBadge() {
+        val n = Downloads.active()
+        val badge = bottomNav.getOrCreateBadge(R.id.nav_offline)
+        badge.isVisible = n > 0
+        if (n > 0) badge.number = n
+    }
+
+    private fun renderPhys(phys: Int) {
         val rows = mutableListOf<Row>()
+        val v = virtualFor(phys)
         val cp = channelPage
         val pp = podPage
-        if (page == MUSIC && pp?.page != MUSIC && cp?.page != MUSIC) musicRows(rows)
-        else if (pp != null && pp.page == page) podcastRows(pp, rows)
-        else if (cp != null && cp.page == page) channelRows(cp, rows)
-        else when (page) {
-            HOME -> homeRows(rows)
-            SUBS -> subsRows(rows)
-            OFFLINE -> offlineRows(rows)
-            SETTINGS -> settingsRows(rows)
+        when {
+            v == SETTINGS -> {
+                rows += Row.Entry("Retour", null, null, R.drawable.ic_back, onClick = { settingsOpen = false; renderAll() })
+                rows += Row.Header("Réglages")
+                settingsRows(rows)
+            }
+            pp != null && pp.page == phys -> podcastRows(pp, rows)
+            cp != null && cp.page == phys -> channelRows(cp, rows)
+            v == ALL -> allRows(rows)
+            v == MUSIC -> musicRows(rows)
+            v == HOME -> {
+                homeRows(rows)
+                // Les chaînes suivies et leurs nouveautés, sous les vidéos
+                if (searchQuery == null) {
+                    subsMode = "yt"
+                    subsRows(rows)
+                }
+            }
+            v == SUBS -> subsRows(rows)
+            v == OFFLINE -> offlineRows(rows)
         }
-        adapters[page].submit(rows)
+        adapters[phys].submit(rows)
+        if (phys == pager.currentItem) {
+            updateBubbles()
+            updateSearchBar()
+        }
+    }
+
+    // ——— Bulles (en bas) ———
+
+    private fun bubble(label: String, checked: Boolean, icon: Int = 0, onClick: () -> Unit): Chip {
+        val d = resources.displayMetrics.density
+        return Chip(this).apply {
+            setChipDrawable(
+                com.google.android.material.chip.ChipDrawable.createFromAttributes(
+                    this@MainActivity, null, 0, com.google.android.material.R.style.Widget_Material3_Chip_Filter
+                )
+            )
+            text = label
+            isCheckable = true
+            isChecked = checked
+            isCheckedIconVisible = false
+            if (icon != 0) {
+                chipIcon = ContextCompat.getDrawable(this@MainActivity, icon)
+                isChipIconVisible = true
+                if (label.isEmpty()) {
+                    textStartPadding = 0f
+                    textEndPadding = 0f
+                    chipEndPadding = 4 * d
+                }
+            }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { marginEnd = (8 * d).toInt() }
+            setOnClickListener { onClick() }
+            Ui.applyFont(this)
+        }
+    }
+
+    private fun updateBubbles() {
+        val phys = pager.currentItem
+        val key = "$phys|$homeFilter|$libFilter|$searchOpen|$settingsOpen"
+        if (key == bubbleKey) return
+        bubbleKey = key
+        val box = findViewById<LinearLayout>(R.id.bubbles)
+        box.removeAllViews()
+        if (phys == 0) {
+            box.addView(bubble("", searchOpen, R.drawable.ic_search) { toggleSearch() })
+            listOf("all" to "Tout", "music" to "Musique", "videos" to "Vidéos", "podcasts" to "Podcasts").forEach { (k, label) ->
+                box.addView(bubble(label, homeFilter == k && !settingsOpen) {
+                    settingsOpen = false
+                    homeFilter = k
+                    if (k == "videos") subsMode = "yt"
+                    if (k == "podcasts") subsMode = "pod"
+                    ensureLoads()
+                    renderAll()
+                    lists[0]?.scrollToPosition(0)
+                })
+            }
+        } else {
+            listOf("all" to "Tout", "video" to "Vidéos", "audio" to "Audio", "podcast" to "Podcasts", "folders" to "Dossiers").forEach { (k, label) ->
+                box.addView(bubble(label, libFilter == k && !settingsOpen) {
+                    settingsOpen = false
+                    libFilter = k
+                    if (k != "folders") {
+                        folderStack.clear()
+                        folderFiles = null
+                    }
+                    renderAll()
+                    lists[1]?.scrollToPosition(0)
+                })
+            }
+        }
+    }
+
+    // ——— Recherche (bulle loupe) ———
+
+    private fun toggleSearch() {
+        searchOpen = !searchOpen
+        updateSearchBar()
+        bubbleKey = ""
+        updateBubbles()
+        if (searchOpen) {
+            query.requestFocus()
+            (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(query, InputMethodManager.SHOW_IMPLICIT)
+        } else hideKeyboard()
+    }
+
+    private fun updateSearchBar() {
+        val active = searchQuery != null || musicQuery != null || podQuery != null
+        searchBar.isVisible = (searchOpen || active) && !fullscreen && pager.currentItem == 0 && !settingsOpen
+        query.hint = getString(
+            when (homeFilter) {
+                "music" -> R.string.hint_music
+                "podcasts" -> R.string.hint_podcasts
+                else -> R.string.hint
+            }
+        )
     }
 
     // ——— Entrées : partage, lien, recherche ———
 
     private fun handleIntent(intent: Intent?) {
-        intent?.getIntExtra("page", -1)?.takeIf { it in 0 until PAGES }?.let {
-            if (it == SUBS) subsMode = "pod"
-            pager.setCurrentItem(it, false)
+        // Notification « Nouveautés » : accueil, bulle « Tout »
+        if ((intent?.getIntExtra("page", -1) ?: -1) >= 0) {
+            show(ALL)
             return
         }
         val text = when (intent?.action) {
@@ -645,7 +841,8 @@ class MainActivity : AppCompatActivity() {
         hideKeyboard()
         when {
             Yt.looksLikeUrl(text) -> openLink(text)
-            pager.currentItem == MUSIC -> musicSearch(text)
+            currentVirtual() == MUSIC -> musicSearch(text)
+            currentVirtual() == SUBS -> runPodSearch(text)
             else -> search(text)
         }
     }
@@ -667,8 +864,9 @@ class MainActivity : AppCompatActivity() {
         hideKeyboard()
         Store.addSearch(q)
         feed = null
-        if (channelPage?.page == HOME) channelPage = null
-        pager.setCurrentItem(HOME, true)
+        if (channelPage?.page == 0) channelPage = null
+        if (podPage?.page == 0) podPage = null
+        show(HOME)
         lifecycleScope.launch {
             busy(true)
             try {
@@ -679,7 +877,7 @@ class MainActivity : AppCompatActivity() {
                 searchQuery = q
                 searchResults = items
                 render(HOME)
-                lists[HOME]?.scrollToPosition(0)
+                listFor(HOME)?.scrollToPosition(0)
                 if (items.isEmpty()) snack("Aucun résultat")
             } catch (e: CancellationException) {
                 throw e
@@ -688,13 +886,19 @@ class MainActivity : AppCompatActivity() {
                 snack("Erreur de recherche : ${e.message}")
             } finally {
                 busy(false)
-                refreshers[HOME]?.isRefreshing = false
+                refresherFor(HOME)?.isRefreshing = false
             }
         }
     }
 
     private fun clearSearch() {
-        if (pager.currentItem == MUSIC) {
+        searchOpen = false
+        if (currentVirtual() == SUBS && podQuery != null) {
+            query.setText("")
+            clearPodSearch()
+            return
+        }
+        if (currentVirtual() == MUSIC) {
             musicQuery = null
             musicResult = null
             query.setText("")
@@ -735,6 +939,71 @@ class MainActivity : AppCompatActivity() {
         player.clearMediaItems()
         Playback.startedLocal()
         refreshUi()
+    }
+
+    // ——— Accueil « Tout » : accès rapide façon Spotify ———
+
+    private fun allRows(rows: MutableList<Row>) {
+        val quick = mutableListOf<Row.QuickItem>()
+        val likes = Store.likes()
+        if (likes.isNotEmpty()) quick += Row.QuickItem("Titres likés", likes.first().thumb, R.drawable.ic_heart, {
+            show(MUSIC); pushMusic(MPage.Liked)
+        })
+        Store.recentAlbums().take(3).forEach { a ->
+            quick += Row.QuickItem(a.title, a.thumb, R.drawable.ic_music, { show(MUSIC); pushMusic(MPage.AlbumP(a)) }, { albumMenu(a, recent = true) })
+        }
+        Store.playlists().take(2).forEach { p ->
+            quick += Row.QuickItem(p.name, p.tracks.firstOrNull()?.thumb, R.drawable.ic_queue, { show(MUSIC); pushMusic(MPage.PlaylistP(p.id)) })
+        }
+        Store.podcasts().take(2).forEach { p ->
+            quick += Row.QuickItem(p.title, p.artwork, R.drawable.ic_headphones, { openPodcast(p) })
+        }
+        Store.watched().take(2).forEach { v ->
+            quick += Row.QuickItem(v.title, v.thumb, R.drawable.ic_video, { play(v.url) }, { videoMenu(v) })
+        }
+        Store.savedArtists().take(1).forEach { a ->
+            quick += Row.QuickItem(a.name, a.thumb, R.drawable.ic_person, { show(MUSIC); pushMusic(MPage.ArtistP(a)) })
+        }
+        if (quick.isNotEmpty()) rows += Row.Quick(quick.take(8))
+
+        val watched = Store.watched()
+        if (watched.size > 2) {
+            rows += Row.Header("Reprendre")
+            rows += Row.Carousel(
+                watched.take(12).map { v -> v.copy(meta = listOfNotNull(v.uploader, resumeText(v.url)).joinToString(" · ")) },
+                onClick = { play(it.url) }, onLong = { videoMenu(it) }
+            )
+        }
+        val albums = Store.recentAlbums() + Store.savedAlbums().filterNot { s -> Store.recentAlbums().any { it.url == s.url } }
+        if (albums.size > 3) {
+            rows += Row.Header("Ta musique", "Tout voir") { show(MUSIC) }
+            rows += Row.Cards(albums.map { a ->
+                Row.Card(a.title, a.artist, a.thumb, onClick = { show(MUSIC); pushMusic(MPage.AlbumP(a)) }, onLong = { albumMenu(a) })
+            })
+        }
+        podFeed?.takeIf { it.isNotEmpty() }?.let { f ->
+            rows += Row.Header("Nouveaux épisodes", "Tout voir") { subsMode = "pod"; show(SUBS) }
+            f.indices.take(3).forEach { rows += episodeRow(f, it, true) }
+        }
+        subsFeed?.takeIf { it.isNotEmpty() }?.let { f ->
+            rows += Row.Header("Nouveautés de tes chaînes", "Tout voir") { subsMode = "yt"; show(HOME) }
+            f.take(4).forEach { rows += videoRow(it) }
+        }
+        val fd = feed
+        if (Store.searches().isNotEmpty()) {
+            if (fd == null) loadFeed()
+            else if (fd.isNotEmpty()) {
+                rows += Row.Header("Pour toi", "Tout voir") { show(HOME) }
+                fd.take(4).forEach { rows += videoRow(it) }
+            }
+        }
+        if (rows.isEmpty()) {
+            rows += Row.Note(
+                "Bienvenue !\nTouche la loupe en bas pour chercher une vidéo, une musique ou un podcast. " +
+                    "Cet écran se remplira avec ce que tu écoutes.",
+                R.drawable.ic_search
+            )
+        }
     }
 
     // ——— Accueil ———
@@ -837,7 +1106,7 @@ class MainActivity : AppCompatActivity() {
             val max = lists.maxOfOrNull { it.size } ?: 0
             for (i in 0 until max) for (l in lists) l.getOrNull(i)?.let { out.putIfAbsent(it.url, it) }
             feed = out.values.take(45)
-            refreshers[HOME]?.isRefreshing = false
+            refresherFor(HOME)?.isRefreshing = false
             render(HOME)
         }
     }
@@ -845,11 +1114,6 @@ class MainActivity : AppCompatActivity() {
     // ——— Abonnements et chaînes ———
 
     private fun subsRows(rows: MutableList<Row>) {
-        rows += Row.Choice("", null, listOf("YouTube", "Podcasts"), if (subsMode == "pod") 1 else 0) { i ->
-            subsMode = if (i == 1) "pod" else "yt"
-            render(SUBS)
-            if (subsMode == "pod") loadPodFeed() else loadSubsFeed()
-        }
         if (subsMode == "pod") {
             podcastSubsRows(rows)
             return
@@ -880,7 +1144,7 @@ class MainActivity : AppCompatActivity() {
         val subs = Store.subs()
         if (subs.isEmpty()) {
             subsFeed = emptyList()
-            refreshers[SUBS]?.isRefreshing = false
+            refresherFor(SUBS)?.isRefreshing = false
             render(SUBS)
             return
         }
@@ -891,7 +1155,7 @@ class MainActivity : AppCompatActivity() {
             }.awaitAll()
             subsFeed = all.flatten().distinctBy { it.url }.sortedByDescending { it.date }.take(150)
             subsFeedTime = System.currentTimeMillis()
-            refreshers[SUBS]?.isRefreshing = false
+            refresherFor(SUBS)?.isRefreshing = false
             render(SUBS)
         }
     }
@@ -970,7 +1234,7 @@ class MainActivity : AppCompatActivity() {
         val pods = Store.podcasts()
         if (pods.isEmpty()) {
             podFeed = emptyList()
-            refreshers[SUBS]?.isRefreshing = false
+            refresherFor(SUBS)?.isRefreshing = false
             render(SUBS)
             return
         }
@@ -981,7 +1245,7 @@ class MainActivity : AppCompatActivity() {
             }.awaitAll()
             podFeed = all.flatten().sortedByDescending { it.date }.take(150)
             podFeedTime = System.currentTimeMillis()
-            refreshers[SUBS]?.isRefreshing = false
+            refresherFor(SUBS)?.isRefreshing = false
             render(SUBS)
         }
     }
@@ -991,7 +1255,7 @@ class MainActivity : AppCompatActivity() {
         if (channelPage?.page == page) channelPage = null
         val pp = PodPage(page, p)
         podPage = pp
-        render(page)
+        renderPhys(page)
         lists[page]?.scrollToPosition(0)
         podJob?.cancel()
         podJob = lifecycleScope.launch {
@@ -1005,7 +1269,7 @@ class MainActivity : AppCompatActivity() {
                 Log.e("Lecteur", "Podcast", e)
                 pp.error = e.message ?: "flux illisible"
             }
-            if (podPage === pp) render(pp.page)
+            if (podPage === pp) renderPhys(pp.page)
         }
     }
 
@@ -1013,7 +1277,7 @@ class MainActivity : AppCompatActivity() {
         val p = podPage?.page ?: return
         podPage = null
         podJob?.cancel()
-        render(p)
+        renderPhys(p)
     }
 
     private fun podcastRows(pp: PodPage, rows: MutableList<Row>) {
@@ -1045,7 +1309,7 @@ class MainActivity : AppCompatActivity() {
         }
         podFeed = null
         renderAll()
-        if (pager.currentItem == SUBS && subsMode == "pod") loadPodFeed()
+        loadPodFeed()
     }
 
     private fun confirmUnsubscribePodcast(p: Podcast) {
@@ -1095,8 +1359,8 @@ class MainActivity : AppCompatActivity() {
         podQuery = text
         podResults2 = null
         subsMode = "pod"
-        podPage?.takeIf { it.page == SUBS }?.let { podPage = null }
-        pager.setCurrentItem(SUBS, true)
+        podPage?.takeIf { it.page == 0 }?.let { podPage = null }
+        show(SUBS)
         render(SUBS)
         podSearchJob?.cancel()
         podSearchJob = lifecycleScope.launch {
@@ -1136,8 +1400,7 @@ class MainActivity : AppCompatActivity() {
                         podQuery = url
                         podResults2 = feeds.map { Podcast(it, it.substringAfter("://"), "Flux trouvé sur la page", null) }
                         subsMode = "pod"
-                        pager.setCurrentItem(SUBS, true)
-                        render(SUBS)
+                        show(SUBS)
                     }
                 }
             } catch (e: CancellationException) {
@@ -1194,7 +1457,7 @@ class MainActivity : AppCompatActivity() {
         DownloadService.startDirect(this, e.audioUrl, e.title, e.podcastTitle, e.image ?: e.podcastArt)
         Snackbar.make(root, "Téléchargement ajouté", Snackbar.LENGTH_LONG)
             .setAnchorView(if (bottomNav.isVisible) bottomNav else null)
-            .setAction("Voir") { pager.setCurrentItem(OFFLINE, true) }
+            .setAction("Voir") { show(OFFLINE) }
             .show()
     }
 
@@ -1235,7 +1498,7 @@ class MainActivity : AppCompatActivity() {
         if (podPage?.page == page) podPage = null
         val cp = ChannelPage(page, c)
         channelPage = cp
-        render(page)
+        renderPhys(page)
         lists[page]?.scrollToPosition(0)
         channelJob?.cancel()
         channelJob = lifecycleScope.launch {
@@ -1250,7 +1513,7 @@ class MainActivity : AppCompatActivity() {
                 Log.e("Lecteur", "Chaîne", e)
                 cp.error = e.message ?: "erreur"
             }
-            if (channelPage === cp) render(cp.page)
+            if (channelPage === cp) renderPhys(cp.page)
         }
     }
 
@@ -1258,7 +1521,7 @@ class MainActivity : AppCompatActivity() {
         val p = channelPage?.page ?: return
         channelPage = null
         channelJob?.cancel()
-        render(p)
+        renderPhys(p)
     }
 
     private fun channelRows(cp: ChannelPage, rows: MutableList<Row>) {
@@ -1287,7 +1550,7 @@ class MainActivity : AppCompatActivity() {
         }
         subsFeed = null
         renderAll()
-        if (pager.currentItem == SUBS) loadSubsFeed()
+        loadSubsFeed()
     }
 
     private fun confirmUnsubscribe(c: Chan) {
@@ -1549,7 +1812,7 @@ class MainActivity : AppCompatActivity() {
         DownloadService.start(this, url, video, title)
         Snackbar.make(root, "Téléchargement ajouté", Snackbar.LENGTH_LONG)
             .setAnchorView(if (bottomNav.isVisible) bottomNav else null)
-            .setAction("Voir") { pager.setCurrentItem(OFFLINE, true) }
+            .setAction("Voir") { show(OFFLINE) }
             .show()
     }
 
@@ -1604,19 +1867,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun offlineRows(rows: MutableList<Row>) {
-        val filters = listOf("all", "video", "audio", "podcast", "folders")
-        rows += Row.Choice(
-            "", null, listOf("Tout", "Vidéos", "Audio", "Podcasts", "Dossiers"),
-            filters.indexOf(libFilter).coerceAtLeast(0)
-        ) { i ->
-            libFilter = filters[i]
-            if (libFilter != "folders") {
-                folderStack.clear()
-                folderFiles = null
-            }
-            render(OFFLINE)
-            lists[OFFLINE]?.scrollToPosition(0)
-        }
         val queue = Downloads.all()
         if (queue.isNotEmpty()) {
             rows += Row.Header("En cours")
@@ -1691,7 +1941,7 @@ class MainActivity : AppCompatActivity() {
             rows += Row.Header("$title · ${list.size}", if (list.size > 4) "Tout voir" else null) {
                 libFilter = key
                 render(OFFLINE)
-                lists[OFFLINE]?.scrollToPosition(0)
+                listFor(OFFLINE)?.scrollToPosition(0)
             }
             entries(list, 4)
         }
@@ -1847,14 +2097,14 @@ class MainActivity : AppCompatActivity() {
                 busy(false)
             }
             render(MUSIC)
-            lists[MUSIC]?.scrollToPosition(0)
+            listFor(MUSIC)?.scrollToPosition(0)
         }
     }
 
     private fun pushMusic(p: MPage) {
         musicStack += p
         render(MUSIC)
-        lists[MUSIC]?.scrollToPosition(0)
+        listFor(MUSIC)?.scrollToPosition(0)
         when (p) {
             is MPage.AlbumP -> lifecycleScope.launch {
                 try {
@@ -2654,7 +2904,9 @@ class MainActivity : AppCompatActivity() {
         miniPlayer.isVisible = has && !video && !fullscreen
         chipDownload.isVisible = yt
         chipChannel.isVisible = yt && PlayerHolder.current?.uploaderUrl != null
-        searchBar.isVisible = !fullscreen
+        updateSearchBar()
+        findViewById<View>(R.id.topBar).isVisible = !fullscreen
+        findViewById<View>(R.id.bubbleBar).isVisible = !fullscreen
         pager.isVisible = !fullscreen
         bottomNav.isVisible = !fullscreen
         if (fullscreen) loading.visibility = View.INVISIBLE
@@ -2731,12 +2983,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val PAGES = 5
+        /** Écrans réels (onglets) : Accueil et Bibliothèque. */
+        private const val PAGES = 2
+        /** Vues : vidéos, musique, abonnements/podcasts, bibliothèque, réglages, « tout ». */
         private const val HOME = 0
         private const val MUSIC = 1
         private const val SUBS = 2
         private const val OFFLINE = 3
         private const val SETTINGS = 4
+        private const val ALL = 5
         private val AUDIO_EXT = setOf("mp3", "m4a", "aac", "ogg", "oga", "opus", "flac", "wav", "wma", "amr")
         private val VIDEO_EXT = setOf("mp4", "mkv", "webm", "mov", "3gp", "avi", "m4v", "ts")
     }

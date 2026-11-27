@@ -55,6 +55,9 @@ sealed class Row {
         val onPlay: (() -> Unit)?, val onShuffle: (() -> Unit)?, val onMore: (() -> Unit)? = null,
         val saveLabel: String? = null, val saved: Boolean = false, val onSave: (() -> Unit)? = null
     ) : Row()
+    /** Grille de petites tuiles (accès rapide, comme Spotify). */
+    class QuickItem(val title: String, val thumb: String?, val icon: Int, val onClick: () -> Unit, val onLong: (() -> Unit)? = null)
+    class Quick(val items: List<QuickItem>) : Row()
     class Progress(
         val title: String,
         val state: String,
@@ -95,6 +98,7 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         is Row.Track -> 15
         is Row.Cards -> 16
         is Row.MusicHeader -> 17
+        is Row.Quick -> 18
     }
 
     /** Nombre de colonnes occupées : seules les cartes vidéo se partagent la largeur. */
@@ -114,6 +118,12 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             0 -> make(R.layout.item_header)
             1 -> make(R.layout.item_note)
             15 -> make(R.layout.item_track)
+            18 -> H(LinearLayout(parent.context).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                val d = resources.displayMetrics.density
+                setPadding((12 * d).toInt(), (8 * d).toInt(), (12 * d).toInt(), (4 * d).toInt())
+            })
             17 -> make(R.layout.item_music_header)
             2, 4, 5, 16 -> {
                 val ctx = parent.context
@@ -388,6 +398,34 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     c.onLong?.let { l -> card.setOnLongClickListener { l(); true } }
                     Ui.applyFont(card)
                     box.addView(card)
+                }
+            }
+            is Row.Quick -> {
+                val box = v as LinearLayout
+                box.removeAllViews()
+                val inf = LayoutInflater.from(box.context)
+                val d = box.resources.displayMetrics.density
+                row.items.chunked(2).forEach { pair ->
+                    val line = LinearLayout(box.context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                            .apply { bottomMargin = (8 * d).toInt() }
+                    }
+                    pair.forEachIndexed { i, q ->
+                        val tile = inf.inflate(R.layout.item_quick, line, false)
+                        (tile.layoutParams as LinearLayout.LayoutParams).apply {
+                            if (i == 0) marginEnd = (4 * d).toInt() else marginStart = (4 * d).toInt()
+                        }
+                        tile.findViewById<TextView>(R.id.title).text = q.title
+                        Thumbs.load(tile.findViewById(R.id.thumb), q.thumb, q.icon)
+                        tile.setOnClickListener { q.onClick() }
+                        q.onLong?.let { l -> tile.setOnLongClickListener { l(); true } }
+                        Ui.applyFont(tile)
+                        line.addView(tile)
+                    }
+                    // Tuile vide pour garder deux colonnes
+                    if (pair.size == 1) line.addView(View(box.context), LinearLayout.LayoutParams(0, 1, 1f).apply { marginStart = (4 * d).toInt() })
+                    box.addView(line)
                 }
             }
             is Row.MusicHeader -> {
