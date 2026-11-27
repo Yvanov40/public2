@@ -110,6 +110,7 @@ object Caster {
     }
 
     private fun ended() {
+        LocalStream.stop()
         session?.remoteMediaClient?.unregisterCallback(remote)
         session = null
         title = null

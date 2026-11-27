@@ -49,11 +49,12 @@ object LocalStream {
     }
 
     @Synchronized
-    private fun ensureServer(): Int {
+    private fun ensureServer(ip: String): Int {
         server?.takeIf { !it.isClosed }?.let { return it.localPort }
         val s = ServerSocket()
         s.reuseAddress = true
-        s.bind(InetSocketAddress(0))
+        // Écoute seulement sur l'adresse Wi-Fi du téléphone (pas sur les autres réseaux)
+        s.bind(InetSocketAddress(java.net.InetAddress.getByName(ip), 0))
         server = s
         thread(name = "LocalStream", isDaemon = true) {
             while (!s.isClosed) {
@@ -67,11 +68,19 @@ object LocalStream {
     /** Enregistre un flux et renvoie l'adresse à donner à l'enceinte. */
     fun publish(e: Entry): String {
         val ip = localIp() ?: throw java.io.IOException("pas de Wi-Fi : l'enceinte doit être sur le même réseau")
-        val port = ensureServer()
+        val port = ensureServer(ip)
         if (entries.size > 30) entries.clear()
         val token = UUID.randomUUID().toString().replace("-", "")
         entries[token] = e
         return "http://$ip:$port/s/$token"
+    }
+
+    /** Fin de diffusion : le serveur est fermé et les adresses oubliées. */
+    @Synchronized
+    fun stop() {
+        entries.clear()
+        try { server?.close() } catch (_: Exception) {}
+        server = null
     }
 
     private fun handle(c: Socket) {

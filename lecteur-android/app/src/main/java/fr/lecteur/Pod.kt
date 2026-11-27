@@ -132,7 +132,34 @@ object Pod {
         links
     }
 
-    suspend fun feed(url: String): Pair<Podcast, List<Episode>> = withContext(Dispatchers.IO) { parse(url, get(url)) }
+    /** Adresse sécurisée (https) d'un lien http, si le site la propose. */
+    fun secure(url: String): String = if (url.startsWith("http://")) "https://" + url.removePrefix("http://") else url
+
+    suspend fun feed(url: String): Pair<Podcast, List<Episode>> = withContext(Dispatchers.IO) {
+        // https d'abord ; http seulement si le site ne le propose pas
+        val xml = if (url.startsWith("http://")) {
+            try { get(secure(url)) } catch (_: Exception) { get(url) }
+        } else get(url)
+        val (p, eps) = parse(url, xml)
+        p to eps.map { e -> e.copy(audioUrl = upgrade(e.audioUrl), image = e.image?.let(::secure)) }
+    }
+
+    /** Épisodes : on passe en https quand l'hébergeur le permet (vérifié une fois par site). */
+    private val httpsOk = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    private fun upgrade(url: String): String {
+        if (!url.startsWith("http://")) return url
+        val host = Uri.parse(url).host ?: return url
+        val ok = httpsOk.getOrPut(host) {
+            try {
+                val req = okhttp3.Request.Builder().url("https://$host/").head().build()
+                client.newCall(req).execute().use { true }
+            } catch (_: Exception) {
+                false
+            }
+        }
+        return if (ok) secure(url) else url
+    }
 
     private fun parse(feedUrl: String, xml: String): Pair<Podcast, List<Episode>> {
         val p = Xml.newPullParser()

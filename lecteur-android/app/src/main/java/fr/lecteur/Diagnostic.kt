@@ -27,7 +27,7 @@ object Diagnostic {
 
     suspend fun run(ctx: Context, out: (String) -> Unit) {
         out("Lecteur v${Updates.current(ctx)} · NewPipeExtractor ${BuildConfig.NPE_VERSION} · Android ${Build.VERSION.RELEASE}")
-        out("Jeton : ${if (Settings.poToken) "activé" else "désactivé"} · Relais : ${if (Settings.fallback) "activés" else "désactivés"}")
+        out("Relais : ${if (Settings.fallback) "activés" else "désactivés"} · SponsorBlock : ${if (Settings.sponsorBlock) "activé" else "désactivé"}")
         out("")
 
         step(out, "Accès à YouTube") {
@@ -48,9 +48,6 @@ object Diagnostic {
             "${ex.initialPage.items.size} titres"
         }
 
-        step(out, "Jeton anti-robot") {
-            if (!Settings.poToken) "désactivé dans les réglages" else PoToken.selfTest()
-        }
 
         var audioUrl: String? = null
         step(out, "Infos d'une vidéo (NewPipe)") {

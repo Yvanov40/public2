@@ -141,10 +141,7 @@ object Playback {
         val p = PlayerHolder.peek() ?: return
         val io = error.errorCode in 2000..2999
         if (!io) return
-        // Refus de YouTube avec le jeton : on le coupe, le nouvel essai passera par d'autres accès
-        if (Settings.poToken && error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS) {
-            PoToken.disableForSession()
-        }
+
         if (Music.active) {
             val key = Music.failingKey() ?: return
             val n = attempts.getOrDefault(key, 0)

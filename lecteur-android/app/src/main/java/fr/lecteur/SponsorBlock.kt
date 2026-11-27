@@ -38,16 +38,22 @@ object SponsorBlock {
         scope.launch {
             val list = withContext(Dispatchers.IO) {
                 try {
-                    val url = Uri.parse("https://sponsor.ajay.app/api/skipSegments").buildUpon()
-                        .appendQueryParameter("videoID", id)
+                    // Mode confidentiel : on n'envoie que les 4 premiers caractères de l'empreinte SHA-256
+                    // de la vidéo ; SponsorBlock renvoie les passages de plusieurs vidéos et on garde la nôtre.
+                    val hash = java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(id.toByteArray()).joinToString("") { "%02x".format(it) }
+                    val url = Uri.parse("https://sponsor.ajay.app/api/skipSegments/${hash.take(4)}").buildUpon()
                         .appendQueryParameter("categories", JSONArray(cats).toString())
                         .build().toString()
                     val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Lecteur").build()
                     DownloaderImpl.instance.client.newCall(req).execute().use { r ->
                         if (!r.isSuccessful) return@use emptyList<Segment>()
                         val arr = JSONArray(r.body?.string() ?: "[]")
-                        (0 until arr.length()).mapNotNull { i ->
-                            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                        val mine = (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }
+                            .firstOrNull { it.optString("videoID") == id } ?: return@use emptyList<Segment>()
+                        val segs = mine.optJSONArray("segments") ?: JSONArray()
+                        (0 until segs.length()).mapNotNull { i ->
+                            val o = segs.optJSONObject(i) ?: return@mapNotNull null
                             val s = o.optJSONArray("segment") ?: return@mapNotNull null
                             Segment(
                                 (s.optDouble(0) * 1000).toLong(), (s.optDouble(1) * 1000).toLong(),
