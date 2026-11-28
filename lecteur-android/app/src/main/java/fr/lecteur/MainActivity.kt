@@ -3435,7 +3435,19 @@ class MainActivity : AppCompatActivity() {
             return if (dy > 0) 1 else -1
         }
         // Vidéo : vers le haut → plein écran ; vers le bas → sort du plein écran, sinon passe en audio
+        // Double appui à gauche / à droite : −10 s / +10 s
         val detector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                val left = e.x < playerView.width / 2f
+                val delta = if (left) -10_000L else 10_000L
+                val d = player.duration
+                var to = (player.currentPosition + delta).coerceAtLeast(0)
+                if (d > 0) to = to.coerceAtMost(d - 500)
+                player.seekTo(to)
+                seekFlash(left)
+                return true
+            }
+
             override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
                 when (vertical(e1, e2, vy)) {
                     -1 -> if (!fullscreen) {
@@ -3470,6 +3482,38 @@ class MainActivity : AppCompatActivity() {
                 true
             } else false
         }
+    }
+
+    private var seekLabel: TextView? = null
+
+    /** Petit « −10 s / +10 s » qui apparaît du côté touché puis s'efface. */
+    private fun seekFlash(left: Boolean) {
+        val frame = playerView.overlayFrameLayout ?: return
+        val d = resources.displayMetrics.density
+        val tv = seekLabel ?: TextView(this).apply {
+            setTextColor(android.graphics.Color.WHITE)
+            textSize = 18f
+            setPadding((16 * d).toInt(), (8 * d).toInt(), (16 * d).toInt(), (8 * d).toInt())
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 24 * d
+                setColor(0x99000000.toInt())
+            }
+            frame.addView(this, android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+            seekLabel = this
+        }
+        tv.text = if (left) "« 10 s" else "10 s »"
+        (tv.layoutParams as android.widget.FrameLayout.LayoutParams).apply {
+            gravity = android.view.Gravity.CENTER_VERTICAL or if (left) android.view.Gravity.START else android.view.Gravity.END
+            marginStart = (32 * d).toInt()
+            marginEnd = (32 * d).toInt()
+        }
+        tv.requestLayout()
+        tv.animate().cancel()
+        tv.alpha = 1f
+        tv.visibility = View.VISIBLE
+        tv.animate().alpha(0f).setStartDelay(500).setDuration(300).start()
     }
 
     private fun openFromMini() {
