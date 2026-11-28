@@ -13,6 +13,9 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <!-- Réglages > Mise à jour : télécharger et installer la nouvelle version. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Gestes : rotation / luminosité auto, silencieux et Ne pas déranger (accordés à la main). -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Nécessaire depuis Android 11 pour voir les applis installées. -->

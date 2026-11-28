@@ -71,7 +71,11 @@ Réglables dans les réglages : double tap dans le vide (par défaut : verrouill
 vers le haut (par défaut : applis récentes), vers le bas à gauche (notifications) et à droite (centre de contrôle), vers
 la gauche, vers la droite. Actions : rien, verrouiller, notifications, centre de contrôle,
 ouvrir une appli, lampe torche, appareil photo, recherche web, réglages, applis récentes,
-recherche d'applis.
+recherche d'applis, musique (lecture/pause, suivant, précédent), volume, son → vibreur →
+silencieux, Ne pas déranger, rotation auto, luminosité auto (droit « Modifier les paramètres
+système » ; silencieux et Ne pas déranger : « Accès Ne pas déranger »), et panneaux Wi-Fi /
+Internet, NFC, Bluetooth, mode avion, économie de batterie (Android ne laisse pas une appli
+les basculer elle-même).
 
 Recherche d'applis (par défaut : glisser vers la gauche) : clavier déjà sorti, résultats à
 chaque lettre (début du nom, début d'un mot, initiales « gm » → Google Maps, puis contenu ;
