@@ -388,9 +388,13 @@ async function choisirGenre(l) {
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-g]');
-  if (!b || !app.livreGenre) return;
-  definirGenre(app.livreGenre, b.dataset.g, true);
+  const ids = app.livresGenre || (app.livreGenre ? [app.livreGenre] : null);
+  if (!b || !ids) return;
+  for (const id of ids) definirGenre(id, b.dataset.g, true);
+  if (app.livresGenre) toast(`${ids.length} livre${ids.length > 1 ? 's' : ''} classé${ids.length > 1 ? 's' : ''} en « ${b.dataset.g} »`);
   app.livreGenre = null;
+  app.livresGenre = null;
+  if (app.selection) app.selection = null;
   $('#d-boutons .bouton').click();
   afficherBiblio();
 });
@@ -770,6 +774,11 @@ async function actionSelection(action) {
     if (!tous.length) return toast('Aucun livre dans la sélection');
     if (A) A.exporterPlusieurs(JSON.stringify(tous));
     finirSelection();
+  } else if (action === 'genre') {
+    if (!tous.length) return toast('Aucun livre dans la sélection');
+    app.livresGenre = tous;
+    const r = await choisirGenre({ id: tous.length === 1 ? tous[0] : '' });
+    if (r === null) app.livresGenre = null;
   } else if (action === 'lu' || action === 'nonlu') {
     for (const id of tous) {
       if (action === 'nonlu') Store.del('pos:' + id);
@@ -787,6 +796,7 @@ async function plusSelection() {
   const v = await dialogue('Sélection', `<div class="liste-actions dans-dialogue">
       <button data-a="partager"><svg><use href="#i-partage"/></svg>Partager les fichiers EPUB</button>
       <button data-a="exporter"><svg><use href="#i-dl"/></svg>Enregistrer les EPUB dans un dossier du téléphone</button>
+      <button data-a="genre"><svg><use href="#i-tri"/></svg>Classer dans un genre</button>
       <button data-a="lu"><svg><use href="#i-coche"/></svg>Marquer comme lu</button>
       <button data-a="nonlu"><svg><use href="#i-refaire"/></svg>Marquer comme non lu</button>
     </div>`, [{ texte: 'Fermer', valeur: null }]);

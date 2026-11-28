@@ -1,1 +1,1 @@
-Filtres Tous · À lire · En cours · Terminés, « Marquer comme lu / non lu » dans le menu d'un livre, et classement automatique par genre (menu ⋮ → Classer par genre). Le pincement des vignettes ne sélectionne plus de livre.
+Sélection multiple : « Classer dans un genre » range d'un coup tous les livres choisis dans le genre de votre choix.
