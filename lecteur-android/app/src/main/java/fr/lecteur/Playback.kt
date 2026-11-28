@@ -68,6 +68,7 @@ object Playback {
         PlayerHolder.videoMode = !audioOnly
         PlayerHolder.setVideoEnabled(p, !audioOnly)
         p.setMediaSource(source, Store.position(info.url).coerceAtLeast(0))
+        resolvedAt = System.currentTimeMillis()
         p.prepare()
         p.play()
         val v = Vid(
@@ -103,6 +104,7 @@ object Playback {
         PlayerHolder.setVideoEnabled(p, !audioOnly)
         p.setMediaSource(r.source, Store.position(mediaId).coerceAtLeast(0))
         p.prepare()
+        resolvedAt = System.currentTimeMillis()
         p.play()
         PlayerHolder.current = r.vid
         Store.addWatched(r.vid)
@@ -162,7 +164,12 @@ object Playback {
         if (!(id.contains("youtube.com/watch") || id.contains("youtu.be"))) return
         lastFailed = id to (p.mediaMetadata.title?.toString() ?: "Vidéo")
         val n = attempts.getOrDefault(id, 0)
-        if (n >= 2 || (n >= 1 && !Settings.fallback)) return
+        if (n >= 2 || (n >= 1 && !Settings.fallback)) {
+            // Abandon : on le dit, et le prochain appui sur lecture réessaiera depuis le début
+            attempts.remove(id)
+            Toast.makeText(app, "Lecture interrompue par YouTube. Appuie sur lecture pour réessayer.", Toast.LENGTH_LONG).show()
+            return
+        }
         attempts[id] = n + 1
         recovering = true
         val pos = p.currentPosition
@@ -183,6 +190,35 @@ object Playback {
     }
 
     /** Lecture réussie : on oublie les essais (un futur refus aura de nouveau droit à 2 essais). */
+    /** Heure à laquelle le lien YouTube en cours a été obtenu (les liens expirent au bout de ~6 h). */
+    @Volatile var resolvedAt = 0L
+
+    /**
+     * Juste avant de reprendre la lecture : si le lien YouTube a plus de 4 h (longue pause),
+     * on en redemande un neuf à la même position, au lieu d'attendre le refus de YouTube.
+     */
+    fun beforeResume(p: androidx.media3.common.Player) {
+        if (Music.active || recovering) return
+        val id = p.currentMediaItem?.mediaId ?: return
+        if (!(id.contains("youtube.com/watch") || id.contains("youtu.be"))) return
+        if (resolvedAt == 0L || System.currentTimeMillis() - resolvedAt < 4 * 3600_000L) return
+        val pos = p.currentPosition
+        if (pos > 5_000) Store.setPosition(id, pos)
+        val audioOnly = !PlayerHolder.videoMode
+        recovering = true
+        resolvedAt = System.currentTimeMillis()
+        scope.launch {
+            try {
+                playYoutube(id, audioOnly)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            } finally {
+                recovering = false
+            }
+        }
+    }
+
     fun onPlaying() {
         val id = PlayerHolder.peek()?.currentMediaItem?.mediaId ?: return
         attempts.remove(id)

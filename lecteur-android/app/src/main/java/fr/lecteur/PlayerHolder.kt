@@ -52,6 +52,10 @@ object PlayerHolder {
                 Playback.onPlayerError(error)
             }
 
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (playWhenReady) Playback.beforeResume(p)
+            }
+
             override fun onPlaybackParametersChanged(pp: PlaybackParameters) {
                 prefs.edit().putFloat("speed", pp.speed).apply()
             }
