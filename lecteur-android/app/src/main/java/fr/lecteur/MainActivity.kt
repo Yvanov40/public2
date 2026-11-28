@@ -578,6 +578,7 @@ class MainActivity : AppCompatActivity() {
                     override fun getSpanSize(p: Int) = adapters[position].spanSize(p, glm.spanCount)
                 }
                 h.list.layoutManager = glm
+                attachPinch(h.list)
             }
             h.list.adapter = adapters[position]
             applyGrid(h.list)
@@ -589,6 +590,61 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** À 1 colonne, la grille en compte 2 pour que les tuiles carrées aillent par deux. */
+    // ——— Pincer / écarter deux doigts : nombre de colonnes ———
+
+    /** Niveaux : 0 = liste, puis cartes à 1, 2, 3, 4 colonnes. */
+    private fun layoutLevel() = if (!Settings.cards) 0 else Settings.columns.coerceIn(1, 4)
+
+    private fun setLayoutLevel(level: Int) {
+        val l = level.coerceIn(0, 4)
+        if (l == layoutLevel()) return
+        if (l == 0) Settings.layout = "list" else {
+            Settings.layout = "cards"
+            Settings.columns = l
+        }
+        relayout()
+        val label = when (l) { 0 -> "Liste"; 1 -> "1 colonne"; else -> "$l colonnes" }
+        Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
+    }
+
+    /** Au bout de la plage (4 colonnes / liste) : on continue en changeant la taille des tuiles. */
+    private fun scaleTiles(delta: Float) {
+        val v = ((Settings.tileScale + delta) * 10).let { Math.round(it) / 10f }.coerceIn(0.7f, 1.4f)
+        if (v == Settings.tileScale) return
+        Settings.tileScale = v
+        relayout()
+        Toast.makeText(this, "Taille des tuiles : ${Math.round(v * 100)} %", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun attachPinch(list: RecyclerView) {
+        var acc = 1f
+        val detector = android.view.ScaleGestureDetector(this, object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScaleBegin(d: android.view.ScaleGestureDetector): Boolean { acc = 1f; return true }
+            override fun onScale(d: android.view.ScaleGestureDetector): Boolean {
+                acc *= d.scaleFactor
+                when {
+                    // Pincer : tuiles plus petites, plus de colonnes
+                    acc < 0.75f -> { if (layoutLevel() < 4) setLayoutLevel(layoutLevel() + 1) else scaleTiles(-0.1f); acc = 1f }
+                    // Écarter : tuiles plus grandes, moins de colonnes (jusqu'à la liste)
+                    acc > 1.35f -> { if (layoutLevel() > 0) setLayoutLevel(layoutLevel() - 1) else scaleTiles(0.1f); acc = 1f }
+                }
+                return true
+            }
+        })
+        list.addOnItemTouchListener(object : RecyclerView.OnItemTouchListener {
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
+                detector.onTouchEvent(e)
+                if (e.pointerCount > 1) {
+                    rv.parent?.requestDisallowInterceptTouchEvent(true)
+                    return true
+                }
+                return false
+            }
+            override fun onTouchEvent(rv: RecyclerView, e: MotionEvent) { detector.onTouchEvent(e) }
+            override fun onRequestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {}
+        })
+    }
+
     private fun columns() = if (Settings.cards) Settings.columns.coerceIn(1, 4).coerceAtLeast(2) else 1
 
     private fun applyGrid(list: RecyclerView) {
