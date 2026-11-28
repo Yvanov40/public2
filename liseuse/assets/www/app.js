@@ -86,6 +86,8 @@ function chargerPro() {
 app.estPro = () => !!app.pro.actif;
 
 function majPro() {
+  const bm = $('#b-maj-haut');
+  if (bm) bm.hidden = !majPossible();
   const z = $('#etat-pro');
   if (!z) return;
   if (app.pro.edition === 'complete') {
@@ -164,6 +166,8 @@ function remettreBoutonMaj() {
 async function evenementMaj(e) {
   if (e.type === 'maj') {
     remettreBoutonMaj();
+    $('#b-maj-haut').classList.remove('cherche');
+    if (!e.erreur) $('#b-maj-haut').classList.toggle('dispo', !!e.disponible);
     if (e.erreur) { if (e.manuel) toast(e.erreur, 4000); return; }
     if (!e.disponible) { if (e.manuel) toast('Vous avez déjà la dernière version.'); return; }
     const notes = e.notes ? `<p>${esc(e.notes).replace(/\n/g, '<br>')}</p>` : '';
@@ -1297,6 +1301,14 @@ function brancher() {
   $('#b-importer').onclick = importer;
   $('#b-importer-vide').onclick = importer;
   $('#b-menu').onclick = menuBiblio;
+  // icône de mise à jour (édition complète)
+  $('#b-maj-haut').hidden = !majPossible();
+  $('#b-maj-haut').onclick = () => {
+    $('#b-maj-haut').classList.add('cherche');
+    toast('Recherche d\'une mise à jour…');
+    Store.set('majVerifiee', Date.now());
+    A.verifierMaj(true);
+  };
   $('#b-vue').onclick = () => {
     app.prefs.affichage = app.prefs.affichage === 'liste' ? 'grille' : 'liste';
     Store.set('app', app.prefs);

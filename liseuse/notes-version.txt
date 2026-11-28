@@ -1,1 +1,1 @@
-Taille du texte en glissant le doigt le long du bord droit (vers le haut : plus grand), comme la luminosité sur le bord gauche.
+Icône de mise à jour en haut de la bibliothèque : un toucher cherche une nouvelle version ; un point coloré signale qu'une mise à jour est disponible.

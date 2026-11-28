@@ -402,3 +402,10 @@ body.lecture .feuille { padding-bottom: var(--sys-bas, 0px); }
 .entete-genre { grid-column: 1 / -1; font-weight: 700; font-size: .95rem; margin: 10px 0 -6px; padding-bottom: 6px; border-bottom: 1px solid var(--trait); color: var(--accent); }
 .entete-genre span { color: var(--doux); font-weight: 400; font-size: .8rem; margin-left: 4px; }
 .grille.liste .entete-genre { margin: 14px 8px 0; }
+
+/* icône de mise à jour : pastille quand une nouvelle version est disponible */
+.ico-maj { position: relative; }
+.ico-maj.dispo::after { content: ""; position: absolute; top: 9px; right: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--fond); }
+.ico-maj.dispo svg { color: var(--accent); }
+.ico-maj.cherche svg { animation: pulsation .9s ease-in-out infinite alternate; }
+@keyframes pulsation { from { opacity: 1; } to { opacity: .25; } }

@@ -1,5 +1,5 @@
 {
- "versionCode": 25,
- "versionName": "4.1",
- "notes": "Taille du texte en glissant le doigt le long du bord droit (vers le haut : plus grand), comme la luminosité sur le bord gauche."
+ "versionCode": 26,
+ "versionName": "4.2",
+ "notes": "Icône de mise à jour en haut de la bibliothèque : un toucher cherche une nouvelle version ; un point coloré signale qu'une mise à jour est disponible."
 }
