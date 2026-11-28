@@ -1,0 +1,87 @@
+name: APK Télécommande
+
+on:
+  push:
+    paths:
+      - 'telecommande-android/**'
+      - '.github/workflows/telecommande-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: telecommande-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: telecommande-android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+          cache-read-only: false
+
+      # Clé de signature fixe, gardée d'une compilation à l'autre (sinon Android
+      # refuse d'installer la mise à jour par-dessus l'ancienne version)
+      - uses: actions/cache@v4
+        with:
+          path: ~/.telecommande/signing.keystore
+          key: telecommande-signing-v1
+
+      - name: Clé de signature
+        run: |
+          mkdir -p "$HOME/.telecommande"
+          KS="$HOME/.telecommande/signing.keystore"
+          if [ ! -f "$KS" ]; then
+            keytool -genkeypair -keystore "$KS" -alias telecommande -keyalg RSA -keysize 2048 \
+              -validity 20000 -storepass telecommande-ci -keypass telecommande-ci -dname "CN=Telecommande"
+          fi
+          echo "TELECOMMANDE_KEYSTORE=$KS" >> "$GITHUB_ENV"
+          echo "TELECOMMANDE_KEYSTORE_PASSWORD=telecommande-ci" >> "$GITHUB_ENV"
+
+      - name: Compilation
+        run: |
+          ARGS="assembleRelease -PversionCode=${{ github.run_number }} -PversionName=1.${{ github.run_number }}"
+          gradle $ARGS || { echo "Nouvelle tentative dans 60 s"; sleep 60; gradle $ARGS; }
+
+      - name: Nommer l'APK
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk "telecommande-v${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk telecommande.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: telecommande-v${{ github.run_number }}
+          path: telecommande-android/telecommande-v${{ github.run_number }}.apk
+
+      - name: Retirer les anciennes versions de la release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view telecommande -R "${{ github.repository }}" --json assets -q '.assets[].name' 2>/dev/null \
+            | grep -E '^telecommande-v[0-9]+\.apk$' \
+            | xargs -r -n1 gh release delete-asset telecommande -R "${{ github.repository }}" -y || true
+
+      - name: Publier (release « telecommande »)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: telecommande
+          name: Télécommande v${{ github.run_number }}
+          prerelease: true
+          make_latest: false
+          body: "Version 1.${{ github.run_number }}, compilée depuis ${{ github.sha }}. `telecommande.apk` est toujours la dernière version."
+          files: |
+            telecommande-android/telecommande-v${{ github.run_number }}.apk
+            telecommande-android/telecommande.apk

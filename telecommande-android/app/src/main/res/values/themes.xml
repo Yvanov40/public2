@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="icon_bg">#1C1E22</color>
+    <style name="Theme.Telecommande" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0F1013</item>
+        <item name="android:statusBarColor">#0F1013</item>
+        <item name="android:navigationBarColor">#0F1013</item>
+        <item name="android:colorAccent">#8AB4F8</item>
+    </style>
+    <style name="Dialog" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">#8AB4F8</item>
+    </style>
+</resources>
