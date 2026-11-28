@@ -1,1 +1,1 @@
-Sélection au doigt : appui long sur un livre puis, sans lever le doigt, glissez pour sélectionner (ou désélectionner) tous les livres jusqu'au doigt ; la liste défile toute seule près des bords.
+Taille du texte en glissant le doigt le long du bord droit (vers le haut : plus grand), comme la luminosité sur le bord gauche.

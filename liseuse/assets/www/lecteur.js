@@ -7,7 +7,7 @@ const lecteur = window.lecteur = (() => {
     taille: 19, theme: 'creme', police: 'literata', interligne: 1.55, marges: 22,
     alignement: 'justifie', paragraphes: 'retrait', mode: 'pages', images: 'document', imagesSombre: 'attenuer',
     cesure: true, gras: false, couleursDoc: true, deuxPages: true, animation: true, uneMain: false,
-    volume: true, pleinEcran: true, ecranAllume: false, infos: true, luminosite: -1, liensExternes: true, bordLum: true,
+    volume: true, pleinEcran: true, ecranAllume: false, infos: true, luminosite: -1, liensExternes: true, bordLum: true, bordTaille: true,
     chaud: 0, persoFond: '#f3ece0', persoTexte: '#2b2b2b'
   };
 
@@ -109,8 +109,28 @@ const lecteur = window.lecteur = (() => {
 
   /** Pastille indiquant la luminosité pendant le geste sur le bord. */
   let minuteIndic;
+  /** Pastille pendant le geste du bord droit (taille du texte). */
+  function indiquerTaille(v, fin) {
+    const p = $('#indic-lum');
+    p.querySelector('svg').style.display = 'none';
+    p.querySelector('span').innerHTML = `<b style="font-family:Georgia,serif;margin-right:8px">Aa</b>${v}`;
+    p.classList.add('actif');
+    clearTimeout(minuteIndic);
+    if (fin) minuteIndic = setTimeout(() => p.classList.remove('actif'), 900);
+  }
+
+  /** Remise en page en gardant la position donnée (fraction du chapitre). */
+  function relayoutFraction(f) {
+    if (!doc || !pretAffiche) return;
+    mettreEnPage();
+    if (R.mode === 'pages') page = Math.max(0, Math.min(pages - 1, Math.round(f * pages)));
+    afficherPage(false, R.mode === 'pages' ? undefined : f);
+    majInfos();
+  }
+
   function indiquerLumiere(fin) {
     const p = $('#indic-lum');
+    p.querySelector('svg').style.display = '';
     p.querySelector('span').textContent = texteLumiere();
     p.classList.add('actif');
     clearTimeout(minuteIndic);
@@ -509,8 +529,12 @@ const lecteur = window.lecteur = (() => {
       if (e.touches.length > 1) { t0 = null; return; }
       const t = e.touches[0];
       t0 = { x: t.clientX, y: t.clientY, t: Date.now() };
-      if (R.bordLum && t.clientX < (win.innerWidth || W) * 0.12) {
-        lum = { y0: t.clientY, depart: R.luminosite < 0 ? 0.6 : R.luminosite, actif: false };
+      const largeur = win.innerWidth || W;
+      if (R.bordLum && t.clientX < largeur * 0.12) {
+        lum = { type: 'lum', y0: t.clientY, depart: R.luminosite < 0 ? 0.6 : R.luminosite, actif: false };
+      } else if (R.bordTaille && t.clientX > largeur * 0.88) {
+        // bord droit : taille du texte
+        lum = { type: 'taille', y0: t.clientY, depart: R.taille, actif: false, f: fractionCourante() };
       }
     }, { passive: true });
     doc.addEventListener('touchmove', e => {
@@ -523,6 +547,17 @@ const lecteur = window.lecteur = (() => {
         lum.y0 = t.clientY;
       }
       e.preventDefault();
+      if (lum.type === 'taille') {
+        // un point de taille tous les 22 px de glissement (vers le haut : plus grand)
+        const v = Math.max(12, Math.min(40, Math.round(lum.depart - (t.clientY - lum.y0) / 22)));
+        indiquerTaille(v);
+        if (v !== R.taille) {
+          R.taille = v;
+          styleLivre();
+          relayoutFraction(lum.f);
+        }
+        return;
+      }
       const v = Math.max(0, Math.min(1, lum.depart - (t.clientY - lum.y0) / ((win.innerHeight || H) * 0.6)));
       R.luminosite = Math.round(v * 100) / 100;
       appliquerLumiere(true);
@@ -530,12 +565,17 @@ const lecteur = window.lecteur = (() => {
     }, { passive: false });
     doc.addEventListener('touchend', e => {
       if (lum && lum.actif) {
-        // fin du réglage de luminosité : pas de toucher ni de page tournée
+        // fin du réglage (luminosité ou taille) : pas de toucher ni de page tournée
         e.preventDefault();
+        const type = lum.type, f = lum.f;
         lum = null;
         t0 = null;
         sauverReglages();
-        indiquerLumiere(true);
+        if (type === 'taille') {
+          indiquerTaille(R.taille, true);
+          majPanneau();
+          if (doc && doc.fonts) doc.fonts.ready.then(() => relayoutFraction(f));
+        } else indiquerLumiere(true);
         return;
       }
       lum = null;
