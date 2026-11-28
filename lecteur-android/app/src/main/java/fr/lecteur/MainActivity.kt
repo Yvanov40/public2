@@ -1016,23 +1016,35 @@ class MainActivity : AppCompatActivity() {
         rows += Row.Quick(items)
     }
 
-    private fun quickMusic(): Row? {
-        val q = mutableListOf<Row.QuickItem>()
+    /** « Album - La fête est finie » → « La fête est finie » (titres YouTube Music). */
+    private fun albumName(t: String) = t.replace(Regex("^(Album|EP|Single)\\s*[-–−:]\\s*", RegexOption.IGNORE_CASE), "")
+
+    /** Accès rapide musique, en deux parties : mes albums, mes titres. */
+    private fun quickMusic(rows: MutableList<Row>) {
+        val albums = mutableListOf<Row.QuickItem>()
+        val recentA = Store.recentAlbums()
+        (recentA + Store.savedAlbums()).distinctBy { it.url }.forEach { a ->
+            val recent = recentA.any { it.url == a.url }
+            albums += Row.QuickItem(albumName(a.title), a.thumb, R.drawable.ic_music, { pushMusic(MPage.AlbumP(a)) }, { albumMenu(a, recent = recent) })
+        }
+        Store.playlists().forEach { p ->
+            albums += Row.QuickItem(p.name, p.tracks.firstOrNull()?.thumb, R.drawable.ic_queue, { pushMusic(MPage.PlaylistP(p.id)) }, { playlistMenu(p) })
+        }
+        if (albums.isNotEmpty()) {
+            rows += Row.Header("Mes albums")
+            rows += Row.Quick(albums.take(6))
+        }
+        val titles = mutableListOf<Row.QuickItem>()
         val likes = Store.likes()
-        if (likes.isNotEmpty()) q += Row.QuickItem("Titres likés", likes.first().thumb, R.drawable.ic_heart, { pushMusic(MPage.Liked) })
-        Store.recentAlbums().take(3).forEach { a ->
-            q += Row.QuickItem(a.title, a.thumb, R.drawable.ic_music, { pushMusic(MPage.AlbumP(a)) }, { albumMenu(a, recent = true) })
+        if (likes.isNotEmpty()) titles += Row.QuickItem("Titres likés · ${likes.size}", likes.first().thumb, R.drawable.ic_heart, { pushMusic(MPage.Liked) })
+        val recent = Store.recentTracks()
+        recent.take(6 - titles.size).forEachIndexed { i, t ->
+            titles += Row.QuickItem(t.title, t.thumb, R.drawable.ic_music, { Music.play(recent, i); openNowPlayingSoon() }, { trackMenu(t, null, i) })
         }
-        Store.playlists().take(2).forEach { p ->
-            q += Row.QuickItem(p.name, p.tracks.firstOrNull()?.thumb, R.drawable.ic_queue, { pushMusic(MPage.PlaylistP(p.id)) }, { playlistMenu(p) })
+        if (titles.isNotEmpty()) {
+            rows += Row.Header("Mes titres", if (recent.size > 5) "Tout voir" else null) { pushMusic(MPage.Recent) }
+            rows += Row.Quick(titles)
         }
-        Store.savedAlbums().filterNot { s -> Store.recentAlbums().take(3).any { it.url == s.url } }.take(3).forEach { a ->
-            q += Row.QuickItem(a.title, a.thumb, R.drawable.ic_music, { pushMusic(MPage.AlbumP(a)) }, { albumMenu(a) })
-        }
-        if (q.size < 8) Store.recentTracks().take(8 - q.size).forEachIndexed { i, t ->
-            q += Row.QuickItem(t.title, t.thumb, R.drawable.ic_music, { Music.play(Store.recentTracks(), i); openNowPlayingSoon() })
-        }
-        return if (q.isEmpty()) null else Row.Quick(q.take(8))
     }
 
     private fun quickVideos(): Row? {
@@ -2752,7 +2764,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Accueil musique
-        quickMusic()?.let { rows += it }
+        quickMusic(rows)
         stripArtists(rows)
         deviceRows(rows, "music")
         val likes = Store.likes()
@@ -2775,9 +2787,9 @@ class MainActivity : AppCompatActivity() {
         })
         val myAlbums = Store.savedAlbums()
         if (myAlbums.isNotEmpty()) {
-            rows += Row.Header("Mes albums")
+            rows += Row.Header("Albums enregistrés")
             rows += Row.Cards(myAlbums.map { a ->
-                Row.Card(a.title, a.artist, a.thumb, onClick = { pushMusic(MPage.AlbumP(a)) }, onLong = { albumMenu(a) })
+                Row.Card(albumName(a.title), a.artist, a.thumb, onClick = { pushMusic(MPage.AlbumP(a)) }, onLong = { albumMenu(a) })
             })
         }
         val myArtists = Store.savedArtists()
@@ -2785,7 +2797,7 @@ class MainActivity : AppCompatActivity() {
         if (recentAlbums.isNotEmpty()) {
             rows += Row.Header("Albums écoutés récemment")
             rows += Row.Cards(recentAlbums.map { a ->
-                Row.Card(a.title, a.artist, a.thumb, onClick = { pushMusic(MPage.AlbumP(a)) }, onLong = { albumMenu(a, recent = true) })
+                Row.Card(albumName(a.title), a.artist, a.thumb, onClick = { pushMusic(MPage.AlbumP(a)) }, onLong = { albumMenu(a, recent = true) })
             })
         }
         val recentArtists = Store.recentArtists().filterNot { r -> myArtists.any { it.url == r.url } }
