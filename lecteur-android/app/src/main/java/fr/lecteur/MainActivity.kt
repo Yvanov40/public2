@@ -3435,8 +3435,24 @@ class MainActivity : AppCompatActivity() {
             return if (dy > 0) 1 else -1
         }
         // Vidéo : vers le haut → plein écran ; vers le bas → sort du plein écran, sinon passe en audio
-        // Double appui à gauche / à droite : −10 s / +10 s
+        // Double appui à gauche / à droite : −10 s / +10 s (sans faire clignoter les commandes)
+        // Plein écran : glisser verticalement à gauche → luminosité, à droite → volume
+        val audio = getSystemService(AUDIO_SERVICE) as android.media.AudioManager
+        var zone = 0 // 0 : rien encore, 1 : luminosité, 2 : volume, -1 : autre
+        var volAcc = 0f
         val detector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean {
+                zone = 0
+                volAcc = 0f
+                return true
+            }
+
+            // Un seul appui (confirmé, donc pas le début d'un double) : commandes affichées / masquées
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                if (playerView.isControllerFullyVisible) playerView.hideController() else playerView.showController()
+                return true
+            }
+
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 val left = e.x < playerView.width / 2f
                 val delta = if (left) -10_000L else 10_000L
@@ -3444,11 +3460,55 @@ class MainActivity : AppCompatActivity() {
                 var to = (player.currentPosition + delta).coerceAtLeast(0)
                 if (d > 0) to = to.coerceAtMost(d - 500)
                 player.seekTo(to)
-                seekFlash(left)
+                flash(if (left) "« 10 s" else "10 s »", if (left) -1 else 1)
                 return true
             }
 
+            override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
+                if (!fullscreen || e1 == null) return false
+                if (zone == 0) {
+                    val dy = abs(e2.y - e1.y)
+                    if (dy < 20 * density || dy < abs(e2.x - e1.x)) return false
+                    val w = playerView.width
+                    zone = when {
+                        e1.x < w / 3f -> 1
+                        e1.x > w * 2 / 3f -> 2
+                        else -> -1
+                    }
+                }
+                val h = playerView.height.coerceAtLeast(1)
+                when (zone) {
+                    1 -> {
+                        val lp = window.attributes
+                        var cur = lp.screenBrightness
+                        if (cur < 0) cur = try {
+                            android.provider.Settings.System.getInt(contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS) / 255f
+                        } catch (_: Exception) { 0.5f }
+                        val b = (cur + distanceY / h * 1.2f).coerceIn(0.01f, 1f)
+                        lp.screenBrightness = b
+                        window.attributes = lp
+                        flash("☀ ${Math.round(b * 100)} %", -1)
+                    }
+                    2 -> {
+                        val max = audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                        volAcc += distanceY / h * max * 1.2f
+                        while (volAcc >= 1f) {
+                            audio.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_RAISE, 0)
+                            volAcc -= 1f
+                        }
+                        while (volAcc <= -1f) {
+                            audio.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_LOWER, 0)
+                            volAcc += 1f
+                        }
+                        val cur = audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                        flash("🔊 ${Math.round(cur * 100f / max.coerceAtLeast(1))} %", 1)
+                    }
+                }
+                return zone > 0
+            }
+
             override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
+                if (zone > 0) return true // c'était un réglage de luminosité / volume
                 when (vertical(e1, e2, vy)) {
                     -1 -> if (!fullscreen) {
                         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -3463,7 +3523,8 @@ class MainActivity : AppCompatActivity() {
                 return false
             }
         })
-        playerView.setOnTouchListener { _, e -> detector.onTouchEvent(e); false }
+        // On garde tous les touchers : c'est nous qui affichons / masquons les commandes
+        playerView.setOnTouchListener { _, e -> detector.onTouchEvent(e); true }
 
         // Mini-lecteur : vers le haut → vidéo (ou écran « en cours » pour l'audio)
         val miniDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
@@ -3486,8 +3547,9 @@ class MainActivity : AppCompatActivity() {
 
     private var seekLabel: TextView? = null
 
-    /** Petit « −10 s / +10 s » qui apparaît du côté touché puis s'efface. */
-    private fun seekFlash(left: Boolean) {
+    /** Petite étiquette (−10 s, luminosité, volume) du côté touché, qui s'efface. side : -1 gauche, 1 droite. */
+    private fun flash(text: String, side: Int) {
+        val left = side < 0
         val frame = playerView.overlayFrameLayout ?: return
         val d = resources.displayMetrics.density
         val tv = seekLabel ?: TextView(this).apply {
@@ -3503,7 +3565,7 @@ class MainActivity : AppCompatActivity() {
             ))
             seekLabel = this
         }
-        tv.text = if (left) "« 10 s" else "10 s »"
+        tv.text = text
         (tv.layoutParams as android.widget.FrameLayout.LayoutParams).apply {
             gravity = android.view.Gravity.CENTER_VERTICAL or if (left) android.view.Gravity.START else android.view.Gravity.END
             marginStart = (32 * d).toInt()
@@ -3545,6 +3607,10 @@ class MainActivity : AppCompatActivity() {
         pager.isVisible = !fullscreen
         bottomNav.isVisible = false
         if (fullscreen) loading.visibility = View.INVISIBLE
+        else if (window.attributes.screenBrightness >= 0) {
+            // Hors plein écran : luminosité normale du téléphone
+            window.attributes = window.attributes.also { it.screenBrightness = -1f }
+        }
 
         val lp = playerView.layoutParams as LinearLayout.LayoutParams
         if (fullscreen) {
