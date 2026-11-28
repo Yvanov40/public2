@@ -39,7 +39,9 @@ sealed class Row {
         val onClick: () -> Unit,
         val onLong: (() -> Unit)? = null,
         /** Grisé (épisode déjà écouté). */
-        val dim: Boolean = false
+        val dim: Boolean = false,
+        /** Peut s'afficher en tuile quand la disposition « Cartes » est choisie. */
+        val tile: Boolean = false
     ) : Row()
     class Choice(val title: String, val sub: String?, val labels: List<String>, val selected: Int, val onSelect: (Int) -> Unit) : Row()
     class Slider(
@@ -79,13 +81,22 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private var rows: List<Row> = emptyList()
 
     fun submit(list: List<Row>) {
-        rows = list
+        rows = if (Settings.cards) list else list.flatMap { r ->
+            // Disposition « Liste » : les rangées d'albums / playlists deviennent des lignes
+            if (r is Row.Cards) r.items.map { c ->
+                Row.Track(c.title, c.sub, c.thumb, round = c.round, onClick = c.onClick, onLong = c.onLong)
+            } else listOf(r)
+        }
         notifyDataSetChanged()
     }
 
+    /** En disposition « Cartes », épisodes, fichiers et morceaux deviennent des tuiles carrées. */
+    private fun isTile(r: Row) = Settings.cards &&
+        ((r is Row.Entry && r.tile) || (r is Row.Track && r.number == null && r.thumb != null))
+
     override fun getItemCount() = rows.size
 
-    override fun getItemViewType(position: Int) = when (rows[position]) {
+    override fun getItemViewType(position: Int) = if (isTile(rows[position])) 19 else when (rows[position]) {
         is Row.Header -> 0
         is Row.Note -> 1
         is Row.Chips -> 2
@@ -106,9 +117,17 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         is Row.Quick -> 18
     }
 
-    /** Nombre de colonnes occupées : seules les cartes vidéo se partagent la largeur. */
-    fun spanSize(position: Int, spanCount: Int): Int =
-        if (position in rows.indices && rows[position] is Row.Video && Settings.cards) 1 else spanCount
+    /** Nombre de colonnes occupées. En « Cartes » à 1 colonne, la grille en a 2 :
+     *  la vidéo prend toute la largeur, les tuiles carrées vont par deux. */
+    fun spanSize(position: Int, spanCount: Int): Int {
+        if (position !in rows.indices || !Settings.cards) return spanCount
+        val r = rows[position]
+        return when {
+            isTile(r) -> 1
+            r is Row.Video -> if (Settings.columns <= 1) spanCount else 1
+            else -> spanCount
+        }
+    }
 
     private class H(v: View) : RecyclerView.ViewHolder(v)
 
@@ -119,6 +138,7 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         fun make(layout: Int) = H(inf.inflate(layout, parent, false).also { Ui.applyFont(it) })
         return when (viewType) {
             10 -> make(R.layout.item_video_row)
+            19 -> make(R.layout.item_tile)
             11, 12, 13, 14 -> make(R.layout.item_setting)
             0 -> make(R.layout.item_header)
             1 -> make(R.layout.item_note)
@@ -154,9 +174,61 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
     }
 
+    private fun bindTile(v: View, row: Row) {
+        val title = v.findViewById<TextView>(R.id.title)
+        val sub = v.findViewById<TextView>(R.id.sub)
+        val img = v.findViewById<com.google.android.material.imageview.ShapeableImageView>(R.id.thumb)
+        val scale = Settings.tileScale * when (Settings.columns) { 1, 2 -> 1f; 3 -> 0.9f; else -> 0.82f }
+        title.textSize = 14f * scale
+        sub.textSize = 12f * scale
+        title.maxLines = if (Settings.columns >= 3) 3 else 2
+        var subText: String? = null
+        when (row) {
+            is Row.Entry -> {
+                title.text = row.title
+                subText = row.subtitle
+                shape(img, false, 12f)
+                Thumbs.load(img, row.thumb, row.icon)
+                title.setTextColor(MaterialColors.getColor(v, com.google.android.material.R.attr.colorOnSurface))
+                v.alpha = if (row.dim) 0.45f else 1f
+                v.findViewById<TextView>(R.id.title).textSize = 16f * Settings.tileScale
+                sub.textSize = 12f * Settings.tileScale
+                v.setOnClickListener { row.onClick() }
+                val long = row.onLong
+                if (long != null) v.setOnLongClickListener { long(); true } else v.setOnLongClickListener(null)
+            }
+            is Row.Track -> {
+                title.text = (if (row.liked) "♥ " else "") + row.title
+                subText = row.sub
+                shape(img, row.round, 12f)
+                Thumbs.load(img, row.thumb, if (row.round) R.drawable.ic_person else R.drawable.ic_music)
+                title.setTextColor(
+                    MaterialColors.getColor(
+                        v, if (row.playing) com.google.android.material.R.attr.colorPrimary
+                        else com.google.android.material.R.attr.colorOnSurface
+                    )
+                )
+                v.alpha = 1f
+                v.setOnClickListener { row.onClick() }
+                val long = row.onLong
+                if (long != null) v.setOnLongClickListener { long(); true } else v.setOnLongClickListener(null)
+            }
+            else -> {}
+        }
+        sub.text = subText
+        sub.visibility = if (subText.isNullOrEmpty()) View.GONE else View.VISIBLE
+        title.gravity = if (row is Row.Track && row.round) android.view.Gravity.CENTER_HORIZONTAL else android.view.Gravity.START
+        sub.gravity = title.gravity
+    }
+
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         val v = holder.itemView
-        when (val row = rows[position]) {
+        val row0 = rows[position]
+        if (isTile(row0)) {
+            bindTile(v, row0)
+            return
+        }
+        when (val row = row0) {
             is Row.Header -> {
                 v.findViewById<TextView>(R.id.text).text = row.text
                 val b = v.findViewById<Button>(R.id.action)
@@ -382,6 +454,9 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 num.text = row.number
                 num.visibility = if (row.number == null) View.GONE else View.VISIBLE
                 v.findViewById<View>(R.id.liked).visibility = if (row.liked) View.VISIBLE else View.GONE
+                title.textSize = 16f * Settings.tileScale
+                sub.textSize = 12f * Settings.tileScale
+                v.alpha = 1f
                 val img = v.findViewById<com.google.android.material.imageview.ShapeableImageView>(R.id.thumb)
                 shape(img, row.round, 8f)
                 Thumbs.load(img, row.thumb, if (row.round) R.drawable.ic_person else R.drawable.ic_music)

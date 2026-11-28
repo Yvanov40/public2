@@ -15,6 +15,14 @@ class RatioLayout @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? =
     }
 }
 
+/** Carré : hauteur = largeur (pochettes d'album, de podcast). */
+class SquareLayout @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = null) : FrameLayout(ctx, attrs) {
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val w = MeasureSpec.getSize(widthMeasureSpec)
+        super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY))
+    }
+}
+
 /** Défilement horizontal qui cohabite avec le glissement entre les écrans. */
 class NestedHScroll @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = null) :
     HorizontalScrollView(ctx, attrs) {

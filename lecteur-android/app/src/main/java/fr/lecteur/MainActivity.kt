@@ -572,11 +572,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun columns() = if (Settings.cards) Settings.columns.coerceIn(1, 4) else 1
+    /** À 1 colonne, la grille en compte 2 pour que les tuiles carrées aillent par deux. */
+    private fun columns() = if (Settings.cards) Settings.columns.coerceIn(1, 4).coerceAtLeast(2) else 1
 
     private fun applyGrid(list: RecyclerView) {
         (list.layoutManager as? GridLayoutManager)?.spanCount = columns()
-        val pad = if (columns() > 1) (7 * resources.displayMetrics.density).toInt() else 0
+        val pad = if (Settings.cards && Settings.columns > 1) (7 * resources.displayMetrics.density).toInt() else 0
         list.setPadding(pad, list.paddingTop, pad, list.paddingBottom)
     }
 
@@ -1279,7 +1280,7 @@ class MainActivity : AppCompatActivity() {
         ).joinToString(" · ")
         return Row.Entry(
             (if (pos == 0L) "● " else "") + e.title, sub, e.image ?: e.podcastArt, R.drawable.ic_audio,
-            onClick = { playEpisodes(list, i) }, onLong = { episodeMenu(list, i) }, dim = pos < 0
+            onClick = { playEpisodes(list, i) }, onLong = { episodeMenu(list, i) }, dim = pos < 0, tile = true
         )
     }
 
@@ -1934,7 +1935,8 @@ class MainActivity : AppCompatActivity() {
                 Row.Entry(
                     f.name, if (audio) "Audio" else "Vidéo", null,
                     if (audio) R.drawable.ic_audio else R.drawable.ic_video,
-                    onClick = { playFolder(media, media.indexOf(f)) }
+                    onClick = { playFolder(media, media.indexOf(f)) },
+                    tile = true
                 )
             }
         }
@@ -2103,7 +2105,8 @@ class MainActivity : AppCompatActivity() {
                     d.thumb,
                     if (d.video) R.drawable.ic_video else R.drawable.ic_audio,
                     onClick = { playDownloads(list, i) },
-                    onLong = { downloadMenu(list, i) }
+                    onLong = { downloadMenu(list, i) },
+                    tile = true
                 )
             }
         }
@@ -2890,14 +2893,14 @@ class MainActivity : AppCompatActivity() {
     // ——— Réglages ———
 
     private fun settingsRows(rows: MutableList<Row>) {
-        rows += Row.Header("Affichage des vidéos")
+        rows += Row.Header("Affichage")
         rows += Row.Choice(
-            "Disposition", "Grandes cartes, ou liste compacte avec la miniature à gauche",
+            "Disposition", "Partout : vidéos, épisodes, morceaux, albums, téléchargements. Tuiles, ou liste compacte",
             listOf("Cartes", "Liste"), if (Settings.cards) 0 else 1
         ) { i -> Settings.layout = if (i == 0) "cards" else "list"; relayout() }
         if (Settings.cards) {
             rows += Row.Slider(
-                "Colonnes", "Nombre de cartes par ligne", Settings.columns.toFloat(), 1f, 4f, 1f,
+                "Colonnes", "Nombre de vidéos par ligne (à 1, les tuiles carrées vont par deux)", Settings.columns.toFloat(), 1f, 4f, 1f,
                 { it.toInt().toString() }
             ) { v -> Settings.columns = v.toInt(); relayout() }
         }
