@@ -127,10 +127,7 @@ class NowPlayingActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_now_playing)
         slideIn()
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            isAppearanceLightStatusBars = false
-            isAppearanceLightNavigationBars = false
-        }
+        Ui.styleSystemBars(this, 0xFF0C0C0C.toInt(), darkBackground = true)
         player = PlayerHolder.get(this)
 
         root = findViewById(R.id.root)
@@ -304,10 +301,16 @@ class NowPlayingActivity : AppCompatActivity() {
                 val base = if (bmp == null) 0xFF303030.toInt() else Palette.from(bmp).generate().let { p ->
                     p.getDarkVibrantColor(p.getDarkMutedColor(p.getMutedColor(0xFF303030.toInt())))
                 }
+                val bottom = blend(base, Color.BLACK, 0.75f)
                 root.background = GradientDrawable(
                     GradientDrawable.Orientation.TOP_BOTTOM,
-                    intArrayOf(base, blend(base, Color.BLACK, 0.75f))
+                    intArrayOf(base, bottom)
                 )
+                // Barres du téléphone assorties au dégradé
+                @Suppress("DEPRECATION")
+                window.statusBarColor = base
+                @Suppress("DEPRECATION")
+                window.navigationBarColor = bottom
             }
         }
 

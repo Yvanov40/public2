@@ -44,4 +44,23 @@ object Ui {
             is ViewGroup -> for (i in 0 until v.childCount) applyFont(v.getChildAt(i))
         }
     }
+
+    /**
+     * Barre de navigation du téléphone (◀ ● ■) : même fond que l'appli, sans le voile gris
+     * qu'Android ajoute par-dessus, et des icônes claires ou sombres selon le thème.
+     */
+    @Suppress("DEPRECATION")
+    fun styleSystemBars(a: Activity, color: Int, darkBackground: Boolean) {
+        val w = a.window
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            w.isNavigationBarContrastEnforced = false
+            w.isStatusBarContrastEnforced = false
+        }
+        w.navigationBarColor = color
+        w.statusBarColor = color
+        androidx.core.view.WindowCompat.getInsetsController(w, w.decorView).apply {
+            isAppearanceLightNavigationBars = !darkBackground
+            isAppearanceLightStatusBars = !darkBackground
+        }
+    }
 }

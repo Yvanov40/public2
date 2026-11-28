@@ -351,6 +351,7 @@ class MainActivity : AppCompatActivity() {
             isAppearanceLightStatusBars = !night
             isAppearanceLightNavigationBars = !night
         }
+        Ui.styleSystemBars(this, MaterialColors.getColor(root, com.google.android.material.R.attr.colorSurface), night)
 
         player = PlayerHolder.get(this)
         playerView.player = player
