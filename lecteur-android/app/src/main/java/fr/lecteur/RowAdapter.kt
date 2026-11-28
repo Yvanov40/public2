@@ -66,7 +66,7 @@ sealed class Row {
     ) : Row()
     /** Grille de petites tuiles (accès rapide, comme Spotify). */
     class QuickItem(val title: String, val thumb: String?, val icon: Int, val onClick: () -> Unit, val onLong: (() -> Unit)? = null)
-    class Quick(val items: List<QuickItem>) : Row()
+    class Quick(val items: List<QuickItem>, val labels: Pair<String, String>? = null) : Row()
     class Progress(
         val title: String,
         val state: String,
@@ -429,10 +429,10 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     setPadding((12 * d).toInt(), (8 * d).toInt(), (12 * d).toInt(), (4 * d).toInt())
                 }
                 val ring = MaterialColors.getColor(v, com.google.android.material.R.attr.colorOnSurface)
-                row.items.forEachIndexed { i, (_, color) ->
-                    val dot = View(v.context)
-                    val bg = android.graphics.drawable.GradientDrawable().apply {
+                row.items.forEachIndexed { i, (label, color) ->
+                    val swatch = android.graphics.drawable.GradientDrawable().apply {
                         shape = android.graphics.drawable.GradientDrawable.OVAL
+                        setSize((22 * d).toInt(), (22 * d).toInt())
                         if (color == 0) {
                             gradientType = android.graphics.drawable.GradientDrawable.SWEEP_GRADIENT
                             colors = intArrayOf(
@@ -440,14 +440,24 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                                 0xFF1E88E5.toInt(), 0xFF8E24AA.toInt(), 0xFFE53935.toInt()
                             )
                         } else setColor(color)
-                        if (i == row.selected) setStroke((3 * d).toInt(), ring)
+                        if (i == row.selected) setStroke((2 * d).toInt(), ring)
                     }
-                    dot.background = bg
-                    dot.contentDescription = row.items[i].first
-                    dot.layoutParams = LinearLayout.LayoutParams((40 * d).toInt(), (40 * d).toInt())
-                        .apply { marginEnd = (12 * d).toInt() }
-                    dot.setOnClickListener { row.onSelect(i) }
-                    box.addView(dot)
+                    // Bulle avec pastille de couleur (même composant que les autres choix, fiable au toucher)
+                    val chip = com.google.android.material.chip.Chip(v.context).apply {
+                        text = label
+                        chipIcon = swatch
+                        isChipIconVisible = true
+                        chipIconSize = 22 * d
+                        isCheckable = true
+                        isChecked = i == row.selected
+                        isCheckedIconVisible = false
+                        layoutParams = LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                        ).apply { marginEnd = (8 * d).toInt() }
+                        setOnClickListener { row.onSelect(i) }
+                        Ui.applyFont(this)
+                    }
+                    box.addView(chip)
                 }
                 content.addView(NestedHScroll(v.context).apply {
                     isHorizontalScrollBarEnabled = false
@@ -504,6 +514,24 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 box.removeAllViews()
                 val inf = LayoutInflater.from(box.context)
                 val d = box.resources.displayMetrics.density
+                row.labels?.let { (l, r) ->
+                    // Titres des deux colonnes
+                    val head = LinearLayout(box.context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        setPadding((4 * d).toInt(), 0, 0, (6 * d).toInt())
+                    }
+                    listOf(l, r).forEachIndexed { i, txt ->
+                        head.addView(TextView(box.context).apply {
+                            text = txt
+                            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleSmall)
+                            setTextColor(MaterialColors.getColor(box, com.google.android.material.R.attr.colorOnSurfaceVariant))
+                            Ui.applyFont(this)
+                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                            if (i == 1) marginStart = (8 * d).toInt()
+                        })
+                    }
+                    box.addView(head)
+                }
                 row.items.chunked(2).forEach { pair ->
                     val line = LinearLayout(box.context).apply {
                         orientation = LinearLayout.HORIZONTAL
@@ -516,6 +544,8 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                             if (i == 0) marginEnd = (4 * d).toInt() else marginStart = (4 * d).toInt()
                         }
                         tile.findViewById<TextView>(R.id.title).text = q.title
+                        // Case vide (colonne plus courte que l'autre)
+                        tile.visibility = if (q.title.isEmpty()) View.INVISIBLE else View.VISIBLE
                         Thumbs.load(tile.findViewById(R.id.thumb), q.thumb, q.icon)
                         tile.setOnClickListener { q.onClick() }
                         q.onLong?.let { l -> tile.setOnLongClickListener { l(); true } }

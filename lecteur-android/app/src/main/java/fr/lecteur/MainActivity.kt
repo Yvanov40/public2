@@ -26,6 +26,7 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -1168,16 +1169,14 @@ class MainActivity : AppCompatActivity() {
         }
         val right = interleave(tracks, episodes, videos).take(4)
 
-        // Grille de 2 : on alterne gauche / droite pour former les deux colonnes
+        // Grille de 2 : on alterne gauche / droite pour former les deux colonnes (case vide si besoin)
         val quick = mutableListOf<Row.QuickItem>()
-        val leftover = mutableListOf<Row.QuickItem>()
+        val blank = Row.QuickItem("", null, 0, {})
         for (i in 0 until maxOf(left.size, right.size)) {
-            val l = left.getOrNull(i)
-            val r = right.getOrNull(i)
-            if (l != null && r != null) { quick += l; quick += r } else leftover += listOfNotNull(l, r)
+            quick += left.getOrNull(i) ?: blank
+            quick += right.getOrNull(i) ?: blank
         }
-        quick += leftover
-        if (quick.isNotEmpty()) rows += Row.Quick(quick.take(8))
+        if (quick.isNotEmpty()) rows += Row.Quick(quick.take(8), "Mes artistes" to "Mes lectures")
         stripFavorites(rows)
         deviceRows(rows, "all")
 
@@ -3181,7 +3180,11 @@ class MainActivity : AppCompatActivity() {
         val colorIdx = Settings.colors.indexOfFirst { it.key == Settings.color }.coerceAtLeast(0)
         rows += Row.Colors(
             "Couleur", Settings.colors.map { it.label to it.seed }, colorIdx
-        ) { i -> Settings.color = Settings.colors[i].key; recreate() }
+        ) { i ->
+            Settings.color = Settings.colors[i].key
+            Toast.makeText(this, "Couleur : ${Settings.colors[i].label}", Toast.LENGTH_SHORT).show()
+            recreate()
+        }
         val modes = listOf("system", "light", "dark")
         rows += Row.Choice(
             "Thème", null, listOf("Comme le téléphone", "Clair", "Sombre"),
