@@ -653,7 +653,7 @@ function afficherBiblio() {
 
   // continuer la lecture (à la racine seulement)
   const cont = $('#continuer');
-  const enCours = !filtre && !app.dossier && !app.selection ? app.livres
+  const enCours = !filtre && !app.dossier ? app.livres
     .map(l => ({ l, p: position(l.id) }))
     .filter(x => x.p && x.p.t && x.p.p < 0.995)
     .sort((a, b) => b.p.t - a.p.t)[0] : null;
@@ -1329,12 +1329,57 @@ function brancher() {
   let appuiLong = false, minuteur = null, depart = null;
   const zone = $('#biblio-defile');
   const cleDe = el => el.dataset.dossier ? 'd:' + el.dataset.dossier : el.dataset.id;
+  // glisser après l'appui long : sélectionne (ou désélectionne) tous les livres entre le premier et le doigt
+  let glisse = null, point = null, boucle = 0;
   const appui = el => {
     appuiLong = true;
     if (navigator.vibrate) try { navigator.vibrate(25); } catch (er) { /* rien */ }
-    if (!app.selection) commencerSelection(cleDe(el));
-    else basculerChoix(cleDe(el));
+    const cle = cleDe(el);
+    if (!app.selection) {
+      // entrée en sélection sans redessiner la bibliothèque : la vignette sous le doigt doit rester la même
+      // (sinon le glissement qui suit serait envoyé à une vignette disparue)
+      if (!exigerPro('La sélection multiple')) return;
+      app.selection = new Set([cle]);
+      $('#grille').classList.add('en-selection');
+      el.classList.add('choisi');
+      majSelection();
+    } else basculerChoix(cle);
+    if (!app.selection) return; // version Pro refusée
+    const cles = $$('#grille .carte').map(cleDe);
+    glisse = { ancre: cles.indexOf(cle), ajout: app.selection.has(cle), base: new Set(app.selection), cles, dernier: -1 };
+    boucle = requestAnimationFrame(defilerBords);
   };
+  const etendre = () => {
+    if (!glisse || !point) return;
+    const sous = document.elementFromPoint(point.x, point.y);
+    const c = sous && sous.closest('#grille .carte');
+    if (!c) return;
+    const i = glisse.cles.indexOf(cleDe(c));
+    if (i < 0 || i === glisse.dernier || glisse.ancre < 0) return;
+    glisse.dernier = i;
+    const a = Math.min(i, glisse.ancre), b = Math.max(i, glisse.ancre);
+    const sel = new Set(glisse.base);
+    for (let k = a; k <= b; k++) {
+      if (glisse.ajout) sel.add(glisse.cles[k]);
+      else sel.delete(glisse.cles[k]);
+    }
+    app.selection = sel;
+    $$('#grille .carte').forEach(x => x.classList.toggle('choisi', sel.has(cleDe(x))));
+    majSelection();
+  };
+  // près du haut ou du bas de l'écran, la bibliothèque défile toute seule
+  const defilerBords = () => {
+    if (!glisse) return;
+    if (point) {
+      const r = zone.getBoundingClientRect();
+      let v = 0;
+      if (point.y < r.top + 80) v = -Math.ceil((r.top + 80 - point.y) / 5);
+      else if (point.y > r.bottom - 80) v = Math.ceil((point.y - (r.bottom - 80)) / 5);
+      if (v) { zone.scrollTop += v; glisse.dernier = -1; etendre(); }
+    }
+    boucle = requestAnimationFrame(defilerBords);
+  };
+  const finGlisse = () => { glisse = null; point = null; cancelAnimationFrame(boucle); };
   zone.addEventListener('touchstart', e => {
     if (e.touches.length > 1) { clearTimeout(minuteur); depart = null; return; } // pincement : pas de sélection
     const el = e.target.closest('#grille .carte');
@@ -1344,10 +1389,17 @@ function brancher() {
     minuteur = setTimeout(() => appui(el), 480);
   }, { passive: true });
   zone.addEventListener('touchmove', e => {
-    if (e.touches.length > 1) { clearTimeout(minuteur); return; }
+    if (e.touches.length > 1) { clearTimeout(minuteur); finGlisse(); return; }
+    if (glisse) {
+      e.preventDefault(); // pas de défilement pendant la sélection au doigt
+      point = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      etendre();
+      return;
+    }
     if (depart && Math.hypot(e.touches[0].clientX - depart.x, e.touches[0].clientY - depart.y) > 10) clearTimeout(minuteur);
-  }, { passive: true });
-  zone.addEventListener('touchend', () => clearTimeout(minuteur));
+  }, { passive: false });
+  zone.addEventListener('touchend', () => { clearTimeout(minuteur); finGlisse(); });
+  zone.addEventListener('touchcancel', () => { clearTimeout(minuteur); finGlisse(); });
   zone.addEventListener('contextmenu', e => {
     e.preventDefault();
     const el = e.target.closest('#grille .carte');

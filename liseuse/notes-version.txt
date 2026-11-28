@@ -1,1 +1,1 @@
-Sélection multiple : « Classer dans un genre » range d'un coup tous les livres choisis dans le genre de votre choix.
+Sélection au doigt : appui long sur un livre puis, sans lever le doigt, glissez pour sélectionner (ou désélectionner) tous les livres jusqu'au doigt ; la liste défile toute seule près des bords.
