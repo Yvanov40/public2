@@ -117,6 +117,8 @@ L'écran principal est une grille de tuiles ; chaque tuile ouvre sa page :
   « Applis », ou glisser un dossier de l'accueil sur un autre. Dans le cercle, toucher le
   sous-dossier ou rester dessus un instant en glissant l'ouvre ; appui long : son menu, et
   glisser ensuite le sort (case vide de l'accueil ou autre dossier).
+  Le dossier parent reste estompé en fond : glisser sur une de ses applis, ou revenir au
+  centre du sous-dossier et y rester un instant, ramène au parent dans le même geste.
   Organiser : toucher une appli puis sa nouvelle place ; l'ordre est celui du cercle (en
   haut, puis sens horaire) et les premières sont celles visibles sur l'icône.
   Invisible : la case paraît vide mais reste un dossier (contour en pointillés pendant un

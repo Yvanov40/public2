@@ -113,6 +113,112 @@ final class FolderWheelView extends View {
         subOpener = o;
     }
 
+    /** Un niveau ouvert (dossier parent gardé en fond quand un sous-dossier s'ouvre). */
+    private static final class Level {
+        String folder;
+        int color, style;
+        float cx, cy, iconFactor;
+        boolean showName, realFolder, panelUp;
+        final List<Spot> spots = new ArrayList<>();
+        final List<float[]> arcs = new ArrayList<>();
+        final RectF panel = new RectF();
+    }
+
+    private final java.util.ArrayDeque<Level> parents = new java.util.ArrayDeque<>();
+    private Level outgoing;          // sous-dossier qu'on vient de quitter (s'efface)
+    private long outgoingAt, dimAt;
+    private boolean leftCenter;      // le doigt a quitté le centre du sous-dossier
+    private boolean pendingCenter;
+
+    private Level snap() {
+        Level l = new Level();
+        l.folder = folder;
+        l.color = color;
+        l.style = style;
+        l.cx = cx;
+        l.cy = cy;
+        l.iconFactor = iconFactor;
+        l.showName = showName;
+        l.realFolder = realFolder;
+        l.panelUp = panelUp;
+        l.spots.addAll(spots);
+        l.arcs.addAll(arcs);
+        l.panel.set(panel);
+        return l;
+    }
+
+    private void apply(Level l) {
+        folder = l.folder;
+        color = l.color;
+        style = l.style;
+        cx = l.cx;
+        cy = l.cy;
+        iconFactor = l.iconFactor;
+        showName = l.showName;
+        realFolder = l.realFolder;
+        panelUp = l.panelUp;
+        spots.clear();
+        spots.addAll(l.spots);
+        arcs.clear();
+        arcs.addAll(l.arcs);
+        panel.set(l.panel);
+    }
+
+    /** Ouvre le sous-dossier de la case s, le dossier actuel reste en fond. */
+    private void enterSub(Spot s) {
+        Level parent = snap();
+        subOpener.openSub(s.app.label, s.x, s.y); // centré sur le sous-dossier
+        parents.push(parent);
+        outgoing = null;
+        leftCenter = false;
+    }
+
+    /** Retour au dossier parent ; le sous-dossier se replie et s'efface. */
+    private void back() {
+        if (parents.isEmpty()) return;
+        removeCallbacks(subDwell);
+        removeCallbacks(centerDwell);
+        outgoing = snap();
+        outgoingAt = SystemClock.uptimeMillis();
+        apply(parents.pop());
+        openedAt = 0; // déjà déployé
+        hover = -1;
+        haptic(HapticFeedbackConstants.CLOCK_TICK);
+        invalidate();
+    }
+
+    /** Le point est-il dans la zone du sous-dossier ouvert (anneau ou panneau) ? */
+    private boolean insideCurrent(float x, float y) {
+        float d = (float) Math.hypot(x - cx, y - cy);
+        if (d < 44 * dp) return true;
+        if (style != CIRCLE) {
+            RectF p = new RectF(panel);
+            p.inset(-12 * dp, -12 * dp);
+            return p.contains(x, y);
+        }
+        float outer = 0;
+        for (float[] arc : arcs) outer = Math.max(outer, arc[0]);
+        return d < outer + iconPxBase() / 2f + 18 * dp;
+    }
+
+    /** Case du dossier parent (en fond) sous le doigt, ou -1. */
+    private int parentSpotAt(float x, float y) {
+        if (parents.isEmpty() || insideCurrent(x, y)) return -1;
+        Level cur = snap();
+        apply(parents.peek());
+        int h = spotAt(x, y);
+        // La case du sous-dossier ouvert ne compte pas : le doigt vient de là.
+        if (h >= 0 && Store.isSub(spots.get(h).app.component) && spots.get(h).app.label.equals(cur.folder)) h = -1;
+        apply(cur);
+        return h;
+    }
+
+    /** Doigt revenu au centre du sous-dossier et resté là : retour au parent. */
+    private final Runnable centerDwell = () -> {
+        pendingCenter = false;
+        back();
+    };
+
     private static boolean isSub(Spot s) {
         return s != null && Store.isSub(s.app.component);
     }
@@ -123,7 +229,7 @@ final class FolderWheelView extends View {
         Spot s = spots.get(hover);
         if (!isSub(s) || subOpener == null) return;
         haptic(HapticFeedbackConstants.VIRTUAL_KEY);
-        subOpener.openSub(s.app.label, s.x, s.y); // centré sur le sous-dossier
+        enterSub(s);
         tracking = true;
         moved = true;
     };
@@ -204,6 +310,11 @@ final class FolderWheelView extends View {
             style = CIRCLE;
             showName = true;
         }
+        if (!open) {
+            parents.clear();
+            outgoing = null;
+            dimAt = SystemClock.uptimeMillis();
+        }
         this.realFolder = realFolder;
         this.folder = folder;
         this.color = color;
@@ -228,6 +339,9 @@ final class FolderWheelView extends View {
     void close() {
         removeCallbacks(longPress);
         removeCallbacks(subDwell);
+        removeCallbacks(centerDwell);
+        parents.clear();
+        outgoing = null;
         boolean was = open;
         open = false;
         sticky = false;
@@ -414,6 +528,13 @@ final class FolderWheelView extends View {
                 moved = false;
                 if (sticky) {
                     hover = spotAt(x, y);
+                    if (hover < 0) {
+                        int ph = parentSpotAt(x, y);
+                        if (ph >= 0) { // toucher une appli du dossier parent, en fond
+                            back();
+                            hover = ph;
+                        }
+                    }
                     holdX = x;
                     holdY = y;
                     if (hover >= 0) postDelayed(longPress, LONG_PRESS_MS);
@@ -426,6 +547,25 @@ final class FolderWheelView extends View {
                 if (!tracking) return true;
                 if (!moved && Math.hypot(x - downX, y - downY) > 10 * dp) moved = true;
                 int h = spotAt(x, y);
+                if (!parents.isEmpty()) {
+                    float dc = (float) Math.hypot(x - cx, y - cy);
+                    if (dc > 44 * dp) leftCenter = true;
+                    if (h < 0) {
+                        int ph = parentSpotAt(x, y);
+                        if (ph >= 0) { // revenu sur le dossier parent dans le même glissé
+                            back();
+                            h = spotAt(x, y);
+                        } else if (leftCenter && dc < 30 * dp) {
+                            if (!pendingCenter) {
+                                pendingCenter = true;
+                                postDelayed(centerDwell, 350);
+                            }
+                        } else if (pendingCenter) {
+                            pendingCenter = false;
+                            removeCallbacks(centerDwell);
+                        }
+                    }
+                }
                 if (h != hover) {
                     hover = h;
                     if (h >= 0) haptic(HapticFeedbackConstants.CLOCK_TICK);
@@ -441,13 +581,16 @@ final class FolderWheelView extends View {
             case MotionEvent.ACTION_UP:
                 removeCallbacks(longPress);
                 removeCallbacks(subDwell);
+                removeCallbacks(centerDwell);
+                pendingCenter = false;
                 if (!tracking) return true;
                 tracking = false;
                 int hit = spotAt(x, y);
                 if (hit >= 0 && (moved || sticky)) {
                     launch(spots.get(hit));
                 } else if (sticky && !moved && hit < 0 && Math.hypot(x - cx, y - cy) <= 34 * dp) {
-                    close(); // toucher le centre referme
+                    if (!parents.isEmpty()) back(); // centre d'un sous-dossier : retour au parent
+                    else close(); // toucher le centre referme
                 } else {
                     sticky = true; // le cercle reste ouvert pour un toucher
                     hover = -1;
@@ -466,7 +609,7 @@ final class FolderWheelView extends View {
 
     private void launch(Spot s) {
         if (isSub(s) && subOpener != null) {
-            subOpener.openSub(s.app.label, s.x, s.y); // centré sur le sous-dossier
+            enterSub(s);
             makeSticky(); // ouvert d'un toucher ou d'un lâcher : il attend le choix
             return;
         }
@@ -485,18 +628,55 @@ final class FolderWheelView extends View {
     protected void onDraw(Canvas canvas) {
         if (!open) return;
         float f = store.speedFactor();
-        float t = f == 0f ? 1f : Math.min(1f, (SystemClock.uptimeMillis() - openedAt) / (200f * f));
+        long now = SystemClock.uptimeMillis();
+        float t = f == 0f ? 1f : Math.min(1f, (now - openedAt) / (220f * f));
         float ease = 1f - (1f - t) * (1f - t);
-        canvas.drawColor(Color.argb((int) (255 * store.dimPercent() / 100f * ease), 0, 0, 0));
+        float td = f == 0f ? 1f : Math.min(1f, (now - dimAt) / (200f * f));
+        canvas.drawColor(Color.argb((int) (255 * store.dimPercent() / 100f * (1f - (1f - td) * (1f - td))), 0, 0, 0));
+        boolean animating = t < 1f || td < 1f;
 
+        // Retour : le sous-dossier se replie vers son centre et s'efface, le parent revient.
+        float back = 1f;
+        if (outgoing != null) {
+            back = f == 0f ? 1f : Math.min(1f, (now - outgoingAt) / (180f * f));
+            if (back >= 1f) outgoing = null;
+            else animating = true;
+        }
+
+        // Dossier parent en fond, estompé (on peut y revenir en glissant dessus).
+        if (!parents.isEmpty()) {
+            Level cur = snap();
+            int hv = hover;
+            hover = -1;
+            apply(parents.peek());
+            drawLevel(canvas, 1f, 1f - 0.72f * ease, false);
+            apply(cur);
+            hover = hv;
+        }
+        if (outgoing != null) {
+            Level cur = snap();
+            int hv = hover;
+            hover = -1;
+            apply(outgoing);
+            float e = 1f - back;
+            drawLevel(canvas, 0.5f + 0.5f * e, e, false);
+            apply(cur);
+            hover = hv;
+        }
+        drawLevel(canvas, ease, outgoing != null ? 0.28f + 0.72f * back : 1f, true);
+        if (animating) postInvalidateOnAnimation();
+    }
+
+    /** Dessine le niveau courant : déploiement {@code ease}, opacité {@code a}. */
+    private void drawLevel(Canvas canvas, float ease, float a, boolean full) {
         boolean labels = store.folderLabels();
         float iconPx = iconPxBase();
         band.setColor(0xFF000000 | store.folderBg());
-        band.setAlpha((int) (255 * store.folderBgAlpha() / 100f * ease));
+        band.setAlpha((int) (255 * store.folderBgAlpha() / 100f * ease * a));
         band.setStrokeWidth(iconPx + (labels ? 34 : 16) * dp);
         if (style != CIRCLE && !spots.isEmpty()) {
             fill.setColor(0xFF000000 | store.folderBg());
-            fill.setAlpha((int) (255 * store.folderBgAlpha() / 100f * ease));
+            fill.setAlpha((int) (255 * store.folderBgAlpha() / 100f * ease * a));
             float rr = 22 * dp;
             canvas.drawRoundRect(panel, rr, rr, fill);
         }
@@ -517,10 +697,10 @@ final class FolderWheelView extends View {
             if (k <= 0f) continue;
             float x = cx + (s.x - cx) * (0.5f + 0.5f * k), y = cy + (s.y - cy) * (0.5f + 0.5f * k);
             boolean h = i == hover;
-            float hh = half * (h ? 1.18f : 1f);
+            float hh = half * (h ? 1.18f : 1f) * (0.6f + 0.4f * k);
             if (h) {
                 fill.setColor(store.accent());
-                fill.setAlpha(110);
+                fill.setAlpha((int) (110 * a));
                 if (style == LIST || style == GRID) {
                     oval.set(s.l + 3 * dp, s.t + 3 * dp, s.r - 3 * dp, s.b - 3 * dp);
                     canvas.drawRoundRect(oval, 14 * dp, 14 * dp, fill);
@@ -531,46 +711,53 @@ final class FolderWheelView extends View {
             Drawable icon = s.app.icon;
             if (icon != null) {
                 icon.setBounds((int) (x - hh), (int) (y - hh), (int) (x + hh), (int) (y + hh));
-                icon.setAlpha((int) (255 * k));
+                icon.setAlpha((int) (255 * k * a));
                 icon.draw(canvas);
                 icon.setAlpha(255);
             }
-            Badges.draw(getContext(), canvas, x, y, hh, Badges.count(getContext(), s.app));
+            if (full) Badges.draw(getContext(), canvas, x, y, hh, Badges.count(getContext(), s.app));
 
             if (style == LIST) {
-                rowText.setAlpha((int) (255 * k));
+                rowText.setAlpha((int) (255 * k * a));
                 float tx = x + hh + 12 * dp;
                 CharSequence nm = TextUtils.ellipsize(s.app.label, rowText, s.r - tx - 10 * dp, TextUtils.TruncateAt.END);
                 canvas.drawText(nm, 0, nm.length(), tx, y + 5 * dp, rowText);
             } else if (labels || style == GRID) {
-                small.setAlpha((int) (255 * k));
+                small.setAlpha((int) (255 * k * a));
                 float w = style == GRID ? (s.r - s.l - 6 * dp) : 64 * dp;
                 CharSequence nm = TextUtils.ellipsize(s.app.label, small, w, TextUtils.TruncateAt.END);
                 canvas.drawText(nm, 0, nm.length(), x, y + hh + 14 * dp, small);
             }
         }
+        rowText.setAlpha(255);
+        small.setAlpha(255);
 
         // Centre : la pastille du dossier, avec le nom de l'appli survolée ou du dossier.
         fill.setColor(color);
-        fill.setAlpha(255);
+        fill.setAlpha((int) (255 * a));
         canvas.drawCircle(cx, cy, 26 * dp * (0.6f + 0.4f * ease), fill);
+        if (!full) return;
+        if (!parents.isEmpty()) {
+            // Flèche de retour dans la pastille d'un sous-dossier.
+            text.setAlpha((int) (200 * a));
+            canvas.drawText("‹", cx - 1 * dp, cy + 7 * dp, text);
+            text.setAlpha(255);
+        }
         // Grille et liste montrent déjà les noms ; nom du dossier seulement s'il est affiché.
         boolean hoverName = hover >= 0 && (style == CIRCLE || style == COLUMN);
         String title = hoverName ? spots.get(hover).app.label : showName ? folder : null;
-        if (title == null) {
-            if (t < 1f) postInvalidateOnAnimation();
-            return;
-        }
+        if (title == null) return;
         CharSequence s = TextUtils.ellipsize(title, text, 220 * dp, TextUtils.TruncateAt.END);
         float tw = text.measureText(s, 0, s.length());
         float ty = cy - 40 * dp;
         if (style != CIRCLE) ty = panelUp ? cy + 52 * dp : cy - 40 * dp;
         else if (ty < Math.max(safe.top, 24 * dp) + 30 * dp) ty = cy + 52 * dp;
         fill.setColor(0xF01B1D26);
+        fill.setAlpha((int) (0xF0 * a));
         oval.set(cx - tw / 2 - 12 * dp, ty - 20 * dp, cx + tw / 2 + 12 * dp, ty + 8 * dp);
         canvas.drawRoundRect(oval, 14 * dp, 14 * dp, fill);
+        text.setAlpha((int) (255 * a));
         canvas.drawText(s, 0, s.length(), cx, ty, text);
-
-        if (t < 1f) postInvalidateOnAnimation();
+        text.setAlpha(255);
     }
 }
