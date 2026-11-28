@@ -22,17 +22,32 @@ const lecteur = window.lecteur = (() => {
 
   const POLICES = {
     literata: { nom: 'Literata', css: '"Literata", Georgia, serif', desc: 'Livre' },
+    garamond: { nom: 'Garamond', css: '"EB Garamond", Georgia, serif', desc: 'Classique' },
+    crimson: { nom: 'Crimson', css: '"Crimson Pro", Georgia, serif', desc: 'Élégante' },
+    baskerville: { nom: 'Baskerville', css: '"Libre Baskerville", Georgia, serif', desc: 'Traditionnelle' },
+    lora: { nom: 'Lora', css: '"Lora", Georgia, serif', desc: 'Douce' },
+    sourceserif: { nom: 'Source Serif', css: '"Source Serif 4", Georgia, serif', desc: 'Nette' },
+    alegreya: { nom: 'Alegreya', css: '"Alegreya", Georgia, serif', desc: 'Littéraire' },
     merriweather: { nom: 'Merriweather', css: '"Merriweather", Georgia, serif', desc: 'Robuste' },
+    bitter: { nom: 'Bitter', css: '"Bitter", Georgia, serif', desc: 'Écran' },
     serif: { nom: 'Serif', css: '"Noto Serif", "Droid Serif", Georgia, serif', desc: 'Système' },
-    atkinson: { nom: 'Atkinson', css: '"Atkinson Hyperlegible", system-ui, sans-serif', desc: 'Très lisible' },
+    nunito: { nom: 'Nunito', css: '"Nunito", system-ui, sans-serif', desc: 'Arrondie' },
     sans: { nom: 'Sans', css: 'Roboto, "Noto Sans", system-ui, sans-serif', desc: 'Système' },
+    atkinson: { nom: 'Atkinson', css: '"Atkinson Hyperlegible", system-ui, sans-serif', desc: 'Très lisible' },
+    lexend: { nom: 'Lexend', css: '"Lexend", system-ui, sans-serif', desc: 'Lecture facile' },
+    andika: { nom: 'Andika', css: '"Andika", system-ui, sans-serif', desc: 'Débutants' },
     dys: { nom: 'Dyslexie', css: '"OpenDyslexic", sans-serif', desc: 'OpenDyslexic' },
     document: { nom: 'Document', css: null, desc: 'D\'origine' }
   };
 
-  const FONTES = [['Literata', 'literata'], ['Merriweather', 'merriweather'], ['Atkinson Hyperlegible', 'atkinson-hyperlegible'], ['OpenDyslexic', 'opendyslexic']]
-    .map(([f, fic]) => [['400', 'normal'], ['400', 'italic'], ['700', 'normal'], ['700', 'italic']]
-      .map(([w, s]) => `@font-face{font-family:"${f}";font-style:${s};font-weight:${w};font-display:block;src:url(/app/polices/${fic}-latin-${w}-${s}.woff2) format("woff2")}`).join('\n')).join('\n');
+  // polices fournies avec l'appli (licence SIL Open Font) ; Lexend n'a pas d'italique (penché automatiquement)
+  const FONTES = [['Literata', 'literata'], ['Merriweather', 'merriweather'], ['Atkinson Hyperlegible', 'atkinson-hyperlegible'],
+    ['OpenDyslexic', 'opendyslexic'], ['EB Garamond', 'eb-garamond'], ['Crimson Pro', 'crimson-pro'], ['Libre Baskerville', 'libre-baskerville'],
+    ['Lora', 'lora'], ['Source Serif 4', 'source-serif-4'], ['Alegreya', 'alegreya'], ['Bitter', 'bitter'], ['Nunito', 'nunito'],
+    ['Lexend', 'lexend', true], ['Andika', 'andika']]
+    .map(([f, fic, sansItalique]) => [['400', 'normal'], ['400', 'italic'], ['700', 'normal'], ['700', 'italic']]
+      .filter(([, st]) => !(sansItalique && st === 'italic'))
+      .map(([w, st]) => `@font-face{font-family:"${f}";font-style:${st};font-weight:${w};font-display:block;src:url(/app/polices/${fic}-latin-${w}-${st}.woff2) format("woff2")}`).join('\n')).join('\n');
 
   // les polices servent aussi aux aperçus du panneau
   const stylePolices = document.createElement('style');

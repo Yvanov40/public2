@@ -1,1 +1,1 @@
-Les livres EPUB mal emballés (contenu rangé dans un sous-dossier de l'archive) sont réparés automatiquement à l'ajout, au lieu d'être refusés.
+10 nouvelles polices de lecture : Garamond, Crimson, Baskerville, Lora, Source Serif, Alegreya, Bitter, Nunito, Lexend et Andika.

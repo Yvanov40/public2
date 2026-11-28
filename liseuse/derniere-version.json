@@ -1,5 +1,5 @@
 {
- "versionCode": 27,
- "versionName": "4.3",
- "notes": "Les livres EPUB mal emballés (contenu rangé dans un sous-dossier de l'archive) sont réparés automatiquement à l'ajout, au lieu d'être refusés."
+ "versionCode": 28,
+ "versionName": "4.4",
+ "notes": "10 nouvelles polices de lecture : Garamond, Crimson, Baskerville, Lora, Source Serif, Alegreya, Bitter, Nunito, Lexend et Andika."
 }
