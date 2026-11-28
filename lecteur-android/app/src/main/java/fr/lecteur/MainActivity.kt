@@ -1181,13 +1181,7 @@ class MainActivity : AppCompatActivity() {
         deviceRows(rows, "all")
 
         val watched = Store.watched()
-        if (watched.size > 2) {
-            rows += Row.Header("Reprendre")
-            rows += Row.Carousel(
-                watched.take(12).map { v -> v.copy(meta = listOfNotNull(v.uploader, resumeText(v.url)).joinToString(" · ")) },
-                onClick = { play(it.url) }, onLong = { videoMenu(it) }
-            )
-        }
+        resumeRows(rows, watched)
         val albums = Store.recentAlbums() + Store.savedAlbums().filterNot { s -> Store.recentAlbums().any { it.url == s.url } }
         if (albums.size > 3) {
             rows += Row.Header("Ta musique", "Tout voir") { show(MUSIC) }
@@ -1221,6 +1215,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ——— Accueil ———
+
+    /** « Reprendre » : vidéos et épisodes de podcast commencés, le plus récent d'abord. */
+    private fun resumeRows(rows: MutableList<Row>, watched: List<Vid>) {
+        val episodes = (Store.recentEpisodes() + podFeed.orEmpty()).distinctBy { it.audioUrl }
+        val epById = episodes.associateBy { Pod.mediaId(it) }
+        val vidById = watched.associateBy { it.url }
+        // Ordre : lectures commencées (dernière écoutée d'abord), puis les autres vidéos vues
+        val started = Store.startedIds().filter { it in epById || it in vidById }
+        val ids = (started + watched.map { it.url }).distinct().take(14)
+        if (ids.size < 2) return
+        val cards = ids.mapNotNull { id ->
+            vidById[id]?.let { v -> v.copy(meta = listOfNotNull(v.uploader, resumeText(v.url)).joinToString(" · ")) }
+                ?: epById[id]?.let { e ->
+                    Vid(id, e.title, e.podcastTitle, null, e.image ?: e.podcastArt, e.duration,
+                        meta = listOfNotNull("🎧 " + e.podcastTitle, resumeText(id)).joinToString(" · "))
+                }
+        }
+        rows += Row.Header("Reprendre")
+        rows += Row.Carousel(
+            cards,
+            onClick = { c ->
+                val e = epById[c.url]
+                if (e != null) {
+                    val list = episodes.filter { it.feedUrl == e.feedUrl }.sortedByDescending { it.date }
+                    playEpisodes(list, list.indexOf(e).coerceAtLeast(0))
+                } else play(c.url)
+            },
+            onLong = { c ->
+                val e = epById[c.url]
+                if (e != null) episodeMenu(listOf(e), 0) else videoMenu(c)
+            }
+        )
+    }
 
     private fun resumeText(id: String): String? {
         val pos = Store.position(id)
@@ -1281,13 +1308,7 @@ class MainActivity : AppCompatActivity() {
                 onLong = { s -> Store.removeSearch(s); feed = null; render(HOME) }
             )
         }
-        if (showResume && watched.isNotEmpty()) {
-            rows += Row.Header("Reprendre")
-            rows += Row.Carousel(
-                watched.take(12).map { v -> v.copy(meta = listOfNotNull(v.uploader, resumeText(v.url)).joinToString(" · ")) },
-                onClick = { play(it.url) }, onLong = { videoMenu(it) }
-            )
-        }
+        if (showResume && watched.isNotEmpty()) resumeRows(rows, watched)
         if (searches.isNotEmpty()) {
             rows += Row.Header("Pour toi")
             val f = feed
@@ -1704,6 +1725,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun playEpisodes(list: List<Episode>, index: Int) {
+        list.getOrNull(index)?.let { Store.addRecentEpisode(it) }
         val items = list.map { e ->
             MediaItem.Builder()
                 .setUri(e.audioUrl)

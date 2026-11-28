@@ -186,6 +186,26 @@ object Store {
     private fun tracks(key: String): List<Track> = objects(key).map(::trackOf)
     private fun saveTracks(key: String, list: List<Track>) = put(key, JSONArray(list.map(::trackJson)))
 
+    // ——— Épisodes écoutés récemment (pour « Reprendre ») ———
+    @Synchronized fun recentEpisodes(): List<Episode> = objects("recentEps").map { o ->
+        Episode(
+            o.optString("title"), o.optString("audioUrl"), o.optLong("date"), o.optLong("duration"),
+            o.str("image"), o.optString("podcastTitle"), o.str("podcastArt"), o.optString("feedUrl")
+        )
+    }
+
+    @Synchronized fun addRecentEpisode(e: Episode) {
+        val list = listOf(e) + recentEpisodes().filterNot { it.audioUrl == e.audioUrl }
+        put("recentEps", JSONArray(list.take(40).map { x ->
+            JSONObject().put("title", x.title).put("audioUrl", x.audioUrl).put("date", x.date)
+                .put("duration", x.duration).put("image", x.image).put("podcastTitle", x.podcastTitle)
+                .put("podcastArt", x.podcastArt).put("feedUrl", x.feedUrl)
+        }))
+    }
+
+    /** Identifiants des lectures commencées, la plus récente d'abord. */
+    @Synchronized fun startedIds(): List<String> = positionsMap().filterValues { it > 0 }.keys.reversed()
+
     @Synchronized fun likes(): List<Track> = tracks("likes")
     @Synchronized fun isLiked(url: String) = likes().any { it.url == url }
     @Synchronized fun toggleLike(t: Track): Boolean {
