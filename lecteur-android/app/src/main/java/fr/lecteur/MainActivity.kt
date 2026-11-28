@@ -57,6 +57,7 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.chip.Chip
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.snackbar.Snackbar
@@ -418,6 +419,10 @@ class MainActivity : AppCompatActivity() {
                 player.play()
             }
         }
+
+        // Mise à jour (icône en haut)
+        findViewById<View>(R.id.updateBtn).setOnClickListener { checkUpdate(manual = true) }
+        showUpdateDot(false)
 
         // Chromecast
         try {
@@ -3151,8 +3156,27 @@ class MainActivity : AppCompatActivity() {
     // ——— Mises à jour ———
 
     private fun autoUpdateCheck() {
-        if (System.currentTimeMillis() - Settings.lastUpdateCheck < 12 * 3600_000L) return
+        if (System.currentTimeMillis() - Settings.lastUpdateCheck < 12 * 3600_000L) {
+            // Vérification discrète : seulement la pastille sur l'icône, sans fenêtre
+            lifecycleScope.launch {
+                try { showUpdateDot(Updates.check(applicationContext) != null) } catch (e: CancellationException) { throw e } catch (_: Exception) {}
+            }
+            return
+        }
         checkUpdate(manual = false)
+    }
+
+    private fun showUpdateDot(available: Boolean) {
+        findViewById<View>(R.id.updateDot).isVisible = available
+        val icon = findViewById<ImageView>(R.id.updateIcon)
+        icon.imageTintList = android.content.res.ColorStateList.valueOf(
+            MaterialColors.getColor(
+                icon, if (available) com.google.android.material.R.attr.colorPrimary
+                else com.google.android.material.R.attr.colorOnSurfaceVariant
+            )
+        )
+        findViewById<View>(R.id.updateBtn).contentDescription =
+            if (available) "Nouvelle version disponible" else "Rechercher une mise à jour"
     }
 
     private fun checkUpdate(manual: Boolean) {
@@ -3160,6 +3184,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 val u = Updates.check(applicationContext)
                 Settings.lastUpdateCheck = System.currentTimeMillis()
+                showUpdateDot(u != null)
                 if (u == null) {
                     if (manual) snack("Tu as la dernière version (v${Updates.current(this@MainActivity)})")
                     return@launch

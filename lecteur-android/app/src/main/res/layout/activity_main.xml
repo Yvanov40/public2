@@ -145,6 +145,33 @@
             android:textAppearance="?attr/textAppearanceTitleLarge"
             android:textStyle="bold" />
 
+        <!-- Mise à jour : pastille quand une nouvelle version existe -->
+        <FrameLayout
+            android:id="@+id/updateBtn"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Mise à jour">
+
+            <ImageView
+                android:id="@+id/updateIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_update" />
+
+            <View
+                android:id="@+id/updateDot"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="9dp"
+                android:layout_marginEnd="9dp"
+                android:background="@drawable/update_dot"
+                android:visibility="gone" />
+        </FrameLayout>
+
         <androidx.mediarouter.app.MediaRouteButton
             android:id="@+id/castBtn"
             android:layout_width="44dp"
