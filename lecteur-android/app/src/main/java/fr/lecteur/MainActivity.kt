@@ -1120,27 +1120,63 @@ class MainActivity : AppCompatActivity() {
 
     // ——— Accueil « Tout » : accès rapide façon Spotify ———
 
+    /** Prend à tour de rôle dans chaque liste : a1, b1, c1, a2, b2… */
+    private fun <T> interleave(vararg lists: List<T>): List<T> {
+        val out = mutableListOf<T>()
+        val n = lists.maxOfOrNull { it.size } ?: 0
+        for (i in 0 until n) lists.forEach { l -> l.getOrNull(i)?.let { out += it } }
+        return out
+    }
+
     private fun allRows(rows: MutableList<Row>) {
+        // Deux colonnes : à gauche albums, podcasts, chaînes ; à droite titres, épisodes, vidéos
+        val pods = Store.podcasts()
+        if (podFeed == null && pods.isNotEmpty()) loadPodFeed()
+        val feed = podFeed.orEmpty()
+        val started = feed.filter { Store.position(Pod.mediaId(it)) > 0 }
+        val fresh = feed.filter { Store.position(Pod.mediaId(it)) == 0L }
+
+        val albums = (Store.recentAlbums() + Store.savedAlbums()).distinctBy { it.url }.take(3).map { a ->
+            Row.QuickItem(albumName(a.title), a.thumb, R.drawable.ic_music, { show(MUSIC); pushMusic(MPage.AlbumP(a)) }, { albumMenu(a) })
+        } + Store.playlists().take(1).map { p ->
+            Row.QuickItem(p.name, p.tracks.firstOrNull()?.thumb, R.drawable.ic_queue, { show(MUSIC); pushMusic(MPage.PlaylistP(p.id)) }, { playlistMenu(p) })
+        }
+        // Podcasts : d'abord ceux qu'on est en train d'écouter
+        val podOrder = (started.map { it.feedUrl } + pods.map { it.feedUrl }).distinct()
+        val podcasts = podOrder.mapNotNull { u -> pods.firstOrNull { it.feedUrl == u } }.take(3).map { p ->
+            Row.QuickItem(p.title, p.artwork, R.drawable.ic_headphones, { openPodcast(p) }, { confirmUnsubscribePodcast(p) })
+        }
+        // Chaînes : celles des vidéos vues récemment, puis les abonnements
+        val subs = Store.subs()
+        val watched = Store.watched()
+        val chanOrder = (watched.mapNotNull { it.uploaderUrl } + subs.map { it.url }).distinct()
+        val channels = chanOrder.mapNotNull { u -> subs.firstOrNull { it.url == u } }.take(3).map { c ->
+            Row.QuickItem(c.name, c.avatar, R.drawable.ic_person, { openChannel(c) })
+        }
+        val left = interleave(albums, podcasts, channels).take(4)
+
+        val recent = Store.recentTracks()
+        val tracks = recent.take(3).mapIndexed { i, t ->
+            Row.QuickItem(t.title, t.thumb, R.drawable.ic_music, { Music.play(recent, i); openNowPlayingSoon() }, { trackMenu(t, null, i) })
+        }
+        val episodes = (started + fresh).distinctBy { it.audioUrl }.take(3).map { e ->
+            val i = feed.indexOf(e).coerceAtLeast(0)
+            Row.QuickItem(e.title, e.image ?: e.podcastArt, R.drawable.ic_headphones, { playEpisodes(feed, i) }, { episodeMenu(feed, i) })
+        }
+        val videos = watched.take(3).map { v ->
+            Row.QuickItem(v.title, v.thumb, R.drawable.ic_video, { play(v.url) }, { videoMenu(v) })
+        }
+        val right = interleave(tracks, episodes, videos).take(4)
+
+        // Grille de 2 : on alterne gauche / droite pour former les deux colonnes
         val quick = mutableListOf<Row.QuickItem>()
-        val likes = Store.likes()
-        if (likes.isNotEmpty()) quick += Row.QuickItem("Titres likés", likes.first().thumb, R.drawable.ic_heart, {
-            show(MUSIC); pushMusic(MPage.Liked)
-        })
-        Store.recentAlbums().take(3).forEach { a ->
-            quick += Row.QuickItem(a.title, a.thumb, R.drawable.ic_music, { show(MUSIC); pushMusic(MPage.AlbumP(a)) }, { albumMenu(a, recent = true) })
+        val leftover = mutableListOf<Row.QuickItem>()
+        for (i in 0 until maxOf(left.size, right.size)) {
+            val l = left.getOrNull(i)
+            val r = right.getOrNull(i)
+            if (l != null && r != null) { quick += l; quick += r } else leftover += listOfNotNull(l, r)
         }
-        Store.playlists().take(2).forEach { p ->
-            quick += Row.QuickItem(p.name, p.tracks.firstOrNull()?.thumb, R.drawable.ic_queue, { show(MUSIC); pushMusic(MPage.PlaylistP(p.id)) })
-        }
-        Store.podcasts().take(2).forEach { p ->
-            quick += Row.QuickItem(p.title, p.artwork, R.drawable.ic_headphones, { openPodcast(p) })
-        }
-        Store.watched().take(2).forEach { v ->
-            quick += Row.QuickItem(v.title, v.thumb, R.drawable.ic_video, { play(v.url) }, { videoMenu(v) })
-        }
-        Store.savedArtists().take(1).forEach { a ->
-            quick += Row.QuickItem(a.name, a.thumb, R.drawable.ic_person, { show(MUSIC); pushMusic(MPage.ArtistP(a)) })
-        }
+        quick += leftover
         if (quick.isNotEmpty()) rows += Row.Quick(quick.take(8))
         stripFavorites(rows)
         deviceRows(rows, "all")
