@@ -1130,40 +1130,40 @@ class MainActivity : AppCompatActivity() {
 
     private fun allRows(rows: MutableList<Row>) {
         // Deux colonnes : à gauche albums, podcasts, chaînes ; à droite titres, épisodes, vidéos
-        val pods = Store.podcasts()
-        if (podFeed == null && pods.isNotEmpty()) loadPodFeed()
-        val feed = podFeed.orEmpty()
-        val started = feed.filter { Store.position(Pod.mediaId(it)) > 0 }
-        val fresh = feed.filter { Store.position(Pod.mediaId(it)) == 0L }
+        val qPods = Store.podcasts()
+        if (podFeed == null && qPods.isNotEmpty()) loadPodFeed()
+        val qFeed = podFeed.orEmpty()
+        val started = qFeed.filter { Store.position(Pod.mediaId(it)) > 0 }
+        val fresh = qFeed.filter { Store.position(Pod.mediaId(it)) == 0L }
 
-        val albums = (Store.recentAlbums() + Store.savedAlbums()).distinctBy { it.url }.take(3).map { a ->
+        val qAlbums = (Store.recentAlbums() + Store.savedAlbums()).distinctBy { it.url }.take(3).map { a ->
             Row.QuickItem(albumName(a.title), a.thumb, R.drawable.ic_music, { show(MUSIC); pushMusic(MPage.AlbumP(a)) }, { albumMenu(a) })
         } + Store.playlists().take(1).map { p ->
             Row.QuickItem(p.name, p.tracks.firstOrNull()?.thumb, R.drawable.ic_queue, { show(MUSIC); pushMusic(MPage.PlaylistP(p.id)) }, { playlistMenu(p) })
         }
         // Podcasts : d'abord ceux qu'on est en train d'écouter
-        val podOrder = (started.map { it.feedUrl } + pods.map { it.feedUrl }).distinct()
-        val podcasts = podOrder.mapNotNull { u -> pods.firstOrNull { it.feedUrl == u } }.take(3).map { p ->
+        val podOrder = (started.map { it.feedUrl } + qPods.map { it.feedUrl }).distinct()
+        val podcasts = podOrder.mapNotNull { u -> qPods.firstOrNull { it.feedUrl == u } }.take(3).map { p ->
             Row.QuickItem(p.title, p.artwork, R.drawable.ic_headphones, { openPodcast(p) }, { confirmUnsubscribePodcast(p) })
         }
         // Chaînes : celles des vidéos vues récemment, puis les abonnements
-        val subs = Store.subs()
-        val watched = Store.watched()
-        val chanOrder = (watched.mapNotNull { it.uploaderUrl } + subs.map { it.url }).distinct()
-        val channels = chanOrder.mapNotNull { u -> subs.firstOrNull { it.url == u } }.take(3).map { c ->
+        val qSubs = Store.subs()
+        val qWatched = Store.watched()
+        val chanOrder = (qWatched.mapNotNull { it.uploaderUrl } + qSubs.map { it.url }).distinct()
+        val channels = chanOrder.mapNotNull { u -> qSubs.firstOrNull { it.url == u } }.take(3).map { c ->
             Row.QuickItem(c.name, c.avatar, R.drawable.ic_person, { openChannel(c) })
         }
-        val left = interleave(albums, podcasts, channels).take(4)
+        val left = interleave(qAlbums, podcasts, channels).take(4)
 
-        val recent = Store.recentTracks()
-        val tracks = recent.take(3).mapIndexed { i, t ->
-            Row.QuickItem(t.title, t.thumb, R.drawable.ic_music, { Music.play(recent, i); openNowPlayingSoon() }, { trackMenu(t, null, i) })
+        val qRecent = Store.recentTracks()
+        val tracks = qRecent.take(3).mapIndexed { i, t ->
+            Row.QuickItem(t.title, t.thumb, R.drawable.ic_music, { Music.play(qRecent, i); openNowPlayingSoon() }, { trackMenu(t, null, i) })
         }
         val episodes = (started + fresh).distinctBy { it.audioUrl }.take(3).map { e ->
-            val i = feed.indexOf(e).coerceAtLeast(0)
-            Row.QuickItem(e.title, e.image ?: e.podcastArt, R.drawable.ic_headphones, { playEpisodes(feed, i) }, { episodeMenu(feed, i) })
+            val i = qFeed.indexOf(e).coerceAtLeast(0)
+            Row.QuickItem(e.title, e.image ?: e.podcastArt, R.drawable.ic_headphones, { playEpisodes(qFeed, i) }, { episodeMenu(qFeed, i) })
         }
-        val videos = watched.take(3).map { v ->
+        val videos = qWatched.take(3).map { v ->
             Row.QuickItem(v.title, v.thumb, R.drawable.ic_video, { play(v.url) }, { videoMenu(v) })
         }
         val right = interleave(tracks, episodes, videos).take(4)
