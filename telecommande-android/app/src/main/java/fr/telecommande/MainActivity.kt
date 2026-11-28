@@ -63,10 +63,12 @@ class MainActivity : Activity() {
         Hid.addListener(stateListener)
         refreshStatus()
         if (hasConnectPermission()) Hid.start() else askPermissions()
+        checkUpdate(silent = true)
     }
 
     override fun onResume() {
         super.onResume()
+        Updates.resumePending(this)
         if (hasConnectPermission() && Hid.state == Hid.State.BT_OFF && Hid.isEnabled) Hid.start()
         refreshStatus()
     }
@@ -710,12 +712,14 @@ class MainActivity : Activity() {
         val m = PopupMenu(this, anchor)
         m.menu.add(0, 1, 0, "Réglages")
         m.menu.add(0, 2, 1, "Aide")
-        if (Hid.connected) m.menu.add(0, 3, 2, "Déconnecter")
+        m.menu.add(0, 4, 2, "Rechercher une mise à jour")
+        if (Hid.connected) m.menu.add(0, 3, 3, "Déconnecter")
         m.setOnMenuItemClickListener {
             when (it.itemId) {
                 1 -> showSettings()
                 2 -> showHelp()
                 3 -> Hid.disconnect()
+                4 -> checkUpdate(silent = false)
             }
             true
         }
@@ -761,6 +765,24 @@ class MainActivity : Activity() {
             "• Appui long sur un raccourci : renommer, couleur, modifier les étapes, supprimer.\n\n" +
             "• Clavier : disposition QWERTY (celle d'Android TV par défaut) ; les accents sont retirés."
         ).setPositiveButton("OK", null).show()
+    }
+
+    // ------------------------------------------------------------------ Mises à jour
+
+    private fun checkUpdate(silent: Boolean) {
+        if (!silent) toast("Recherche d'une mise à jour…")
+        Updates.check(this) { u, err ->
+            if (isFinishing || isDestroyed) return@check
+            when {
+                u != null -> dialog().setTitle("Mise à jour disponible")
+                    .setMessage("La version ${u.version} est disponible (vous avez la ${Updates.current(this)}).\n\nElle va être téléchargée puis installée par-dessus : vos raccourcis sont conservés.")
+                    .setPositiveButton("Installer") { _, _ -> Updates.downloadAndInstall(this, u) }
+                    .setNegativeButton("Plus tard", null).show()
+                silent -> {}
+                err != null -> toast("Vérification impossible : $err")
+                else -> toast("Vous avez la dernière version (${Updates.current(this)})")
+            }
+        }
     }
 
     // ------------------------------------------------------------------ Outils
