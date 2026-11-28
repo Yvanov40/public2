@@ -124,17 +124,45 @@ object Hid {
         }
     }
 
-    private fun register(h: BluetoothHidDevice) {
+    /**
+     * Inscription auprès du Bluetooth comme télécommande. Sur certains téléphones (Xiaomi…)
+     * le premier essai échoue juste après l'ouverture du profil, ou une ancienne inscription
+     * traîne : on libère et on réessaie plusieurs fois avant d'abandonner.
+     */
+    private fun register(h: BluetoothHidDevice, attempt: Int = 0) {
         val sdp = BluetoothHidDeviceAppSdpSettings(
             "Télécommande", "Télécommande Bluetooth", "Télécommande",
             BluetoothHidDevice.SUBCLASS1_COMBO, DESCRIPTOR
         )
         try {
+            if (attempt > 0) try { h.unregisterApp() } catch (_: Exception) {}
             val ok = h.registerApp(sdp, null, null, callbacks, callback)
-            if (!ok) set(State.UNAVAILABLE, "Impossible d'activer la télécommande Bluetooth. Une autre appli (clavier Bluetooth…) l'utilise peut-être déjà : fermez-la puis réessayez.")
+            if (ok) return
+            if (attempt < 4) {
+                set(State.STARTING, "Nouvel essai (${attempt + 1})…")
+                main.postDelayed({ if (hid === h && !registered) register(h, attempt + 1) }, 600L * (attempt + 1))
+            } else {
+                set(State.UNAVAILABLE, FAIL)
+            }
         } catch (e: SecurityException) {
             set(State.UNAVAILABLE, "Autorisation Bluetooth refusée.")
         }
+    }
+
+    const val FAIL = "Le téléphone refuse le mode télécommande Bluetooth.\n\n" +
+        "Causes possibles :\n" +
+        "• une autre appli l'utilise déjà (appli clavier/souris Bluetooth, « Phone as keyboard »…) : fermez-la ou désinstallez-la ;\n" +
+        "• le Bluetooth est en train de redémarrer : désactivez puis réactivez le Bluetooth, puis « Réessayer » ;\n" +
+        "• le fabricant a désactivé ce mode (profil HID Device) sur ce modèle : aucune appli ne pourra alors l'utiliser."
+
+    /** Tout reprendre de zéro (bouton « Réessayer »). */
+    fun retry() {
+        try {
+            hid?.unregisterApp()
+            hid?.let { adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, it) }
+        } catch (_: Exception) {}
+        reset()
+        start()
     }
 
     private val callback = object : BluetoothHidDevice.Callback() {

@@ -151,7 +151,7 @@ class MainActivity : Activity() {
         }
         statusDot = View(this)
         bar.addView(statusDot, LinearLayout.LayoutParams(dp(10), dp(10)).apply { rightMargin = dp(10) })
-        statusText = Ui.text(this, "", 14f, Ui.ICON).apply { maxLines = 2 }
+        statusText = Ui.text(this, "", 14f, Ui.ICON).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
         bar.addView(statusText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         bar.setOnClickListener { onStatusClick() }
         bar.addView(iconAction(R.drawable.ic_bluetooth, "Appareils") { showDevices() })
@@ -210,7 +210,8 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             addView(key(R.drawable.ic_mute, "mute", 46, iconDp = 20))
-            addView(key(R.drawable.ic_guide, "guide", 46, iconDp = 20), lp(top = 14))
+            addView(key(R.drawable.ic_guide, "guide", 46, iconDp = 20),
+                LinearLayout.LayoutParams(dp(46), dp(46)).apply { topMargin = dp(14) })
         }
         body.addView(row(
             rocker(R.drawable.ic_add, "volup", R.drawable.ic_remove, "voldown"),
@@ -234,6 +235,18 @@ class MainActivity : Activity() {
         holder.setPadding(0, dp(6), 0, dp(28))
         val scroll = ScrollView(this).apply { isFillViewport = true; addView(holder) }
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // Android 15 affiche l'appli bord à bord : on laisse la place aux barres du système
+        root.setOnApplyWindowInsetsListener { v, insets ->
+            if (Build.VERSION.SDK_INT >= 30) {
+                val b = insets.getInsets(android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout())
+                v.setPadding(b.left, b.top, b.right, b.bottom)
+            } else {
+                @Suppress("DEPRECATION")
+                v.setPadding(insets.systemWindowInsetLeft, insets.systemWindowInsetTop, insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
+            }
+            insets
+        }
         return root
     }
 
@@ -298,11 +311,11 @@ class MainActivity : Activity() {
     private fun refreshStatus() {
         if (!::statusText.isInitialized) return
         val (color, txt) = when (Hid.state) {
-            Hid.State.UNAVAILABLE -> 0xFFF28B82.toInt() to (Hid.message ?: "Bluetooth indisponible")
+            Hid.State.UNAVAILABLE -> 0xFFF28B82.toInt() to (Hid.message?.lineSequence()?.first() ?: "Bluetooth indisponible") + "\nToucher ici pour les détails / réessayer"
             Hid.State.BT_OFF -> 0xFF9AA0A6.toInt() to
                 if (!hasConnectPermission()) "Autorisation Bluetooth nécessaire · toucher ici"
                 else "Bluetooth désactivé · toucher pour l'activer"
-            Hid.State.STARTING -> 0xFFFDD663.toInt() to "Démarrage…"
+            Hid.State.STARTING -> 0xFFFDD663.toInt() to (Hid.message ?: "Démarrage…")
             Hid.State.READY -> 0xFFFDD663.toInt() to ((Hid.message?.let { "$it\n" } ?: "") + "Non connecté · toucher pour choisir la TV")
             Hid.State.CONNECTING -> 0xFFFDD663.toInt() to "Connexion${Hid.message?.let { " à $it" } ?: ""}…"
             Hid.State.CONNECTED -> 0xFF81C995.toInt() to "Connecté à ${Hid.host?.name ?: Hid.host?.address ?: "la TV"}"
@@ -317,7 +330,10 @@ class MainActivity : Activity() {
             Hid.state == Hid.State.BT_OFF -> try {
                 startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
             } catch (_: Exception) {}
-            Hid.state == Hid.State.UNAVAILABLE -> Hid.start()
+            Hid.state == Hid.State.UNAVAILABLE -> dialog().setTitle("Bluetooth")
+                .setMessage(Hid.message ?: "Bluetooth indisponible")
+                .setPositiveButton("Réessayer") { _, _ -> Hid.retry() }
+                .setNegativeButton("Fermer", null).show()
             else -> showDevices()
         }
     }
