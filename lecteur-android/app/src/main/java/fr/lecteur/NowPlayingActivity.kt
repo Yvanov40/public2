@@ -9,6 +9,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -82,10 +84,49 @@ class NowPlayingActivity : AppCompatActivity() {
         }
     }
 
+    // ——— Ouverture par le bas, fermeture vers le bas (glisser vers le bas pour refermer) ———
+
+    @Suppress("DEPRECATION")
+    private fun slideIn() {
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, R.anim.np_in, R.anim.np_stay)
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, R.anim.np_stay, R.anim.np_out)
+        } else overridePendingTransition(R.anim.np_in, R.anim.np_stay)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun finish() {
+        super.finish()
+        if (android.os.Build.VERSION.SDK_INT < 34) overridePendingTransition(R.anim.np_stay, R.anim.np_out)
+    }
+
+    private val swipeDown by lazy {
+        val density = resources.displayMetrics.density
+        GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
+                if (e1 == null) return false
+                val dy = e2.y - e1.y
+                val dx = e2.x - e1.x
+                if (dy < 90 * density || dy < Math.abs(dx) * 1.5f || vy < 500) return false
+                // Pas pendant qu'on fait défiler les paroles
+                val lyr = findViewById<View>(R.id.lyricsScroll)
+                if (lyr != null && lyr.isShown && lyr.canScrollVertically(-1)) return false
+                finish()
+                return true
+            }
+        })
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        swipeDown.onTouchEvent(ev)
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         Ui.applyTheme(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_now_playing)
+        slideIn()
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = false
             isAppearanceLightNavigationBars = false
