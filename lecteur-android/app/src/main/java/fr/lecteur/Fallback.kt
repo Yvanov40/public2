@@ -96,14 +96,19 @@ object Fallback {
             .take(max)
     }
 
-    private fun <T> firstWorking(block: (Relay) -> T): T {
+    /** Échec propre à une vidéo (le relais lui-même marche) : on ne le met pas de côté. */
+    private class VideoRefused(msg: String) : IOException(msg)
+
+    private fun <T> firstWorking(max: Int = 10, block: (Relay) -> T): T {
         var last: Exception? = null
-        for (r in relays()) {
+        for (r in relays(max)) {
             try {
                 val res = block(r)
                 lastGood = r
                 benched.remove(r)
                 return res
+            } catch (e: VideoRefused) {
+                last = e
             } catch (e: Exception) {
                 last = e
                 benched[r] = System.currentTimeMillis() + 30 * 60_000L
@@ -111,6 +116,18 @@ object Fallback {
             }
         }
         throw IOException("Aucun serveur relais n'a répondu" + (last?.message?.let { " ($it)" } ?: ""))
+    }
+
+    /** Vérifie qu'un fichier se télécharge vraiment (premiers 64 ko). */
+    private fun probe(url: String): Int {
+        val req = okhttp3.Request.Builder().url(url)
+            .header("User-Agent", DownloaderImpl.USER_AGENT)
+            .header("Range", "bytes=0-65535")
+            .build()
+        DownloaderImpl.instance.client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw VideoRefused("fichier : HTTP ${resp.code}")
+            return resp.body?.bytes()?.size ?: 0
+        }
     }
 
     fun videoId(url: String) = SponsorBlock.videoId(url)
@@ -137,7 +154,13 @@ object Fallback {
         videoId: String, mediaId: String, audioOnly: Boolean,
         title: String? = null, artist: String? = null, artwork: String? = null
     ): Result {
-        val s = firstWorking { r -> if (r.kind == "piped") piped(r.url, videoId) else invidious(r.url, videoId) }
+        // Chaque relais est vérifié sur le fichier lui-même : certains donnent les infos mais refusent le flux
+        val s = firstWorking(14) { r ->
+            val st = if (r.kind == "piped") piped(r.url, videoId) else invidious(r.url, videoId)
+            val first = if (audioOnly) st.audio ?: st.muxed else st.video ?: st.muxed ?: st.audio
+            if (first != null) probe(first) else if (st.hls == null) throw VideoRefused("aucun flux")
+            st
+        }
         return toResult(s, videoId, mediaId, audioOnly, title, artist, artwork)
     }
 
@@ -266,9 +289,11 @@ object Fallback {
     }
 
     /** Adresse du son d'une vidéo via un relais (pour l'enceinte Chromecast). */
-    fun audioUrl(videoId: String): String = firstWorking { r ->
+    fun audioUrl(videoId: String): String = firstWorking(14) { r ->
         val s = if (r.kind == "piped") piped(r.url, videoId) else invidious(r.url, videoId)
-        s.audio ?: s.muxed ?: throw IOException("aucun flux")
+        val url = s.audio ?: s.muxed ?: throw VideoRefused("aucun flux")
+        probe(url)
+        url
     }
 
     // ——— Recherche ———
@@ -320,14 +345,6 @@ object Fallback {
     fun test(r: Relay, videoId: String): String {
         val s = if (r.kind == "piped") piped(r.url, videoId) else invidious(r.url, videoId)
         val url = s.audio ?: s.muxed ?: throw IOException("aucun flux")
-        val req = okhttp3.Request.Builder().url(url)
-            .header("User-Agent", DownloaderImpl.USER_AGENT)
-            .header("Range", "bytes=0-65535")
-            .build()
-        DownloaderImpl.instance.client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IOException("fichier : HTTP ${resp.code}")
-            val n = resp.body?.bytes()?.size ?: 0
-            return "OK (${n / 1024} ko reçus)"
-        }
+        return "OK (${probe(url) / 1024} ko reçus)"
     }
 }
