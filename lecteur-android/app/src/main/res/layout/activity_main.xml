@@ -291,6 +291,23 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
+    <!-- Bulles : recherche et filtres -->
+    <fr.lecteur.NestedHScroll
+        android:id="@+id/bubbleBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/bubbles"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="2dp" />
+    </fr.lecteur.NestedHScroll>
+
     <!-- Diffusion Chromecast en cours -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/castBar"
@@ -456,23 +473,6 @@
                 app:tint="?attr/colorOnSecondaryContainer" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
-
-    <!-- Bulles : recherche et filtres -->
-    <fr.lecteur.NestedHScroll
-        android:id="@+id/bubbleBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:scrollbars="none">
-
-        <LinearLayout
-            android:id="@+id/bubbles"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="2dp" />
-    </fr.lecteur.NestedHScroll>
 
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNav"

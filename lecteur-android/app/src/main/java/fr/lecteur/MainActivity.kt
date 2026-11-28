@@ -407,9 +407,7 @@ class MainActivity : AppCompatActivity() {
         // Mini-lecteur
         miniPlayer.setOnClickListener {
             // Musique ou audio : écran « en cours de lecture » ; vidéo : on réaffiche l'image
-            val hasVideo = player.currentTracks.containsType(androidx.media3.common.C.TRACK_TYPE_VIDEO)
-            if (Music.active || !hasVideo) startActivity(Intent(this, NowPlayingActivity::class.java))
-            else setVideoMode(true)
+            openFromMini()
         }
         findViewById<ImageButton>(R.id.miniVideo).setOnClickListener { setVideoMode(true) }
         findViewById<ImageButton>(R.id.miniClose).setOnClickListener { stopPlayback() }
@@ -3276,19 +3274,56 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("ClickableViewAccessibility")
     private fun setupSwipeDown() {
         val density = resources.displayMetrics.density
+        fun vertical(e1: MotionEvent?, e2: MotionEvent, vy: Float): Int {
+            if (e1 == null) return 0
+            val dy = e2.y - e1.y
+            val dx = e2.x - e1.x
+            if (abs(dy) < 60 * density || abs(dy) < abs(dx) * 1.5f || abs(vy) < 400) return 0
+            return if (dy > 0) 1 else -1
+        }
+        // Vidéo : vers le haut → plein écran ; vers le bas → sort du plein écran, sinon passe en audio
         val detector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
-                if (e1 == null) return false
-                val dy = e2.y - e1.y
-                val dx = e2.x - e1.x
-                if (dy > 80 * density && abs(dy) > abs(dx) * 1.5f && vy > 500) {
-                    setVideoMode(false)
-                    return true
+                when (vertical(e1, e2, vy)) {
+                    -1 -> if (!fullscreen) {
+                        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                        return true
+                    }
+                    1 -> {
+                        if (fullscreen) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                        else setVideoMode(false)
+                        return true
+                    }
                 }
                 return false
             }
         })
         playerView.setOnTouchListener { _, e -> detector.onTouchEvent(e); false }
+
+        // Mini-lecteur : vers le haut → vidéo (ou écran « en cours » pour l'audio)
+        val miniDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
+                if (vertical(e1, e2, vy) != -1) return false
+                openFromMini()
+                return true
+            }
+        })
+        miniPlayer.setOnTouchListener { v, e ->
+            if (miniDetector.onTouchEvent(e)) {
+                // Le geste a servi : pas de « clic » en plus
+                val c = MotionEvent.obtain(e).apply { action = MotionEvent.ACTION_CANCEL }
+                v.onTouchEvent(c)
+                c.recycle()
+                true
+            } else false
+        }
+    }
+
+    private fun openFromMini() {
+        val hasVideo = player.currentTracks.containsType(androidx.media3.common.C.TRACK_TYPE_VIDEO) ||
+            PlayerHolder.current != null
+        if (Music.active || !hasVideo) startActivity(Intent(this, NowPlayingActivity::class.java))
+        else setVideoMode(true)
     }
 
     // ——— Affichage ———
