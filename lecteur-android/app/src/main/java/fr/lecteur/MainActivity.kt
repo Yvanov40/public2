@@ -712,7 +712,6 @@ class MainActivity : AppCompatActivity() {
         val pp = podPage
         when {
             v == SETTINGS -> {
-                rows += Row.Entry("Retour", null, null, R.drawable.ic_back, onClick = { settingsOpen = false; renderAll() })
                 rows += Row.Header("Réglages")
                 settingsRows(rows)
             }
@@ -772,13 +771,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Une sous-page est ouverte sur l'écran courant (réglages, podcast, chaîne, album, dossier). */
+    private fun canGoBack(): Boolean {
+        val phys = pager.currentItem
+        val v = currentVirtual()
+        return settingsOpen || podPage?.page == phys || channelPage?.page == phys ||
+            (v == MUSIC && musicStack.isNotEmpty()) || (v == OFFLINE && folderStack.isNotEmpty())
+    }
+
     private fun updateBubbles() {
         val phys = pager.currentItem
-        val key = "$phys|$homeFilter|$libFilter|$searchOpen|$settingsOpen"
+        val back = canGoBack()
+        val key = "$phys|$homeFilter|$libFilter|$searchOpen|$settingsOpen|$back"
         if (key == bubbleKey) return
         bubbleKey = key
         val box = findViewById<LinearLayout>(R.id.bubbles)
         box.removeAllViews()
+        // Retour : petite bulle en bas, sous le pouce (remplace la grande ligne « Retour »)
+        if (back) box.addView(bubble("", false, R.drawable.ic_back) { onBackPressedDispatcher.onBackPressed() }.apply {
+            contentDescription = "Retour"
+        })
+        if (back) (box.parent as? android.widget.HorizontalScrollView)?.scrollTo(0, 0)
         if (phys == 0) {
             box.addView(bubble("", searchOpen, R.drawable.ic_search) { toggleSearch() })
             listOf("all" to "Tout", "music" to "Musique", "videos" to "Vidéos", "podcasts" to "Podcasts").forEach { (k, label) ->
@@ -1460,7 +1473,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun podcastRows(pp: PodPage, rows: MutableList<Row>) {
-        rows += Row.Entry("Retour", null, null, R.drawable.ic_back, onClick = { closePodcast() })
         val p = pp.podcast
         rows += Row.ChannelHeader(Chan(p.feedUrl, p.title, p.artwork), p.author, Store.isPodSubscribed(p.feedUrl)) {
             togglePodcast(pp.podcast)
@@ -1882,7 +1894,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun channelRows(cp: ChannelPage, rows: MutableList<Row>) {
-        rows += Row.Entry("Retour", null, null, R.drawable.ic_back, onClick = { closeChannel() })
         rows += Row.ChannelHeader(cp.chan, cp.subs, Store.isSubscribed(cp.chan.url)) { toggleSub(cp.chan) }
         val vids = cp.videos
         when {
@@ -2102,7 +2113,6 @@ class MainActivity : AppCompatActivity() {
             }
             return
         }
-        rows += Row.Entry("Retour", null, null, R.drawable.ic_back, onClick = { leaveFolder() })
         rows += Row.Header(folderStack.last().second)
         val files = folderFiles
         if (files == null) {
@@ -2685,7 +2695,6 @@ class MainActivity : AppCompatActivity() {
     private fun musicRows(rows: MutableList<Row>) {
         val page = musicStack.lastOrNull()
         if (page != null) {
-            rows += Row.Entry("Retour", null, null, R.drawable.ic_back, onClick = { popMusic() })
             musicPageRows(page, rows)
             return
         }
