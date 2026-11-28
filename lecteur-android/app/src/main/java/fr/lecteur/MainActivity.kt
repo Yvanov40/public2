@@ -473,6 +473,8 @@ class MainActivity : AppCompatActivity() {
         refreshUi()
         renderAll()
         savedInstanceState?.getString("filter")?.let { homeFilter = it }
+        // Après un changement de couleur / police : on reste dans les réglages
+        if (savedInstanceState?.getBoolean("settings") == true) settingsOpen = true
         savedInstanceState?.getInt("page", -1)?.takeIf { it in 0 until PAGES }?.let {
             pager.setCurrentItem(it, false)
         }
@@ -515,6 +517,7 @@ class MainActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
         outState.putInt("page", pager.currentItem)
         outState.putString("filter", homeFilter)
+        outState.putBoolean("settings", settingsOpen)
     }
 
     override fun onStart() {

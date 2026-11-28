@@ -7,7 +7,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import com.google.android.material.color.DynamicColors
-import com.google.android.material.color.DynamicColorsOptions
 
 /** Thème (couleur, noir pur) et police choisis dans les réglages. */
 object Ui {
@@ -15,12 +14,9 @@ object Ui {
         val opt = Settings.colors.firstOrNull { it.key == Settings.color } ?: Settings.colors[0]
         if (opt.key == "auto") {
             DynamicColors.applyToActivityIfAvailable(a)
-        } else if (DynamicColors.isDynamicColorAvailable()) {
-            // Palette Material complète calculée à partir de la couleur choisie
-            DynamicColors.applyToActivityIfAvailable(
-                a, DynamicColorsOptions.Builder().setContentBasedSource(opt.seed).build()
-            )
         } else {
+            // Palette fixe de l'appli : les couleurs dynamiques calculées ne s'appliquent pas
+            // sur tous les téléphones (HyperOS notamment)
             a.theme.applyStyle(opt.overlay, true)
         }
         val night = (a.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
