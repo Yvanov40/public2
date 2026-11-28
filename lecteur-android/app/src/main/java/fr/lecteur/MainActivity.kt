@@ -420,6 +420,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Bulles fixes : retour et recherche
+        findViewById<View>(R.id.backBubble).setOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        findViewById<View>(R.id.searchBubble).setOnClickListener { toggleSearch() }
+
         // Mise à jour (icône en haut)
         findViewById<View>(R.id.updateBtn).setOnClickListener { checkUpdate(manual = true) }
         showUpdateDot(false)
@@ -850,13 +854,16 @@ class MainActivity : AppCompatActivity() {
         bubbleKey = key
         val box = findViewById<LinearLayout>(R.id.bubbles)
         box.removeAllViews()
-        // Retour : petite bulle en bas, sous le pouce (remplace la grande ligne « Retour »)
-        if (back) box.addView(bubble("", false, R.drawable.ic_back) { onBackPressedDispatcher.onBackPressed() }.apply {
-            contentDescription = "Retour"
-        })
-        if (back) (box.parent as? android.widget.HorizontalScrollView)?.scrollTo(0, 0)
+        // Retour et recherche : boutons ronds fixes, à gauche des bulles (ne défilent pas)
+        findViewById<View>(R.id.backBubble).isVisible = back
+        findViewById<com.google.android.material.button.MaterialButton>(R.id.searchBubble).apply {
+            isVisible = phys == 0
+            backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (searchOpen) MaterialColors.getColor(this, com.google.android.material.R.attr.colorSecondaryContainer)
+                else android.graphics.Color.TRANSPARENT
+            )
+        }
         if (phys == 0) {
-            box.addView(bubble("", searchOpen, R.drawable.ic_search) { toggleSearch() })
             listOf("all" to "Tout", "music" to "Musique", "videos" to "Vidéos", "podcasts" to "Podcasts").forEach { (k, label) ->
                 box.addView(bubble(label, homeFilter == k && !settingsOpen) {
                     settingsOpen = false
