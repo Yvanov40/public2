@@ -19,7 +19,10 @@ import com.google.android.material.progressindicator.LinearProgressIndicator
 sealed class Row {
     class Header(val text: String, val action: String? = null, val onAction: (() -> Unit)? = null) : Row()
     class Note(val text: String, val icon: Int = 0) : Row()
-    class Chips(val items: List<String>, val onClick: (String) -> Unit, val onLong: (String) -> Unit) : Row()
+    class Chips(
+        val items: List<String>, val onClick: (String) -> Unit, val onLong: (String) -> Unit,
+        val selected: Set<String> = emptySet()
+    ) : Row()
     class Video(val v: Vid, val onClick: () -> Unit, val onLong: () -> Unit) : Row()
     class Carousel(val items: List<Vid>, val onClick: (Vid) -> Unit, val onLong: (Vid) -> Unit) : Row()
     class Avatars(val items: List<Chan>, val onClick: (Chan) -> Unit, val onLong: (Chan) -> Unit) : Row()
@@ -34,7 +37,9 @@ sealed class Row {
         val thumb: String?,
         val icon: Int,
         val onClick: () -> Unit,
-        val onLong: (() -> Unit)? = null
+        val onLong: (() -> Unit)? = null,
+        /** Grisé (épisode déjà écouté). */
+        val dim: Boolean = false
     ) : Row()
     class Choice(val title: String, val sub: String?, val labels: List<String>, val selected: Int, val onSelect: (Int) -> Unit) : Row()
     class Slider(
@@ -172,7 +177,9 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 row.items.forEach { s ->
                     box.addView(Chip(box.context).apply {
                         text = s
-                        isCheckable = false
+                        isCheckable = s in row.selected
+                        isChecked = s in row.selected
+                        isCheckedIconVisible = false
                         layoutParams = LinearLayout.LayoutParams(
                             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
                         ).apply { marginEnd = (8 * d).toInt() }
@@ -262,6 +269,7 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 sub.text = row.subtitle
                 sub.visibility = if (row.subtitle.isNullOrEmpty()) View.GONE else View.VISIBLE
                 Thumbs.load(v.findViewById(R.id.thumb), row.thumb, row.icon)
+                v.alpha = if (row.dim) 0.45f else 1f
                 v.setOnClickListener { row.onClick() }
                 val long = row.onLong
                 if (long != null) v.setOnLongClickListener { long(); true } else v.setOnLongClickListener(null)

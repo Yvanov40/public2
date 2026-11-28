@@ -17,6 +17,8 @@ object Store {
 
     fun init(ctx: Context) {
         prefs = ctx.getSharedPreferences("store", Context.MODE_PRIVATE)
+        positions = null
+        played = null
     }
 
     class Download(
@@ -104,6 +106,7 @@ object Store {
     @Synchronized fun unsubscribePodcast(feed: String) = savePodcasts(podcasts().filterNot { it.feedUrl == feed })
 
     private var positions: LinkedHashMap<String, Long>? = null
+    private var played: LinkedHashSet<String>? = null
 
     private fun positionsMap(): LinkedHashMap<String, Long> = positions ?: LinkedHashMap<String, Long>().also { m ->
         try {
@@ -114,18 +117,56 @@ object Store {
         positions = m
     }
 
-    /** Où en était la lecture (ms) ; 0 = jamais commencé ; -1 = vu / écouté jusqu'au bout. */
-    @Synchronized fun position(id: String): Long = positionsMap()[id] ?: 0
-
-    @Synchronized fun setPosition(id: String, ms: Long) {
+    /** Écoutés / vus jusqu'au bout : liste séparée, bien plus longue que les positions. */
+    private fun playedSet(): LinkedHashSet<String> = played ?: LinkedHashSet<String>().also { set ->
+        try {
+            val a = JSONArray(prefs.getString("played", "[]")!!)
+            for (i in 0 until a.length()) set += a.getString(i)
+        } catch (_: Exception) {
+        }
+        // Reprise des anciens « -1 » rangés avec les positions
         val m = positionsMap()
-        m.remove(id)
-        if (ms != 0L) m[id] = ms // les plus récents à la fin
-        // Limite la taille : on garde les 600 dernières entrées
-        while (m.size > 600) m.remove(m.keys.first())
+        val old = m.filterValues { it < 0 }.keys
+        if (old.isNotEmpty()) {
+            set += old
+            old.forEach { m.remove(it) }
+            savePositions(m)
+            played = set
+            savePlayed(set)
+        }
+        played = set
+    }
+
+    private fun savePositions(m: LinkedHashMap<String, Long>) {
         val o = JSONObject()
         m.forEach { (k, v) -> o.put(k, v) }
         prefs.edit().putString("positions", o.toString()).apply()
+    }
+
+    private fun savePlayed(set: LinkedHashSet<String>) {
+        while (set.size > 8000) set.remove(set.first())
+        prefs.edit().putString("played", JSONArray(set.toList()).toString()).apply()
+    }
+
+    /** Où en était la lecture (ms) ; 0 = jamais commencé ; -1 = vu / écouté jusqu'au bout. */
+    @Synchronized fun position(id: String): Long =
+        if (id in playedSet()) -1 else positionsMap()[id] ?: 0
+
+    @Synchronized fun setPosition(id: String, ms: Long) = setPositions(listOf(id), ms)
+
+    /** Même chose pour plusieurs à la fois (tout marquer comme écouté…). */
+    @Synchronized fun setPositions(ids: Collection<String>, ms: Long) {
+        val set = playedSet()
+        val m = positionsMap()
+        ids.forEach { id ->
+            m.remove(id)
+            set.remove(id)
+            if (ms < 0) set += id else if (ms != 0L) m[id] = ms // les plus récents à la fin
+        }
+        // Limite la taille : on garde les 600 dernières positions
+        while (m.size > 600) m.remove(m.keys.first())
+        savePositions(m)
+        savePlayed(set)
     }
 
     /** Date (ms) de la dernière nouveauté vue pour un flux ou une chaîne. */

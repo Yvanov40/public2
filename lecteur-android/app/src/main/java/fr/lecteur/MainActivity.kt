@@ -1278,9 +1278,67 @@ class MainActivity : AppCompatActivity() {
             Yt.formatDuration(e.duration).ifEmpty { null }, state
         ).joinToString(" · ")
         return Row.Entry(
-            e.title, sub, e.image ?: e.podcastArt, R.drawable.ic_audio,
-            onClick = { playEpisodes(list, i) }, onLong = { episodeMenu(list, i) }
+            (if (pos == 0L) "● " else "") + e.title, sub, e.image ?: e.podcastArt, R.drawable.ic_audio,
+            onClick = { playEpisodes(list, i) }, onLong = { episodeMenu(list, i) }, dim = pos < 0
         )
+    }
+
+    // ——— Tri et filtre des épisodes ———
+
+    private val podFilters = listOf("all" to "Tous", "unplayed" to "Non écoutés", "started" to "En cours", "played" to "Écoutés")
+    private val podSorts = listOf("new" to "Plus récents", "old" to "Plus anciens", "long" to "Plus longs", "short" to "Plus courts")
+
+    private fun sortFilter(eps: List<Episode>, sort: Boolean = true): List<Episode> {
+        val f = Settings.podFilter
+        val kept = if (f == "all") eps else eps.filter {
+            val pos = Store.position(Pod.mediaId(it))
+            when (f) {
+                "unplayed" -> pos >= 0
+                "started" -> pos > 0
+                "played" -> pos < 0
+                else -> true
+            }
+        }
+        if (!sort) return kept
+        return when (Settings.podSort) {
+            "old" -> kept.sortedBy { it.date }
+            "long" -> kept.sortedByDescending { it.duration }
+            "short" -> kept.sortedBy { it.duration.takeIf { d -> d > 0 } ?: Long.MAX_VALUE }
+            else -> kept.sortedByDescending { it.date }
+        }
+    }
+
+    /** Bulles de filtre (et de tri sur la page d'un podcast). */
+    private fun episodeControls(rows: MutableList<Row>, withSort: Boolean) {
+        val curF = podFilters.first { it.first == Settings.podFilter }.second
+        rows += Row.Chips(podFilters.map { it.second }, onClick = { label ->
+            Settings.podFilter = podFilters.first { it.second == label }.first
+            renderAll()
+        }, onLong = {}, selected = setOf(curF))
+        if (withSort) {
+            val curS = podSorts.firstOrNull { it.first == Settings.podSort }?.second ?: podSorts[0].second
+            rows += Row.Chips(podSorts.map { it.second }, onClick = { label ->
+                Settings.podSort = podSorts.first { it.second == label }.first
+                renderAll()
+            }, onLong = {}, selected = setOf(curS))
+        }
+    }
+
+    private fun markAll(eps: List<Episode>, played: Boolean) {
+        Store.setPositions(eps.map { Pod.mediaId(it) }, if (played) -1 else 0)
+        snack(if (played) "${eps.size} épisodes marqués comme écoutés" else "${eps.size} épisodes marqués comme non écoutés")
+        renderAll()
+    }
+
+    private fun markAllMenu(all: List<Episode>, shown: List<Episode>) {
+        val opts = mutableListOf(
+            Opt(R.drawable.ic_play, "Tout marquer comme écouté") { markAll(all, true) },
+            Opt(R.drawable.ic_retry, "Tout marquer comme non écouté") { markAll(all, false) }
+        )
+        if (shown.size != all.size) {
+            opts += Opt(R.drawable.ic_play, "Marquer les ${shown.size} affichés comme écoutés") { markAll(shown, true) }
+        }
+        sheet("Marquer les épisodes", null, opts)
     }
 
     private fun podcastSubsRows(rows: MutableList<Row>) {
@@ -1324,7 +1382,12 @@ class MainActivity : AppCompatActivity() {
         when {
             f == null -> rows += Row.Note("Chargement…")
             f.isEmpty() -> rows += Row.Note("Aucun épisode trouvé. Tire vers le bas pour actualiser.")
-            else -> f.indices.forEach { rows += episodeRow(f, it, true) }
+            else -> {
+                episodeControls(rows, false)
+                val shown = sortFilter(f, sort = false)
+                if (shown.isEmpty()) rows += Row.Note("Aucun épisode dans ce filtre.")
+                shown.indices.forEach { rows += episodeRow(shown, it, true) }
+            }
         }
         rows += addRss
     }
@@ -1393,8 +1456,12 @@ class MainActivity : AppCompatActivity() {
             eps == null -> rows += Row.Note("Chargement…")
             eps.isEmpty() -> rows += Row.Note("Aucun épisode.")
             else -> {
-                rows += Row.Header("${eps.size} épisodes")
-                eps.indices.forEach { rows += episodeRow(eps, it, false) }
+                val unplayed = eps.count { Store.position(Pod.mediaId(it)) >= 0 }
+                val shown = sortFilter(eps)
+                rows += Row.Header("${eps.size} épisodes · $unplayed non écoutés", "Marquer…") { markAllMenu(eps, shown) }
+                episodeControls(rows, true)
+                if (shown.isEmpty()) rows += Row.Note("Aucun épisode dans ce filtre.")
+                shown.indices.forEach { rows += episodeRow(shown, it, false) }
             }
         }
     }
@@ -1581,6 +1648,10 @@ class MainActivity : AppCompatActivity() {
                 Opt(R.drawable.ic_play, if (done) "Marquer comme non écouté" else "Marquer comme écouté") {
                     Store.setPosition(id, if (done) 0 else -1)
                     renderAll()
+                },
+                Opt(R.drawable.ic_play, "Marquer celui-ci et les plus anciens comme écoutés") {
+                    val all = podPage?.episodes?.takeIf { l -> l.any { it.audioUrl == e.audioUrl } } ?: list
+                    markAll(all.filter { it.feedUrl == e.feedUrl && it.date <= e.date }, true)
                 },
                 Opt(R.drawable.ic_share, "Partager le lien") {
                     startActivity(

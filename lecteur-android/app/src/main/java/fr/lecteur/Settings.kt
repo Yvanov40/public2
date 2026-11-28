@@ -121,6 +121,15 @@ object Settings {
         get() = bool("autoDownload", false)
         set(v) = setBool("autoDownload", v)
 
+    /** Podcasts : ordre des épisodes (new, old, long, short) et filtre (all, unplayed, started, played). */
+    var podSort: String
+        get() = p.getString("podSort", "new") ?: "new"
+        set(v) = p.edit().putString("podSort", v).apply()
+
+    var podFilter: String
+        get() = p.getString("podFilter", "all") ?: "all"
+        set(v) = p.edit().putString("podFilter", v).apply()
+
     var lastUpdateCheck: Long
         get() = p.getLong("lastUpdateCheck", 0)
         set(v) = p.edit().putLong("lastUpdateCheck", v).apply()
