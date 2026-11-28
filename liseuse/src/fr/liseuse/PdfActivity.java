@@ -90,6 +90,7 @@ public final class PdfActivity extends Activity {
 
         Window w = getWindow();
         w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        Achats.bordsEcran(w);
         w.setStatusBarColor(0xFF1F1F21);
         w.setNavigationBarColor(0xFF1F1F21);
         if (in.getBooleanExtra(EXTRA_ALLUME, false)) w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);

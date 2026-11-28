@@ -225,6 +225,8 @@ const lecteur = window.lecteur = (() => {
       try { if (plein) t = JSON.parse(A.tailleBarres()); } catch (e) { /* rien */ }
       document.documentElement.style.setProperty('--sys-haut', (plein ? t.haut : 0) + 'px');
       document.documentElement.style.setProperty('--sys-bas', (plein ? t.bas : 0) + 'px');
+      // plein écran : la page commence sous la caméra, la bande au-dessus prend la couleur du thème
+      document.documentElement.style.setProperty('--encoche', (plein ? (t.encoche || 0) : 0) + 'px');
     } else A.pleinEcran(plein);
     A.ecranAllume(actif && R.ecranAllume);
     A.volume(actif && R.volume);

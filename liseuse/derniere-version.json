@@ -1,5 +1,5 @@
 {
- "versionCode": 29,
- "versionName": "4.5",
- "notes": "Pincer la page avec deux doigts règle l'interligne. Nouvelles polices : Charis et Gentium ; Atkinson passe à sa nouvelle version, encore plus lisible."
+ "versionCode": 30,
+ "versionName": "4.6",
+ "notes": "Plein écran : plus de bande noire en haut (caméra dans l'écran), la zone prend la couleur du thème et le texte commence juste en dessous."
 }

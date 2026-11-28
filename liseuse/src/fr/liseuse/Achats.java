@@ -10,6 +10,35 @@ import android.app.Activity;
 public abstract class Achats {
 
     /**
+     * Android 9+ : la fenêtre peut dessiner derrière la caméra logée dans l'écran (encoche, poinçon).
+     * Sans cela, en plein écran, Android laisse une bande noire en haut.
+     */
+    public static void bordsEcran(android.view.Window w) {
+        if (android.os.Build.VERSION.SDK_INT < 28) return;
+        try {
+            android.view.WindowManager.LayoutParams lp = w.getAttributes();
+            android.view.WindowManager.LayoutParams.class.getField("layoutInDisplayCutoutMode").setInt(lp, 1); // SHORT_EDGES
+            w.setAttributes(lp);
+        } catch (Throwable ignore) {
+        }
+    }
+
+    /** Hauteur de la zone de la caméra en haut de l'écran (pixels), 0 s'il n'y en a pas. */
+    public static int encocheHaut(android.view.View v) {
+        if (android.os.Build.VERSION.SDK_INT < 28 || v == null) return 0;
+        try {
+            android.view.WindowInsets ins = v.getRootWindowInsets();
+            if (ins == null) return 0;
+            Object c = android.view.WindowInsets.class.getMethod("getDisplayCutout").invoke(ins);
+            if (c == null) return 0;
+            return (Integer) c.getClass().getMethod("getSafeInsetTop").invoke(c);
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+
+    /**
      * Les boutons de volume servent-ils au son ? Oui si une appli joue du son
      * (musique, podcast, vidéo…) ou si un appel / une sonnerie est en cours.
      */

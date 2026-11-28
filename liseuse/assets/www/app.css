@@ -409,3 +409,8 @@ body.lecture .feuille { padding-bottom: var(--sys-bas, 0px); }
 .ico-maj.dispo svg { color: var(--accent); }
 .ico-maj.cherche svg { animation: pulsation .9s ease-in-out infinite alternate; }
 @keyframes pulsation { from { opacity: 1; } to { opacity: .25; } }
+
+/* caméra dans l'écran (encoche / poinçon) : la zone reste aux couleurs du thème, le texte commence dessous */
+#lecteur #cadre { top: var(--encoche, 0px); }
+#lecteur.avec-infos #cadre { top: calc(28px + var(--encoche, 0px)); }
+#lecteur .entete { top: var(--encoche, 0px); }

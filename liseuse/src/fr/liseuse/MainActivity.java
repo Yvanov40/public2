@@ -97,6 +97,7 @@ public final class MainActivity extends Activity {
         prefs = getSharedPreferences("liseuse", MODE_PRIVATE);
         Window w = getWindow();
         w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        Achats.bordsEcran(w);
         boolean sombre = systemeSombre();
         int fond = sombre ? 0xFF121212 : 0xFFF7F5F0;
         barres(fond, sombre);
@@ -1482,7 +1483,8 @@ public final class MainActivity extends Activity {
             int h = getResources().getIdentifier("status_bar_height", "dimen", "android");
             int b = getResources().getIdentifier("navigation_bar_height", "dimen", "android");
             return obj("haut", h > 0 ? getResources().getDimensionPixelSize(h) / k : 24,
-                    "bas", b > 0 ? getResources().getDimensionPixelSize(b) / k : 48).toString();
+                    "bas", b > 0 ? getResources().getDimensionPixelSize(b) / k : 48,
+                    "encoche", Achats.encocheHaut(web) / k).toString();
         }
 
         @JavascriptInterface

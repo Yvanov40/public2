@@ -1,1 +1,1 @@
-Pincer la page avec deux doigts règle l'interligne. Nouvelles polices : Charis et Gentium ; Atkinson passe à sa nouvelle version, encore plus lisible.
+Plein écran : plus de bande noire en haut (caméra dans l'écran), la zone prend la couleur du thème et le texte commence juste en dessous.
