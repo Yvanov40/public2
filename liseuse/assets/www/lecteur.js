@@ -7,7 +7,7 @@ const lecteur = window.lecteur = (() => {
     taille: 19, theme: 'creme', police: 'literata', interligne: 1.55, marges: 22,
     alignement: 'justifie', paragraphes: 'retrait', mode: 'pages', images: 'document', imagesSombre: 'attenuer',
     cesure: true, gras: false, couleursDoc: true, deuxPages: true, animation: true, uneMain: false,
-    volume: true, pleinEcran: true, ecranAllume: false, infos: true, luminosite: -1, liensExternes: true, bordLum: true, bordTaille: true,
+    volume: true, pleinEcran: true, ecranAllume: false, infos: true, luminosite: -1, liensExternes: true, bordLum: true, bordTaille: true, pinceInterligne: true,
     chaud: 0, persoFond: '#f3ece0', persoTexte: '#2b2b2b'
   };
 
@@ -28,12 +28,14 @@ const lecteur = window.lecteur = (() => {
     lora: { nom: 'Lora', css: '"Lora", Georgia, serif', desc: 'Douce' },
     sourceserif: { nom: 'Source Serif', css: '"Source Serif 4", Georgia, serif', desc: 'Nette' },
     alegreya: { nom: 'Alegreya', css: '"Alegreya", Georgia, serif', desc: 'Littéraire' },
+    charis: { nom: 'Charis', css: '"Charis SIL", Georgia, serif', desc: 'Longues lectures' },
+    gentium: { nom: 'Gentium', css: '"Gentium Book Plus", Georgia, serif', desc: 'Raffinée' },
     merriweather: { nom: 'Merriweather', css: '"Merriweather", Georgia, serif', desc: 'Robuste' },
     bitter: { nom: 'Bitter', css: '"Bitter", Georgia, serif', desc: 'Écran' },
     serif: { nom: 'Serif', css: '"Noto Serif", "Droid Serif", Georgia, serif', desc: 'Système' },
     nunito: { nom: 'Nunito', css: '"Nunito", system-ui, sans-serif', desc: 'Arrondie' },
     sans: { nom: 'Sans', css: 'Roboto, "Noto Sans", system-ui, sans-serif', desc: 'Système' },
-    atkinson: { nom: 'Atkinson', css: '"Atkinson Hyperlegible", system-ui, sans-serif', desc: 'Très lisible' },
+    atkinson: { nom: 'Atkinson', css: '"Atkinson Hyperlegible Next", system-ui, sans-serif', desc: 'Très lisible' },
     lexend: { nom: 'Lexend', css: '"Lexend", system-ui, sans-serif', desc: 'Lecture facile' },
     andika: { nom: 'Andika', css: '"Andika", system-ui, sans-serif', desc: 'Débutants' },
     dys: { nom: 'Dyslexie', css: '"OpenDyslexic", sans-serif', desc: 'OpenDyslexic' },
@@ -41,10 +43,11 @@ const lecteur = window.lecteur = (() => {
   };
 
   // polices fournies avec l'appli (licence SIL Open Font) ; Lexend n'a pas d'italique (penché automatiquement)
-  const FONTES = [['Literata', 'literata'], ['Merriweather', 'merriweather'], ['Atkinson Hyperlegible', 'atkinson-hyperlegible'],
+  const FONTES = [['Literata', 'literata'], ['Merriweather', 'merriweather'], ['Atkinson Hyperlegible Next', 'atkinson-hyperlegible-next'],
     ['OpenDyslexic', 'opendyslexic'], ['EB Garamond', 'eb-garamond'], ['Crimson Pro', 'crimson-pro'], ['Libre Baskerville', 'libre-baskerville'],
     ['Lora', 'lora'], ['Source Serif 4', 'source-serif-4'], ['Alegreya', 'alegreya'], ['Bitter', 'bitter'], ['Nunito', 'nunito'],
-    ['Lexend', 'lexend', true], ['Andika', 'andika']]
+    ['Lexend', 'lexend', true], ['Andika', 'andika'],
+    ['Charis SIL', 'charis-sil'], ['Gentium Book Plus', 'gentium-book-plus']]
     .map(([f, fic, sansItalique]) => [['400', 'normal'], ['400', 'italic'], ['700', 'normal'], ['700', 'italic']]
       .filter(([, st]) => !(sansItalique && st === 'italic'))
       .map(([w, st]) => `@font-face{font-family:"${f}";font-style:${st};font-weight:${w};font-display:block;src:url(/app/polices/${fic}-latin-${w}-${st}.woff2) format("woff2")}`).join('\n')).join('\n');
@@ -129,6 +132,16 @@ const lecteur = window.lecteur = (() => {
     const p = $('#indic-lum');
     p.querySelector('svg').style.display = 'none';
     p.querySelector('span').innerHTML = `<b style="font-family:Georgia,serif;margin-right:8px">Aa</b>${v}`;
+    p.classList.add('actif');
+    clearTimeout(minuteIndic);
+    if (fin) minuteIndic = setTimeout(() => p.classList.remove('actif'), 900);
+  }
+
+  /** Pastille pendant le pincement (interligne). */
+  function indiquerInterligne(v, fin) {
+    const p = $('#indic-lum');
+    p.querySelector('svg').style.display = 'none';
+    p.querySelector('span').innerHTML = `<b style="margin-right:8px">☰</b>interligne ${v.toFixed(2).replace('.', ',')}`;
     p.classList.add('actif');
     clearTimeout(minuteIndic);
     if (fin) minuteIndic = setTimeout(() => p.classList.remove('actif'), 900);
@@ -539,8 +552,16 @@ const lecteur = window.lecteur = (() => {
     let t0 = null;
     // glisser verticalement le long du bord gauche : luminosité
     let lum = null;
+    // pincer avec deux doigts : interligne (écarter = plus aéré, rapprocher = plus serré)
+    let pince = null;
+    const ecart = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
     doc.addEventListener('touchstart', e => {
       lum = null;
+      if (e.touches.length === 2 && R.pinceInterligne) {
+        pince = { d0: ecart(e.touches), depart: R.interligne, f: fractionCourante(), actif: false };
+        t0 = null;
+        return;
+      }
       if (e.touches.length > 1) { t0 = null; return; }
       const t = e.touches[0];
       t0 = { x: t.clientX, y: t.clientY, t: Date.now() };
@@ -553,6 +574,21 @@ const lecteur = window.lecteur = (() => {
       }
     }, { passive: true });
     doc.addEventListener('touchmove', e => {
+      if (pince && e.touches.length === 2) {
+        e.preventDefault();
+        const d = ecart(e.touches) - pince.d0;
+        if (!pince.actif && Math.abs(d) < 15) return;
+        pince.actif = true;
+        // 0,05 d'interligne tous les 16 px d'écartement
+        const v = Math.max(1.1, Math.min(2.4, Math.round((pince.depart + d / 320) * 20) / 20));
+        indiquerInterligne(v);
+        if (v !== R.interligne) {
+          R.interligne = v;
+          styleLivre();
+          relayoutFraction(pince.f);
+        }
+        return;
+      }
       if (!lum || !t0 || e.touches.length > 1) return;
       const t = e.touches[0];
       const dx = t.clientX - t0.x, dy = t.clientY - t0.y;
@@ -579,6 +615,21 @@ const lecteur = window.lecteur = (() => {
       indiquerLumiere();
     }, { passive: false });
     doc.addEventListener('touchend', e => {
+      if (pince) {
+        if (e.touches.length < 2) {
+          if (pince.actif) {
+            sauverReglages();
+            majPanneau();
+            indiquerInterligne(R.interligne, true);
+            const f = pince.f;
+            if (doc && doc.fonts) doc.fonts.ready.then(() => relayoutFraction(f));
+          }
+          pince = null;
+          t0 = null;
+          e.preventDefault();
+        }
+        return;
+      }
       if (lum && lum.actif) {
         // fin du réglage (luminosité ou taille) : pas de toucher ni de page tournée
         e.preventDefault();
