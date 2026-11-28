@@ -38,6 +38,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="14dp"
+        android:gravity="center_vertical"
         android:orientation="horizontal">
 
         <com.google.android.material.button.MaterialButton
@@ -59,19 +60,20 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/save"
-            style="@style/Widget.Material3.Button.OutlinedButton.Icon"
+            style="@style/Widget.Material3.Button.IconButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
             android:visibility="gone"
-            app:icon="@drawable/ic_heart_outline" />
+            app:icon="@drawable/ic_heart_outline"
+            app:iconSize="28dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/more"
-            style="@style/Widget.Material3.Button.IconButton.Outlined"
+            style="@style/Widget.Material3.Button.IconButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:visibility="gone"
-            app:icon="@drawable/ic_settings" />
+            app:icon="@drawable/ic_more_vert"
+            app:iconSize="26dp" />
     </LinearLayout>
 </LinearLayout>

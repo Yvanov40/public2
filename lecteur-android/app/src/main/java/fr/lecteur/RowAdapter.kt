@@ -576,8 +576,17 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 more.setOnClickListener { row.onMore?.invoke() }
                 val save = v.findViewById<MaterialButton>(R.id.save)
                 save.visibility = if (row.onSave != null) View.VISIBLE else View.GONE
-                save.text = row.saveLabel
+                // Simple cœur (comme Spotify) : plein = enregistré
+                save.text = null
+                save.contentDescription = row.saveLabel
                 save.setIconResource(if (row.saved) R.drawable.ic_heart else R.drawable.ic_heart_outline)
+                save.iconTint = ColorStateList.valueOf(
+                    MaterialColors.getColor(
+                        save, if (row.saved) com.google.android.material.R.attr.colorPrimary
+                        else com.google.android.material.R.attr.colorOnSurfaceVariant
+                    )
+                )
+                save.setOnLongClickListener { android.widget.Toast.makeText(save.context, row.saveLabel, android.widget.Toast.LENGTH_SHORT).show(); true }
                 save.setOnClickListener { row.onSave?.invoke() }
             }
             is Row.Progress -> {

@@ -2910,7 +2910,7 @@ class MainActivity : AppCompatActivity() {
             onPlayed: (() -> Unit)? = null, saveLabel: String? = null, saved: Boolean = false, onSave: (() -> Unit)? = null
         ) {
             rows += Row.MusicHeader(
-                title, sub, thumb, round,
+                albumName(title), sub, thumb, round,
                 onPlay = if (tracks.isEmpty()) null else ({ onPlayed?.invoke(); Music.play(tracks, 0); openNowPlayingSoon() }),
                 onShuffle = if (tracks.size < 2) null else ({ onPlayed?.invoke(); Music.play(tracks, (tracks.indices).random(), shuffled = true); openNowPlayingSoon() }),
                 onMore = onMore, saveLabel = saveLabel, saved = saved, onSave = onSave
@@ -2922,11 +2922,11 @@ class MainActivity : AppCompatActivity() {
                 val t = page.tracks
                 when {
                     page.error != null -> {
-                        rows += Row.MusicHeader(page.album.title, page.album.artist, page.album.thumb, false, null, null)
+                        rows += Row.MusicHeader(albumName(page.album.title), page.album.artist, page.album.thumb, false, null, null)
                         rows += Row.Note("Impossible de charger : ${page.error}")
                     }
                     t == null -> {
-                        rows += Row.MusicHeader(page.album.title, page.album.artist, page.album.thumb, false, null, null)
+                        rows += Row.MusicHeader(albumName(page.album.title), page.album.artist, page.album.thumb, false, null, null)
                         rows += Row.Note("Chargement…")
                     }
                     else -> {
