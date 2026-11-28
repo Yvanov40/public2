@@ -1,1 +1,1 @@
-Icône de mise à jour en haut de la bibliothèque : un toucher cherche une nouvelle version ; un point coloré signale qu'une mise à jour est disponible.
+Les livres EPUB mal emballés (contenu rangé dans un sous-dossier de l'archive) sont réparés automatiquement à l'ajout, au lieu d'être refusés.

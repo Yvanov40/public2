@@ -1,5 +1,5 @@
 {
- "versionCode": 26,
- "versionName": "4.2",
- "notes": "Icône de mise à jour en haut de la bibliothèque : un toucher cherche une nouvelle version ; un point coloré signale qu'une mise à jour est disponible."
+ "versionCode": 27,
+ "versionName": "4.3",
+ "notes": "Les livres EPUB mal emballés (contenu rangé dans un sous-dossier de l'archive) sont réparés automatiquement à l'ajout, au lieu d'être refusés."
 }

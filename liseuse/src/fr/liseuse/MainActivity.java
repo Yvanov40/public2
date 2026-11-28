@@ -435,7 +435,7 @@ public final class MainActivity extends Activity {
             ZipFile z = new ZipFile(f);
             try {
                 if (z.getEntry("word/document.xml") != null) return "docx";
-                if (z.getEntry("META-INF/container.xml") != null) return "epub";
+                if (EpubReparation.estEpub(z)) return "epub"; // y compris mal emballé (contenu dans un sous-dossier)
                 ZipEntry ct = z.getEntry("[Content_Types].xml");
                 if (ct != null) {
                     String s = new String(EpubBuilder.lireTout(z.getInputStream(ct)), "UTF-8");
@@ -474,7 +474,7 @@ public final class MainActivity extends Activity {
         File tmp = new File(biblio.epub(id).getPath() + ".tmp");
         AndroidImages images = new AndroidImages();
         if (t.equals("epub")) {
-            copier(new FileInputStream(src), tmp);
+            EpubReparation.copier(src, tmp); // remis en forme si besoin
         } else {
             OutputStream o = new FileOutputStream(tmp);
             try {
