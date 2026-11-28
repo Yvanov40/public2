@@ -152,6 +152,9 @@ class NowPlayingActivity : AppCompatActivity() {
             if (Caster.isCasting) Caster.previous()
             else if (Music.active) Music.previous() else player.seekToPrevious()
         }
+        // −15 / +15 s (podcasts, vidéos : à la place d'aléatoire / répéter)
+        findViewById<View>(R.id.back15).setOnClickListener { jump(-15_000) }
+        findViewById<View>(R.id.fwd15).setOnClickListener { jump(15_000) }
         shuffle.setOnClickListener { Music.toggleShuffle(); refresh() }
         repeat.setOnClickListener { Music.cycleRepeat(); refresh() }
         like.setOnClickListener {
@@ -215,6 +218,18 @@ class NowPlayingActivity : AppCompatActivity() {
             (player.duration / 1000).coerceAtLeast(0))
     }
 
+    private fun jump(deltaMs: Long) {
+        if (Caster.isCasting) {
+            Caster.seekBy(deltaMs)
+        } else {
+            val d = player.duration
+            var to = (player.currentPosition + deltaMs).coerceAtLeast(0)
+            if (d > 0) to = to.coerceAtMost(d - 1000)
+            player.seekTo(to)
+        }
+        refresh()
+    }
+
     private fun refresh() {
         if (player.mediaItemCount == 0) {
             finish()
@@ -230,6 +245,8 @@ class NowPlayingActivity : AppCompatActivity() {
         like.setImageResource(if (t != null && Store.isLiked(t.url)) R.drawable.ic_heart else R.drawable.ic_heart_outline)
         shuffle.isVisible = Music.active
         repeat.isVisible = Music.active
+        findViewById<View>(R.id.back15).isVisible = !Music.active
+        findViewById<View>(R.id.fwd15).isVisible = !Music.active
         shuffle.alpha = if (Music.shuffle) 1f else 0.45f
         repeat.alpha = if (Music.repeat != Music.Repeat.OFF) 1f else 0.45f
         repeat.setImageResource(if (Music.repeat == Music.Repeat.ONE) R.drawable.ic_repeat_one else R.drawable.ic_repeat)
