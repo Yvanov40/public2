@@ -162,6 +162,14 @@ class MainActivity : AppCompatActivity() {
         var error: String? = null
     }
     private var podPage: PodPage? = null
+
+    /** Sélection multiple (appui long) : épisodes ou fichiers de la bibliothèque. */
+    private class Sel(val episodes: Boolean, val universe: List<Any>) {
+        val keys = LinkedHashSet<String>()
+        val items = LinkedHashMap<String, Any>()
+        var last = -1
+    }
+    private var sel: Sel? = null
     private var podJob: Job? = null
     private var podResults: List<Podcast> = emptyList()
     private var podFeed: List<Episode>? = null
@@ -360,6 +368,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageSelected(position: Int) {
                 if (bottomNav.selectedItemId != navIds[position]) bottomNav.selectedItemId = navIds[position]
                 if (settingsOpen) settingsOpen = false
+                if (sel != null) { sel = null; updateSelBar() }
                 if (position == 1) rescanLocal() else ensureLoads()
                 renderAll()
             }
@@ -435,6 +444,7 @@ class MainActivity : AppCompatActivity() {
                 val v = currentVirtual()
                 when {
                     fullscreen -> requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    sel != null -> selEnd()
                     settingsOpen -> { settingsOpen = false; renderAll() }
                     podPage?.page == phys -> closePodcast()
                     channelPage?.page == phys -> closeChannel()
@@ -1278,9 +1288,13 @@ class MainActivity : AppCompatActivity() {
             if (showPodcast) e.podcastTitle else null, Pod.ago(e.date),
             Yt.formatDuration(e.duration).ifEmpty { null }, state
         ).joinToString(" · ")
+        val key = Pod.mediaId(e)
+        val sl = sel?.takeIf { it.episodes }
         return Row.Entry(
             (if (pos == 0L) "● " else "") + e.title, sub, e.image ?: e.podcastArt, R.drawable.ic_audio,
-            onClick = { playEpisodes(list, i) }, onLong = { episodeMenu(list, i) }, dim = pos < 0, tile = true
+            onClick = { if (sl != null) selToggle(key, e, list, i) else playEpisodes(list, i) },
+            onLong = { if (sl != null) selRange(list, i) else selStart(true, list, i) },
+            dim = pos < 0, tile = true, selected = sl?.keys?.contains(key) == true
         )
     }
 
@@ -1628,6 +1642,176 @@ class MainActivity : AppCompatActivity() {
             .setAnchorView(if (bottomNav.isVisible) bottomNav else null)
             .setAction("Voir") { show(OFFLINE) }
             .show()
+    }
+
+    // ——— Sélection multiple ———
+
+    private fun keyOf(o: Any): String = when (o) {
+        is Episode -> Pod.mediaId(o)
+        is OffItem -> o.uri.toString()
+        else -> o.toString()
+    }
+
+    private fun selStart(episodes: Boolean, list: List<Any>, i: Int) {
+        val s0 = Sel(episodes, list)
+        sel = s0
+        val o = list[i]
+        s0.keys += keyOf(o)
+        s0.items[keyOf(o)] = o
+        s0.last = i
+        vibrate()
+        updateSelBar()
+        renderAll()
+    }
+
+    private fun selToggle(key: String, o: Any, list: List<Any>, i: Int) {
+        val s0 = sel ?: return
+        if (!s0.keys.remove(key)) {
+            s0.keys += key
+            s0.items[key] = o
+            s0.last = list.indexOfFirst { keyOf(it) == key }.takeIf { it >= 0 && list === s0.universe } ?: i
+        } else s0.items.remove(key)
+        if (s0.keys.isEmpty()) selEnd() else { updateSelBar(); renderAll() }
+    }
+
+    /** Appui long pendant la sélection : coche tout entre le dernier coché et celui-ci. */
+    private fun selRange(list: List<Any>, i: Int) {
+        val s0 = sel ?: return
+        val from = if (s0.last in list.indices) s0.last else i
+        for (j in minOf(from, i)..maxOf(from, i)) {
+            val o = list[j]
+            s0.keys += keyOf(o)
+            s0.items[keyOf(o)] = o
+        }
+        s0.last = i
+        vibrate()
+        updateSelBar()
+        renderAll()
+    }
+
+    private fun selEnd() {
+        sel = null
+        updateSelBar()
+        renderAll()
+    }
+
+    private fun vibrate() {
+        try { root.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS) } catch (_: Exception) {}
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun selEpisodes(): List<Episode> = sel?.items?.values?.filterIsInstance<Episode>() ?: emptyList()
+    private fun selFiles(): List<OffItem> = sel?.items?.values?.filterIsInstance<OffItem>() ?: emptyList()
+
+    private fun updateSelBar() {
+        val bar = findViewById<View>(R.id.selBar)
+        val s0 = sel
+        bar.isVisible = s0 != null
+        findViewById<View>(R.id.topBar).isVisible = s0 == null && !fullscreen
+        if (s0 == null) return
+        val n = s0.keys.size
+        findViewById<TextView>(R.id.selCount).text = "$n sélectionné" + if (n > 1) "s" else ""
+        val a = findViewById<ImageButton>(R.id.selA)
+        val b = findViewById<ImageButton>(R.id.selB)
+        val c = findViewById<ImageButton>(R.id.selC)
+        findViewById<View>(R.id.selClose).setOnClickListener { selEnd() }
+        b.setOnClickListener { selQueue() }
+        findViewById<View>(R.id.selMore).setOnClickListener { selMenu() }
+        if (s0.episodes) {
+            a.setImageResource(R.drawable.ic_check)
+            a.contentDescription = "Marquer comme écouté"
+            a.setOnClickListener { selMark(true) }
+            c.setImageResource(R.drawable.ic_download)
+            c.contentDescription = "Télécharger"
+            c.setOnClickListener { selDownload() }
+        } else {
+            a.setImageResource(R.drawable.ic_play)
+            a.contentDescription = "Lire la sélection"
+            a.setOnClickListener { selPlayFiles() }
+            c.setImageResource(R.drawable.ic_delete)
+            c.contentDescription = "Supprimer"
+            c.setOnClickListener { selDelete() }
+        }
+        listOf(a, b, c).forEach { btn ->
+            btn.setOnLongClickListener { snack(btn.contentDescription.toString()); true }
+        }
+    }
+
+    private fun selMark(played: Boolean) {
+        val eps = selEpisodes()
+        Store.setPositions(eps.map { Pod.mediaId(it) }, if (played) -1 else 0)
+        snack("${eps.size} marqué" + (if (eps.size > 1) "s" else "") + if (played) " comme écouté" else " comme non écouté")
+        selEnd()
+    }
+
+    private fun selQueue() {
+        val s0 = sel ?: return
+        if (s0.episodes) selEpisodes().forEach { e ->
+            Playback.addLast(Playback.QItem(e.title, e.podcastTitle, e.image ?: e.podcastArt, uri = e.audioUrl, mediaId = Pod.mediaId(e)))
+        } else selFiles().forEach { d ->
+            Playback.addLast(Playback.QItem(d.title, d.uploader, d.thumb, uri = d.uri.toString()))
+        }
+        snack("${s0.keys.size} ajouté(s) à la file (${Playback.queue.size})")
+        selEnd()
+    }
+
+    private fun selDownload() {
+        val eps = selEpisodes()
+        eps.forEach { downloadEpisode(it) }
+        if (eps.size > 1) snack("${eps.size} téléchargements ajoutés")
+        selEnd()
+    }
+
+    private fun selPlayFiles() {
+        val files = selFiles()
+        if (files.isEmpty()) return
+        selEnd()
+        playDownloads(files, 0, files.none { it.video })
+    }
+
+    private fun selDelete() {
+        val files = selFiles()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Supprimer ${files.size} fichier" + (if (files.size > 1) "s" else "") + " ?")
+            .setMessage("Ils seront supprimés du téléphone.")
+            .setPositiveButton("Supprimer") { _, _ ->
+                files.forEach { deleteFile(it) }
+                selEnd()
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    private fun selMenu() {
+        val s0 = sel ?: return
+        val opts = mutableListOf<Opt>()
+        opts += Opt(R.drawable.ic_check, "Tout sélectionner (${s0.universe.size})") {
+            s0.universe.forEach { o -> s0.keys += keyOf(o); s0.items[keyOf(o)] = o }
+            updateSelBar(); renderAll()
+        }
+        if (s0.episodes) {
+            opts += Opt(R.drawable.ic_check, "Marquer comme écouté") { selMark(true) }
+            opts += Opt(R.drawable.ic_retry, "Marquer comme non écouté") { selMark(false) }
+            opts += Opt(R.drawable.ic_download, "Télécharger") { selDownload() }
+            opts += Opt(R.drawable.ic_queue, "Ajouter à la file d'attente") { selQueue() }
+            val eps = selEpisodes()
+            if (eps.size == 1) {
+                val list = s0.universe.filterIsInstance<Episode>()
+                val idx = list.indexOfFirst { Pod.mediaId(it) == Pod.mediaId(eps[0]) }
+                if (idx >= 0) opts += Opt(R.drawable.ic_more_vert, "Autres options de l'épisode…") { selEnd(); episodeMenu(list, idx) }
+            }
+        } else {
+            opts += Opt(R.drawable.ic_play, "Lire la sélection") { selPlayFiles() }
+            opts += Opt(R.drawable.ic_queue, "Ajouter à la file d'attente") { selQueue() }
+            opts += Opt(R.drawable.ic_delete, "Supprimer du téléphone") { selDelete() }
+            val files = selFiles()
+            if (files.size == 1) {
+                val list = s0.universe.filterIsInstance<OffItem>()
+                val idx = list.indexOfFirst { it.uri == files[0].uri }
+                if (idx >= 0) opts += Opt(R.drawable.ic_more_vert, "Autres options du fichier…") { selEnd(); downloadMenu(list, idx) }
+            }
+        }
+        sheet("${s0.keys.size} sélectionné(s)", "Astuce : appui long sur un autre élément pour cocher tout ce qu'il y a entre les deux", opts)
     }
 
     private fun episodeMenu(list: List<Episode>, i: Int) {
@@ -2104,9 +2288,10 @@ class MainActivity : AppCompatActivity() {
                         .joinToString(" · ").ifEmpty { d.path },
                     d.thumb,
                     if (d.video) R.drawable.ic_video else R.drawable.ic_audio,
-                    onClick = { playDownloads(list, i) },
-                    onLong = { downloadMenu(list, i) },
-                    tile = true
+                    onClick = { if (sel?.episodes == false) selToggle(d.uri.toString(), d, list, i) else playDownloads(list, i) },
+                    onLong = { if (sel?.episodes == false) selRange(list, i) else selStart(false, list, i) },
+                    tile = true,
+                    selected = sel?.takeIf { !it.episodes }?.keys?.contains(d.uri.toString()) == true
                 )
             }
         }
@@ -3077,7 +3262,8 @@ class MainActivity : AppCompatActivity() {
         chipDownload.isVisible = yt
         chipChannel.isVisible = yt && PlayerHolder.current?.uploaderUrl != null
         updateSearchBar()
-        findViewById<View>(R.id.topBar).isVisible = !fullscreen
+        findViewById<View>(R.id.topBar).isVisible = !fullscreen && sel == null
+        findViewById<View>(R.id.selBar).isVisible = !fullscreen && sel != null
         findViewById<View>(R.id.bubbleBar).isVisible = !fullscreen
         pager.isVisible = !fullscreen
         bottomNav.isVisible = !fullscreen

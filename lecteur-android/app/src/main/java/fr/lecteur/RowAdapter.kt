@@ -41,7 +41,9 @@ sealed class Row {
         /** Grisé (épisode déjà écouté). */
         val dim: Boolean = false,
         /** Peut s'afficher en tuile quand la disposition « Cartes » est choisie. */
-        val tile: Boolean = false
+        val tile: Boolean = false,
+        /** Coché en sélection multiple. */
+        val selected: Boolean = false
     ) : Row()
     class Choice(val title: String, val sub: String?, val labels: List<String>, val selected: Int, val onSelect: (Int) -> Unit) : Row()
     class Slider(
@@ -174,6 +176,17 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
     }
 
+    /** Fond coché (sélection multiple) ou fond normal avec effet au toucher. */
+    private fun markSelected(v: View, selected: Boolean) {
+        if (selected) {
+            v.setBackgroundColor(MaterialColors.getColor(v, com.google.android.material.R.attr.colorSecondaryContainer))
+        } else {
+            val tv = android.util.TypedValue()
+            v.context.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
+            v.setBackgroundResource(tv.resourceId)
+        }
+    }
+
     private fun bindTile(v: View, row: Row) {
         val title = v.findViewById<TextView>(R.id.title)
         val sub = v.findViewById<TextView>(R.id.sub)
@@ -185,12 +198,13 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         var subText: String? = null
         when (row) {
             is Row.Entry -> {
-                title.text = row.title
+                title.text = (if (row.selected) "✓ " else "") + row.title
                 subText = row.subtitle
+                markSelected(v, row.selected)
                 shape(img, false, 12f)
                 Thumbs.load(img, row.thumb, row.icon)
                 title.setTextColor(MaterialColors.getColor(v, com.google.android.material.R.attr.colorOnSurface))
-                v.alpha = if (row.dim) 0.45f else 1f
+                v.alpha = if (row.dim && !row.selected) 0.45f else 1f
                 v.findViewById<TextView>(R.id.title).textSize = 16f * Settings.tileScale
                 sub.textSize = 12f * Settings.tileScale
                 v.setOnClickListener { row.onClick() }
@@ -209,6 +223,7 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     )
                 )
                 v.alpha = 1f
+                markSelected(v, false)
                 v.setOnClickListener { row.onClick() }
                 val long = row.onLong
                 if (long != null) v.setOnLongClickListener { long(); true } else v.setOnLongClickListener(null)
@@ -336,12 +351,13 @@ class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 styleSubscribe(v.findViewById(R.id.subscribe), row.subscribed, row.onToggle)
             }
             is Row.Entry -> {
-                v.findViewById<TextView>(R.id.title).text = row.title
+                v.findViewById<TextView>(R.id.title).text = (if (row.selected) "✓ " else "") + row.title
+                markSelected(v, row.selected)
                 val sub = v.findViewById<TextView>(R.id.sub)
                 sub.text = row.subtitle
                 sub.visibility = if (row.subtitle.isNullOrEmpty()) View.GONE else View.VISIBLE
                 Thumbs.load(v.findViewById(R.id.thumb), row.thumb, row.icon)
-                v.alpha = if (row.dim) 0.45f else 1f
+                v.alpha = if (row.dim && !row.selected) 0.45f else 1f
                 v.setOnClickListener { row.onClick() }
                 val long = row.onLong
                 if (long != null) v.setOnLongClickListener { long(); true } else v.setOnLongClickListener(null)
