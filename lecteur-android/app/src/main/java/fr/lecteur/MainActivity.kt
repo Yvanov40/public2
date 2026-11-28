@@ -363,6 +363,9 @@ class MainActivity : AppCompatActivity() {
 
         // Écrans : glisser à gauche / à droite, ou barre du bas
         pager.adapter = PagesAdapter()
+        // Un seul onglet : la page des fichiers s'ouvre depuis les encarts « Sur cet appareil »
+        pager.isUserInputEnabled = false
+        bottomNav.isVisible = false
         pager.offscreenPageLimit = PAGES - 1
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
@@ -452,10 +455,6 @@ class MainActivity : AppCompatActivity() {
                     v == MUSIC && musicStack.isNotEmpty() -> popMusic()
                     v == MUSIC && musicQuery != null -> clearSearch()
                     v == OFFLINE && folderStack.isNotEmpty() -> leaveFolder()
-                    v == OFFLINE && libFilter != "all" -> {
-                        libFilter = "all"
-                        renderAll()
-                    }
                     v == HOME && searchQuery != null -> clearSearch()
                     searchOpen -> toggleSearch()
                     phys == 0 && homeFilter != "all" -> show(ALL)
@@ -723,6 +722,7 @@ class MainActivity : AppCompatActivity() {
                 if (searchQuery == null) {
                     quickVideos()?.let { rows += it }
                     stripChannels(rows)
+                    deviceRows(rows, "video")
                 }
                 homeRows(rows, showResume = false)
                 // Les nouveautés des chaînes suivies, sous les vidéos
@@ -775,7 +775,7 @@ class MainActivity : AppCompatActivity() {
     private fun canGoBack(): Boolean {
         val phys = pager.currentItem
         val v = currentVirtual()
-        return settingsOpen || podPage?.page == phys || channelPage?.page == phys ||
+        return settingsOpen || phys != 0 || podPage?.page == phys || channelPage?.page == phys ||
             (v == MUSIC && musicStack.isNotEmpty()) || (v == OFFLINE && folderStack.isNotEmpty())
     }
 
@@ -806,16 +806,17 @@ class MainActivity : AppCompatActivity() {
                 })
             }
         } else {
-            listOf("all" to "Tout", "video" to "Vidéos", "audio" to "Audio", "podcast" to "Podcasts", "folders" to "Dossiers").forEach { (k, label) ->
-                box.addView(bubble(label, libFilter == k && !settingsOpen) {
+            // Liste des fichiers : les bulles ramènent à l'accueil sur le bon type
+            listOf("all" to "Tout", "music" to "Musique", "videos" to "Vidéos", "podcasts" to "Podcasts").forEach { (k, label) ->
+                box.addView(bubble(label, false) {
                     settingsOpen = false
-                    libFilter = k
-                    if (k != "folders") {
-                        folderStack.clear()
-                        folderFiles = null
-                    }
+                    homeFilter = k
+                    if (k == "videos") subsMode = "yt"
+                    if (k == "podcasts") subsMode = "pod"
+                    pager.setCurrentItem(0, true)
+                    ensureLoads()
                     renderAll()
-                    lists[1]?.scrollToPosition(0)
+                    lists[0]?.scrollToPosition(0)
                 })
             }
         }
@@ -971,6 +972,50 @@ class MainActivity : AppCompatActivity() {
 
     // ——— Tuiles et ronds propres à chaque bulle ———
 
+    // ——— Encart « Sur cet appareil » de chaque bulle (remplace l'onglet Bibliothèque) ———
+
+    /** Ouvre la liste des fichiers (téléchargés ou dossiers) ; la bulle ← ramène à l'accueil. */
+    private fun openLib(key: String) {
+        libFilter = key
+        if (key != "folders") {
+            folderStack.clear()
+            folderFiles = null
+        }
+        settingsOpen = false
+        pager.setCurrentItem(1, true)
+        renderAll()
+        lists[1]?.scrollToPosition(0)
+    }
+
+    /** kind : all, music, video, podcast. */
+    private fun deviceRows(rows: MutableList<Row>, kind: String) {
+        if (localFiles == null && scanJob == null) rescanLocal()
+        val all = offlineItems()
+        val list = when (kind) {
+            "music" -> all.filter { !it.video && !it.podcast }
+            "video" -> all.filter { it.video }
+            "podcast" -> all.filter { it.podcast }
+            else -> all
+        }
+        val running = Downloads.all().count {
+            it.state == Downloads.State.WAITING || it.state == Downloads.State.RUNNING
+        }
+        val dlTitle = "Téléchargés · ${list.size}" + if (running > 0) " · $running en cours" else ""
+        val libKey = when (kind) { "music" -> "audio"; "video" -> "video"; "podcast" -> "podcast"; else -> "all" }
+        val items = mutableListOf(
+            Row.QuickItem(dlTitle, list.firstOrNull()?.thumb?.takeIf { it.startsWith("http") }, R.drawable.ic_download, { openLib(libKey) })
+        )
+        items += if (kind == "music") {
+            Row.QuickItem("Sur le téléphone", null, R.drawable.ic_folder, {
+                if (hasMediaPerm()) pushMusic(MPage.LocalAll) else askMediaPerm()
+            })
+        } else {
+            Row.QuickItem("Sur le téléphone", null, R.drawable.ic_folder, { openLib("folders") })
+        }
+        rows += Row.Header("Sur cet appareil")
+        rows += Row.Quick(items)
+    }
+
     private fun quickMusic(): Row? {
         val q = mutableListOf<Row.QuickItem>()
         val likes = Store.likes()
@@ -1085,6 +1130,7 @@ class MainActivity : AppCompatActivity() {
         }
         if (quick.isNotEmpty()) rows += Row.Quick(quick.take(8))
         stripFavorites(rows)
+        deviceRows(rows, "all")
 
         val watched = Store.watched()
         if (watched.size > 2) {
@@ -1399,6 +1445,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         quickPodcasts()?.let { rows += it }
+        deviceRows(rows, "podcast")
         rows += Row.Header("Mes podcasts")
         rows += Row.Avatars(
             pods.map { Chan(it.feedUrl, it.title, it.artwork) },
@@ -2202,7 +2249,7 @@ class MainActivity : AppCompatActivity() {
         scanJob?.cancel()
         scanJob = lifecycleScope.launch {
             localFiles = withContext(Dispatchers.IO) { LocalMedia.scan(applicationContext) }
-            render(OFFLINE)
+            renderAll()
         }
     }
 
@@ -2358,30 +2405,6 @@ class MainActivity : AppCompatActivity() {
                 section("Audio", audios, "audio")
                 section("Podcasts", pods, "podcast")
 
-                // Fichiers et dossiers du téléphone
-                val folders = Store.folders()
-                rows += Row.Header("Dossiers du téléphone", if (folders.isNotEmpty()) "Tout voir" else null) {
-                    libFilter = "folders"
-                    render(OFFLINE)
-                }
-                folders.take(4).forEach { f ->
-                    val uri = Uri.parse(f)
-                    val doc = DocumentFile.fromTreeUri(this, uri)
-                    val name = doc?.name ?: uri.lastPathSegment ?: f
-                    rows += Row.Entry(
-                        name, "Dossier", null, R.drawable.ic_folder,
-                        onClick = { if (doc != null) enterFolder(doc, name) },
-                        onLong = { confirmRemoveFolder(f) }
-                    )
-                }
-                rows += Row.Entry(
-                    "Ajouter un dossier…", "Musique, vidéos ou podcasts déjà sur le téléphone", null, R.drawable.ic_add,
-                    onClick = { openTree.launch(null) }
-                )
-                rows += Row.Entry(
-                    "Ouvrir un fichier…", "Audio ou vidéo", null, R.drawable.ic_file,
-                    onClick = { openFile.launch(arrayOf("audio/*", "video/*")) }
-                )
                 rows += Row.Note("Téléchargements : mémoire interne › Music/Lecteur (audio) et Movies/Lecteur (vidéo)")
             }
         }
@@ -2731,6 +2754,7 @@ class MainActivity : AppCompatActivity() {
         // Accueil musique
         quickMusic()?.let { rows += it }
         stripArtists(rows)
+        deviceRows(rows, "music")
         val likes = Store.likes()
         val pls = Store.playlists()
         val recent = Store.recentTracks()
@@ -3275,7 +3299,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.selBar).isVisible = !fullscreen && sel != null
         findViewById<View>(R.id.bubbleBar).isVisible = !fullscreen
         pager.isVisible = !fullscreen
-        bottomNav.isVisible = !fullscreen
+        bottomNav.isVisible = false
         if (fullscreen) loading.visibility = View.INVISIBLE
 
         val lp = playerView.layoutParams as LinearLayout.LayoutParams
