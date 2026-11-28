@@ -391,3 +391,14 @@ body.lecture .feuille { padding-bottom: var(--sys-bas, 0px); }
 .indic-lum { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%) scale(.92); background: rgba(20, 20, 20, .82); color: #fff; padding: 14px 22px; border-radius: 18px; display: flex; align-items: center; gap: 10px; font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums; z-index: 210; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
 .indic-lum.actif { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 .indic-lum svg { width: 26px; height: 26px; }
+
+/* filtres lu / non lu, intertitres de genre */
+.statuts { display: flex; gap: 8px; padding: 2px 16px 10px; overflow-x: auto; scrollbar-width: none; }
+.statuts::-webkit-scrollbar { display: none; }
+.statut { flex: none; padding: 7px 13px; border-radius: 20px; background: var(--surface); border: 1px solid var(--trait); font-size: .84rem; color: var(--texte); white-space: nowrap; }
+.statut span { color: var(--doux); margin-left: 3px; font-variant-numeric: tabular-nums; }
+.statut.actif { background: var(--accent); border-color: var(--accent); color: var(--sur-accent); font-weight: 600; }
+.statut.actif span { color: inherit; opacity: .8; }
+.entete-genre { grid-column: 1 / -1; font-weight: 700; font-size: .95rem; margin: 10px 0 -6px; padding-bottom: 6px; border-bottom: 1px solid var(--trait); color: var(--accent); }
+.entete-genre span { color: var(--doux); font-weight: 400; font-size: .8rem; margin-left: 4px; }
+.grille.liste .entete-genre { margin: 14px 8px 0; }

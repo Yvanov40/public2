@@ -102,7 +102,7 @@ Pour tester l'achat sans payer : *Paramètres → Test de licence*, ajouter votr
 | Annonces | **Non**, l'appli ne contient pas d'annonces |
 | Classification du contenu | Questionnaire : catégorie « Référence, actualités ou éducation » ; répondre **Non** à tout (pas de violence, pas d'échange entre utilisateurs, pas de contenu généré partagé…) → classement « Tout public » |
 | Public cible | 13 ans et plus (évite les obligations spécifiques aux applis pour enfants) |
-| Sécurité des données | **Aucune donnée collectée**, **aucune donnée partagée** ; les données ne quittent pas l'appareil. (Les achats sont gérés par Google Play.) |
+| Sécurité des données | **Aucune donnée collectée** par le développeur. À déclarer : le *titre et l'auteur* des livres peuvent être envoyés à Google Books **uniquement à la demande de l'utilisateur** (« Classer par genre » avec recherche sur Internet), sans conservation par l'appli ni partage avec le développeur. Les achats sont gérés par Google Play. |
 | Appli d'actualités | Non |
 | Applis gouvernementales / financières / santé | Non |
 

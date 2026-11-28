@@ -65,6 +65,7 @@ public final class MainActivity extends Activity {
     private String nomRaccourci = "Liseuse";
 
     private WebView web;
+    private static final String URL_GOOGLE = "https://www.googleapis.com/books/v1/volumes?maxResults=3&printType=books&q=";
     private Achats achats;
     private android.widget.FrameLayout racine;
     private WindowInsets dernierInsets;
@@ -524,6 +525,7 @@ public final class MainActivity extends Activity {
         livre.put("nomFichier", nom);
         livre.put("taille", dest.length());
         livre.put("chapitres", l.spine.size());
+        livre.put("sujets", l.sujets);
         livre.put("couverture", couv.exists());
         livre.put("sourceExt", t.equals("epub") ? "" : t);
         livre.put("convertiLe", System.currentTimeMillis());
@@ -1816,6 +1818,52 @@ public final class MainActivity extends Activity {
                     }
                 }
             });
+        }
+
+        // ---------------------------------------------------------------- genres
+
+        /** Sujets inscrits dans un EPUB (genres fournis par l'éditeur). */
+        @JavascriptInterface
+        public String sujets(String id) {
+            try {
+                return EpubLivre.lire(biblio.epub(id)).sujets.toString();
+            } catch (Throwable e) {
+                return "[]";
+            }
+        }
+
+        /** Catégories d'un livre selon Google Books (titre + auteur) ; réponse par l'évènement « genre ». */
+        @JavascriptInterface
+        public void chercherGenre(final String id, final String titre, final String auteur) {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    java.net.HttpURLConnection c = null;
+                    try {
+                        String q = "intitle:" + titre.trim() + (auteur == null || auteur.trim().isEmpty() ? "" : " inauthor:" + auteur.trim());
+                        java.net.URL url = new java.net.URL(URL_GOOGLE + java.net.URLEncoder.encode(q, "UTF-8"));
+                        c = (java.net.HttpURLConnection) url.openConnection();
+                        c.setConnectTimeout(10000);
+                        c.setReadTimeout(15000);
+                        if (c.getResponseCode() != 200) throw new IOException("code " + c.getResponseCode());
+                        JSONObject r = new JSONObject(new String(EpubBuilder.lireTout(c.getInputStream()), "UTF-8"));
+                        org.json.JSONArray cats = new org.json.JSONArray();
+                        org.json.JSONArray items = r.optJSONArray("items");
+                        for (int i = 0; items != null && i < items.length(); i++) {
+                            JSONObject v = items.getJSONObject(i).optJSONObject("volumeInfo");
+                            if (v == null) continue;
+                            org.json.JSONArray k = v.optJSONArray("categories");
+                            for (int j = 0; k != null && j < k.length(); j++) cats.put(k.optString(j));
+                            if (v.has("mainCategory")) cats.put(v.optString("mainCategory"));
+                        }
+                        evenement(obj("type", "genre", "id", id, "categories", cats));
+                    } catch (Throwable e) {
+                        evenement(obj("type", "genre", "id", id, "erreur", message(e)));
+                    } finally {
+                        if (c != null) c.disconnect();
+                    }
+                }
+            }).start();
         }
 
         // ---------------------------------------------------------------- mise à jour (édition complète)

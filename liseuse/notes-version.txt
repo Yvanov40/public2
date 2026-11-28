@@ -1,1 +1,1 @@
-Taille des vignettes réglable : de 2 à 7 par ligne, dans Réglages ou en pinçant la bibliothèque avec deux doigts.
+Filtres Tous · À lire · En cours · Terminés, « Marquer comme lu / non lu » dans le menu d'un livre, et classement automatique par genre (menu ⋮ → Classer par genre). Le pincement des vignettes ne sélectionne plus de livre.

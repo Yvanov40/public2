@@ -290,6 +290,111 @@ function htmlCouverture(l) {
   return `<div class="couv"><div class="couv-gen" style="background:${couleurLivre(l.titre)}"><span>${esc(l.titre)}</span></div>${img}</div>`;
 }
 
+// ================================================================ lu / non lu, genres
+
+/** État de lecture : 'alire' (jamais ouvert), 'encours', 'lu'. */
+function statut(id) {
+  const p = position(id);
+  if (!p || !p.t || !(p.p > 0)) return 'alire';
+  return p.p >= 0.995 ? 'lu' : 'encours';
+}
+const NOMS_STATUT = { tous: 'Tous', alire: 'À lire', encours: 'En cours', lu: 'Terminés' };
+
+const GENRES = [
+  ['Bande dessinée', /comic|graphic novel|bande dessin|\bbd\b|manga|roman graphique/],
+  ['Science-fiction', /science.?fiction|sci-fi|dystop|space opera|anticipation/],
+  ['Fantasy', /fantasy|fantastique|merveilleux/],
+  ['Policier & thriller', /myster|detective|crime|thriller|polar|policier|suspense|noir/],
+  ['Jeunesse', /juvenile|children|jeunesse|young adult|enfant/],
+  ['Poésie', /poetry|poésie|poème|poems/],
+  ['Théâtre', /drama|theat|théâtre|plays/],
+  ['Biographie', /biograph|autobiograph|memoir|souvenirs/],
+  ['Histoire', /\bhistory\b|histoire|guerre|world war/],
+  ['Économie & business', /business|econom|finance|management|marketing|économ/],
+  ['Psychologie & développement personnel', /psycholog|self-help|développement personnel|personal|persuasion|influence|motivation/],
+  ['Philosophie', /philosoph/],
+  ['Sciences & techniques', /science|mathemat|physi|biolog|médec|medic|technolog|computer|informatique/],
+  ['Cuisine', /cook|cuisine|recette|recipe|gastronom/],
+  ['Nature & jardin', /garden|jardin|nature|animaux|animals|plantes|écolog|ecolog/],
+  ['Religion & spiritualité', /religio|spiritu|bible|theolog/],
+  ['Arts', /\bart\b|arts|music|musique|photograph|peinture|cinéma|film/],
+  ['Cours & études', /study|education|\bcours\b|leçon|exercice|manuel|révision|scolaire|examen|terminale|licence|master/],
+  ['Documents', /rapport|mémoire|compte.rendu|réunion|contrat|procès|\bcv\b|notes de|courrier|facture/],
+  ['Roman', /fiction|novel|roman|nouvelles|short stor|littérature|literary|récit/]
+];
+
+function genreDepuis(textes) {
+  const t = textes.filter(Boolean).join(' | ').toLowerCase();
+  if (!t) return null;
+  for (const [nom, re] of GENRES) if (re.test(t)) return nom;
+  return null;
+}
+
+function genres() { return Store.get('genres', {}); }
+function genreDe(id) { const g = genres()[id]; return g ? g.nom : null; }
+function definirGenre(id, nom, manuel) {
+  const g = genres();
+  if (nom) g[id] = { nom, manuel: !!manuel }; else delete g[id];
+  Store.set('genres', g);
+}
+
+/** Genre trouvé sans Internet : sujets de l'EPUB, puis titre et nom du fichier. */
+function genreLocal(l) {
+  let sujets = l.sujets || [];
+  if ((!sujets || !sujets.length) && l.format === 'epub' && A && A.sujets) {
+    try { sujets = JSON.parse(A.sujets(l.id)); } catch (e) { sujets = []; }
+  }
+  return genreDepuis(sujets) || genreDepuis([l.titre, l.nomFichier]);
+}
+
+async function classerGenres() {
+  const enLigne = await dialogue('Classer par genre', `<p>Chaque livre reçoit un genre (roman, BD, policier, essai…) d'après les informations qu'il contient et son titre.</p>
+    <label class="ligne"><span>Chercher aussi sur Internet<small>Envoie le titre et l'auteur de vos livres à Google Books pour trouver leur genre. Aucun contenu de livre n'est envoyé.</small></span><input type="checkbox" class="interrupteur" id="g-net" checked></label>
+    <p class="petit-pro">Les genres choisis à la main ne sont pas modifiés. Vous pourrez toujours changer un genre depuis le menu ⋮ d'un livre.</p>`,
+    [{ texte: 'Annuler', valeur: null }, { texte: 'Classer', classe: 'plein', valeur: () => $('#g-net').checked }]);
+  if (enLigne === null) return;
+  const aFaire = app.livres.filter(l => { const g = genres()[l.id]; return !g || !g.manuel; });
+  let n = 0;
+  $('#import').classList.add('actif');
+  for (const l of aFaire) {
+    n++;
+    $('#import-texte').textContent = `Classement par genre… ${n} / ${aFaire.length}`;
+    let g = null;
+    if (enLigne && A && A.chercherGenre) {
+      const r = await new Promise(resolve => {
+        app.attenteGenre[l.id] = resolve;
+        A.chercherGenre(l.id, l.titre || '', l.auteur || '');
+        setTimeout(() => { if (app.attenteGenre[l.id]) { delete app.attenteGenre[l.id]; resolve(null); } }, 15000);
+      });
+      if (r && r.categories) g = genreDepuis(r.categories);
+    }
+    if (!g) g = genreLocal(l);
+    definirGenre(l.id, g || 'Non classé', false);
+  }
+  $('#import').classList.remove('actif');
+  app.prefs.tri = 'genre';
+  Store.set('app', app.prefs);
+  afficherBiblio();
+  toast(`${aFaire.length} livre${aFaire.length > 1 ? 's' : ''} classé${aFaire.length > 1 ? 's' : ''} par genre`);
+}
+app.attenteGenre = {};
+
+async function choisirGenre(l) {
+  const actuel = genreDe(l.id);
+  const noms = GENRES.map(g => g[0]).concat(['Non classé']);
+  const v = await dialogue('Genre', `<div class="liste-dossiers">${noms.map(n => `<button class="choix-dossier${n === actuel ? ' nouveau' : ''}" data-g="${esc(n)}">${esc(n)}</button>`).join('')}</div>`,
+    [{ texte: 'Annuler', valeur: null }]);
+  return v;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-g]');
+  if (!b || !app.livreGenre) return;
+  definirGenre(app.livreGenre, b.dataset.g, true);
+  app.livreGenre = null;
+  $('#d-boutons .bouton').click();
+  afficherBiblio();
+});
+
 function trier(liste) {
   const t = app.prefs.tri;
   const l = liste.slice();
@@ -300,11 +405,12 @@ function trier(liste) {
   else if (t === 'auteur') l.sort((a, b) => coll.compare(a.auteur || '~', b.auteur || '~') || coll.compare(a.titre, b.titre));
   else if (t === 'ajout') l.sort((a, b) => (b.ajoute || 0) - (a.ajoute || 0));
   else if (t === 'progression') l.sort((a, b) => prog(b) - prog(a));
+  else if (t === 'genre') l.sort((a, b) => coll.compare(genreDe(a.id) || '~', genreDe(b.id) || '~') || coll.compare(a.titre, b.titre));
   else l.sort((a, b) => Math.max(lu(b), b.ajoute || 0) - Math.max(lu(a), a.ajoute || 0));
   return l;
 }
 
-const NOMS_TRI = { recent: 'Lus récemment', ajout: 'Ajoutés récemment', titre: 'Titre (A → Z)', auteur: 'Auteur', progression: 'Progression' };
+const NOMS_TRI = { recent: 'Lus récemment', ajout: 'Ajoutés récemment', titre: 'Titre (A → Z)', auteur: 'Auteur', genre: 'Genre', progression: 'Progression' };
 
 // ================================================================ dossiers
 
@@ -513,6 +619,13 @@ function afficherBiblio() {
     liste = trier(app.livres).filter(l => (valides.has(ran[l.id]) ? ran[l.id] : null) === app.dossier);
     dossiersVus = sousDossiers(app.dossier);
   }
+  // filtre lu / non lu
+  const st = app.prefs.statut || 'tous';
+  const compte = { tous: liste.length, alire: 0, encours: 0, lu: 0 };
+  for (const l of liste) compte[statut(l.id)]++;
+  if (st !== 'tous') { liste = liste.filter(l => statut(l.id) === st); dossiersVus = []; }
+  $('#statuts').innerHTML = app.livres.length ? Object.keys(NOMS_STATUT).map(k =>
+    `<button class="statut${k === st ? ' actif' : ''}" data-statut="${k}">${NOMS_STATUT[k]} <span>${compte[k]}</span></button>`).join('') : '';
   dossiersVus.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { numeric: true }));
   const grille = $('#grille');
   grille.classList.toggle('liste', app.prefs.affichage === 'liste');
@@ -549,7 +662,21 @@ function afficherBiblio() {
         <div class="barre-prog"><i style="width:${pc}%"></i></div></div></button>`;
   } else cont.innerHTML = '';
 
-  let h = dossiersVus.map(htmlDossier).join('') + liste.map(l => htmlLivre(l, !!filtre)).join('');
+  let h = dossiersVus.map(htmlDossier).join('');
+  if (app.prefs.tri === 'genre' && !filtre) {
+    // regroupement par genre, avec un intertitre par genre
+    let courant;
+    for (const l of liste) {
+      const g = genreDe(l.id) || 'Non classé';
+      if (g !== courant) {
+        courant = g;
+        const nb = liste.filter(x => (genreDe(x.id) || 'Non classé') === g).length;
+        h += `<div class="entete-genre">${esc(g)} <span>${nb}</span></div>`;
+      }
+      h += htmlLivre(l, false);
+    }
+    if (liste.length && !Object.keys(genres()).length) h = `<div class="vide-dossier">Aucun genre attribué pour l'instant. Menu ⋮ → « Classer par genre ».</div>` + h;
+  } else h += liste.map(l => htmlLivre(l, !!filtre)).join('');
   if (!h && !filtre && app.dossier) h = '<div class="vide-dossier">Ce dossier est vide.<br>Ajoutez un document ici, ou utilisez « Déplacer » sur des livres.</div>';
   if (!h && filtre) h = '<div class="vide-dossier">Aucun livre ne correspond.</div>';
   grille.innerHTML = h;
@@ -677,6 +804,7 @@ async function menuBiblio() {
   const v = await dialogue('Bibliothèque · v' + ($('#version').textContent || '?') + (app.pro.edition === 'play' ? ' · Play' : ''), `<div class="liste-actions dans-menu">
       <button data-m="dossier"><svg><use href="#i-dossier-plus"/></svg>Nouveau dossier${app.dossier ? ' ici' : ''}</button>
       <button data-m="selection"><svg><use href="#i-coche"/></svg>Sélectionner plusieurs livres</button>
+      <button data-m="genres"><svg><use href="#i-livre"/></svg>Classer par genre automatiquement</button>
       <button data-m="tri"><svg><use href="#i-tri"/></svg>Trier par… <small>${esc(NOMS_TRI[app.prefs.tri] || '')}</small></button>
       <button data-m="reglages"><svg><use href="#i-reglages"/></svg>Réglages et personnalisation</button>
       ${majPossible() ? '<button data-m="maj"><svg><use href="#i-refaire"/></svg>Rechercher une mise à jour</button>' : ''}
@@ -692,6 +820,7 @@ document.addEventListener('click', e => {
   else if (m === 'selection') commencerSelection(null);
   else if (m === 'tri') choisirTri();
   else if (m === 'reglages') afficherParametres();
+  else if (m === 'genres') classerGenres();
   else if (m === 'maj') { toast('Recherche d\'une mise à jour…'); Store.set('majVerifiee', Date.now()); A.verifierMaj(true); }
 });
 
@@ -914,6 +1043,11 @@ app.toast = toast;
 
 app.evenement = function (e) {
   if (e.type && e.type.startsWith('maj')) { evenementMaj(e); return; }
+  if (e.type === 'genre') {
+    const f = app.attenteGenre[e.id];
+    if (f) { delete app.attenteGenre[e.id]; f(e); }
+    return;
+  }
   if (e.type === 'pro') {
     app.pro = { actif: !!e.actif, prix: e.prix || '', edition: e.edition || app.pro.edition };
     majPro();
@@ -1002,6 +1136,8 @@ function actionsLivre(id) {
   $('#a-titre').textContent = l.titre;
   $('#a-auteur').textContent = l.auteur || '';
   $('[data-action=reconvertir]').hidden = !l.sourceExt;
+  $('#a-lu').textContent = statut(l.id) === 'lu' ? 'Marquer comme non lu' : 'Marquer comme lu';
+  $('#a-genre').textContent = 'Genre : ' + (genreDe(l.id) || 'non classé');
   $('[data-action=vers-epub]').hidden = !l.original;
   $('[data-action=autre-appli]').hidden = !(l.original || l.sourceExt === 'pdf');
   $('[data-action=pdf-origine]').hidden = !(l.sourceExt === 'pdf' && !l.original);
@@ -1025,6 +1161,15 @@ async function faireAction(action) {
   fermerFeuilles();
   if (action === 'lire') ouvrirLivre(l.id);
   else if (action === 'deplacer') deplacerLivres([l.id], []);
+  else if (action === 'lu') {
+    if (statut(l.id) === 'lu') Store.del('pos:' + l.id);
+    else Store.set('pos:' + l.id, Object.assign(position(l.id) || { c: 0, f: 0 }, { p: 1, t: Date.now() }));
+    afficherBiblio();
+  } else if (action === 'genre') {
+    app.livreGenre = l.id;
+    await choisirGenre(l);
+    app.livreGenre = null;
+  }
   else if (action === 'pdf-origine') ouvrirPdf(l);
   else if (action === 'autre-appli') { if (A) A.ouvrirAilleurs(l.id); }
   else if (action === 'vers-epub') {
@@ -1148,6 +1293,13 @@ function brancher() {
     afficherBiblio();
   };
   $('#b-dossier-retour').onclick = () => app.retour();
+  $('#statuts').onclick = e => {
+    const b = e.target.closest('[data-statut]');
+    if (!b) return;
+    app.prefs.statut = b.dataset.statut;
+    Store.set('app', app.prefs);
+    afficherBiblio();
+  };
   $('#b-sel-fin').onclick = finirSelection;
   $('#b-sel-tout').onclick = toutSelectionner;
   $('#b-sel-plus').onclick = plusSelection;
@@ -1174,6 +1326,7 @@ function brancher() {
     else basculerChoix(cleDe(el));
   };
   zone.addEventListener('touchstart', e => {
+    if (e.touches.length > 1) { clearTimeout(minuteur); depart = null; return; } // pincement : pas de sélection
     const el = e.target.closest('#grille .carte');
     appuiLong = false;
     if (!el || e.target.closest('.plus')) return;
@@ -1181,6 +1334,7 @@ function brancher() {
     minuteur = setTimeout(() => appui(el), 480);
   }, { passive: true });
   zone.addEventListener('touchmove', e => {
+    if (e.touches.length > 1) { clearTimeout(minuteur); return; }
     if (depart && Math.hypot(e.touches[0].clientX - depart.x, e.touches[0].clientY - depart.y) > 10) clearTimeout(minuteur);
   }, { passive: true });
   zone.addEventListener('touchend', () => clearTimeout(minuteur));

@@ -20,6 +20,7 @@ import fr.liseuse.Xml.El;
 public final class EpubLivre {
 
     public String titre = "", auteur = "", langue = "", description = "";
+    public final JSONArray sujets = new JSONArray();
     public String opf, dossier = "";
     public String couverture; // chemin dans l'archive
     public final List<String> spine = new ArrayList<String>();
@@ -118,6 +119,7 @@ public final class EpubLivre {
                 String t = e.texte().trim();
                 if (n.equals("title") && titre.isEmpty()) titre = t;
                 else if (n.equals("creator") && auteur.isEmpty()) auteur = t;
+                else if (n.equals("subject") && !t.isEmpty() && sujets.length() < 20) sujets.put(t);
                 else if (n.equals("language") && langue.isEmpty()) langue = t;
                 else if (n.equals("description") && description.isEmpty()) description = t.replaceAll("<[^>]*>", "");
                 else if (n.equals("meta") && "cover".equals(e.a("name"))) idCouv = e.a("content");
@@ -273,6 +275,7 @@ public final class EpubLivre {
         o.put("auteur", auteur);
         o.put("langue", langue);
         o.put("description", description);
+        o.put("sujets", sujets);
         JSONArray s = new JSONArray();
         for (int i = 0; i < spine.size(); i++) {
             JSONObject c = new JSONObject();
