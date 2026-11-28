@@ -93,6 +93,11 @@ public final class SettingsActivity extends Activity {
         w.setBackgroundDrawable(new ColorDrawable(BG));
 
         int open = savedInstanceState == null ? -1 : savedInstanceState.getInt("page", -1);
+        String wanted = getIntent().getStringExtra(EXTRA_PAGE);
+        if (savedInstanceState == null && wanted != null) {
+            Tile[] ts = tiles();
+            for (int i = 0; i < ts.length; i++) if (ts[i].title.equals(wanted)) open = i;
+        }
         if (open >= 0 && open < tiles().length) showPage(open);
         else showHome();
     }
@@ -112,6 +117,9 @@ public final class SettingsActivity extends Activity {
     }
 
     private int currentPage = -1;
+
+    /** Page à ouvrir directement (titre de sa tuile), ex. « Mise à jour » depuis l'accueil. */
+    static final String EXTRA_PAGE = "page_title";
 
     private Tile[] tiles() {
         return new Tile[]{

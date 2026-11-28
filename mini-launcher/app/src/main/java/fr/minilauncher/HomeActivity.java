@@ -427,6 +427,8 @@ public final class HomeActivity extends Activity
         }});
         acts.add(new Object[]{"⏻", "Verrouiller l'écran", false, (Runnable) () -> Actions.lock(this)});
         acts.add(new Object[]{"⚙", "Réglages", false, (Runnable) () -> startActivity(new Intent(this, SettingsActivity.class))});
+        acts.add(new Object[]{"↓", "Mise à jour", false, (Runnable) () -> startActivity(
+                new Intent(this, SettingsActivity.class).putExtra(SettingsActivity.EXTRA_PAGE, "Mise à jour"))});
         Menus.tileSheet(this, getApplicationInfo().loadIcon(getPackageManager()), 0, "Mini Launcher",
                 "Version " + Store.version(this) + (locked ? " · disposition verrouillée" : ""), acts);
     }
